@@ -194,7 +194,7 @@ h1 .x{color:var(--human)}
 
 <div class="stage">
   <div class="panel a">
-    <div class="who"><span class="name">PONKEY A 〔ひと〕</span>
+    <div class="who"><span class="name">PONKEY A 〔Human〕</span>
       <button class="conn-btn" id="btnA" onclick="BLE.toggle('A')">つなぐ</button></div>
     <div class="avatar" id="avA"><canvas id="faceA"></canvas></div>
     <div class="grid" id="gridA"></div>
@@ -1725,8 +1725,8 @@ const Tape={
     return st.seq[st.fi%st.seq.length];
   }
 
-  function colorOrange(c){if(!c||c===K)return null;if(c===O)return'#ff8f43';if(c===B)return'#3b6fd4';return null;}
-  function colorGreen(c){if(!c)return null;if(c===K)return'#e8efd8';if(c===O)return'#9fc36a';if(c===B)return'#ffcf4a';return null;}
+  function colorOrange(c){if(!c||c===K)return null;if(c===O)return'#ff8800';if(c===B)return'#2266ff';return null;}
+  function colorGreen(c){if(!c)return null;if(c===K)return'#eeeeee';if(c===O)return'#00cc44';if(c===B)return'#ffdd00';return null;}
   function colorBlue(c){if(!c||c===K)return null;if(c===O)return'#6db9ff';if(c===B)return'#ffcf4a';return null;}
 
   const CW=86,CH=120,GRID_W=15*S,GROUND_Y=CH-8;
@@ -1749,7 +1749,7 @@ const Tape={
     }
     if(tailDots){
       tailDots.forEach(({dx,dy})=>{
-        ctx.fillStyle='#ff8f43';
+        ctx.fillStyle='#ff8800';
         ctx.fillRect(ox+(TAIL_ROOT_GX+dx)*S,oy+(TAIL_ROOT_GY+dy)*S,S,S);
       });
     }
@@ -1771,8 +1771,8 @@ const Tape={
   }
 
   const defs={
-    A:{color:colorOrange,ant:false,tail:true, blob:'#ff8f43'},
-    B:{color:colorGreen, ant:true, tail:false,blob:'#9fc36a',antStem:'#e8efd8',antBall:'#7fae45'},
+    A:{color:colorOrange,ant:false,tail:true, blob:'#ff8800'},
+    B:{color:colorGreen, ant:true, tail:false,blob:'#00cc44',antStem:'#eeeeee',antBall:'#00cc44'},
     C:{color:colorBlue,  ant:false,tail:false,blob:'#6db9ff'},
   };
   ['A','B','C'].forEach(slot=>{
