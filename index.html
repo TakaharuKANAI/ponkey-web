@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PONKEY Web Apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0e0f12;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;}
+  *{box-sizing:border-box}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+    font-weight:300;letter-spacing:.01em;max-width:640px;margin:0 auto;padding:34px 20px 60px;min-height:100vh}
+  h1{font-size:22px;font-weight:400;letter-spacing:.14em;margin:0 0 4px;text-transform:uppercase}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:24px}
+  a.app{display:block;text-decoration:none;color:var(--txt);background:var(--panel);border:1px solid var(--line);
+    padding:16px 18px;margin:12px 0;transition:border-color .12s,background .12s}
+  a.app:hover{border-color:var(--teal);background:#1a1d23}
+  .nm{font-size:17px;font-weight:400;color:var(--teal);letter-spacing:.02em}
+  .desc{font-size:13px;color:var(--dim);margin-top:5px;line-height:1.55}
+  .req{font-size:11px;color:var(--dim);margin-top:7px;letter-spacing:.04em}
+  footer{color:var(--dim);font-size:11.5px;margin-top:28px;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+  <h1>PONKEY</h1>
+  <div class="sub">Web apps — Edge / Chrome で開いてください</div>
+
+  <a class="app" href="sync.html">
+    <div class="nm">Sync</div>
+    <div class="desc">複数台の PONKEY に同じ BPM を送ってテンポを揃える。「同期」で頭出し(同時スタート)。</div>
+    <div class="req">要 Web Bluetooth(Edge / Chrome)</div>
+  </a>
+
+  <a class="app" href="sequence.html">
+    <div class="nm">シーケンス</div>
+    <div class="desc">ソングモード。スロット(1小節ループ)を編集し、シーケンスに並べて演奏。本体と双方向同期。</div>
+    <div class="req">要 Web Bluetooth(Edge / Chrome)</div>
+  </a>
+
+  <a class="app" href="keyboard.html">
+    <div class="nm">Keyboard Practice</div>
+    <div class="desc">音ゲー風の練習アプリ。</div>
+  </a>
+
+  <a class="app" href="translator.html">
+    <div class="nm">Translator (MIN)</div>
+    <div class="desc">PONKEY と Logic / Ableton 等を MIDI で連携(多台同期・クロック)。</div>
+    <div class="req">要 Web MIDI(Edge / Chrome)</div>
+  </a>
+
+  <footer>
+    Safari / Firefox は Web Bluetooth / Web MIDI 非対応です。<br>
+    PONKEY — pocket-sized MIDI instrument.
+  </footer>
+</body>
+</html>

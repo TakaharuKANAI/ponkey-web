@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sync</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ニュートラル・ダーク。色は2色のみ: ティール(操作/強調) と レッド(停止)。他はグレー階調。 */
+  :root{
+    --bg:#0e0f12; --panel:#15171b; --line:#272a30; --txt:#cbced4; --dim:#6b6f76;
+    --teal:#6fb0b8;   /* color 1 */
+    --red:#c96a5e;    /* color 2 */
+  }
+  *{box-sizing:border-box}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;color:var(--txt);background:var(--bg);
+    max-width:620px;margin:0 auto;padding:28px 20px 48px;min-height:100vh;font-weight:300;letter-spacing:.01em}
+  h1{font-size:26px;font-weight:400;letter-spacing:.32em;margin:0 0 22px;color:var(--txt);text-transform:uppercase}
+  h2{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0 0 12px}
+  .card{background:var(--panel);border:1px solid var(--line);padding:16px;margin:14px 0}
+  button{font-family:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:10px 15px;
+    border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button:disabled{opacity:.35;cursor:default;background:transparent;border-color:var(--line)}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:rgba(111,176,184,.12);border-color:var(--teal)}
+  button.red{border-color:var(--red);color:var(--red)}
+  button.red:hover{background:rgba(201,106,94,.12);border-color:var(--red)}
+  .dev{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:9px 12px;margin:7px 0}
+  .dev .nm{flex:1;font-weight:400}
+  .dev .st{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal)}
+  .dev .x{cursor:pointer;color:var(--dim);font-size:15px}
+  .dev .x:hover{color:var(--red)}
+  .empty{color:var(--dim)}
+  .bpmrow{display:flex;align-items:center;gap:18px}
+  .bpmval{font-size:56px;font-weight:300;min-width:120px;color:var(--teal);line-height:1;letter-spacing:.01em}
+  input[type=range]{flex:1;accent-color:var(--teal);height:4px}
+  .transport{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
+  .count{color:var(--teal)}
+  .console{height:92px;overflow:auto;background:#0a0b0e;border:1px solid var(--line);padding:9px;margin-top:4px;
+    font-size:12px;line-height:1.65;color:var(--dim);font-weight:300}
+</style>
+</head>
+<body>
+  <h1>Sync</h1>
+
+  <div class="card">
+    <h2>Devices <span class="count" id="count">0</span></h2>
+    <div id="devs"><div class="empty">No device</div></div>
+    <button class="primary" id="btnAdd" style="margin-top:10px">＋ Add device</button>
+  </div>
+
+  <div class="card">
+    <h2>BPM</h2>
+    <div class="bpmrow">
+      <span class="bpmval" id="bpmv">120</span>
+      <input type="range" id="bpm" min="60" max="187" value="120">
+    </div>
+    <div class="transport">
+      <button id="btnPlay">▶ Play all</button>
+      <button class="red" id="btnStop">■ Stop all</button>
+      <button class="primary" id="btnAlign">⟲ 同期</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Console</h2>
+    <div class="console" id="log"></div>
+  </div>
+
+<script>
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const CC_PLAY_STOP=0x40, CC_BPM=0x41;
+let devices=[];  // {device,char,name}
+
+function log(m){const e=document.getElementById('log');e.innerHTML+=`> ${m}<br>`;e.scrollTop=e.scrollHeight;}
+function midiBytes(status,d1,d2){return Uint8Array.from([0x80,0x80,status,d1,d2]);}  // BLE-MIDI: header,timestamp,status,d1,d2
+
+document.getElementById('btnAdd').onclick=async()=>{
+  try{
+    log('scanning…');
+    const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}], optionalServices:[MIDI_SERVICE]});
+    const gatt=await dev.gatt.connect();
+    const svc=await gatt.getPrimaryService(MIDI_SERVICE);
+    const ch=await svc.getCharacteristic(MIDI_CHAR);
+    const entry={device:dev,char:ch,name:dev.name||'PONKEY'};
+    dev.addEventListener('gattserverdisconnected',()=>{ devices=devices.filter(e=>e!==entry); render(); log(entry.name+' disconnected'); });
+    devices.push(entry); render(); log('linked: '+entry.name);
+    await writeOne(entry,0xB0,CC_BPM,Math.max(0,Math.min(127,(+bpm.value)-60)));  // 接続時に現在BPMを自動送信
+    log('BPM '+bpm.value+' → '+entry.name);
+  }catch(e){ log('error: '+e); }
+};
+function render(){
+  const el=document.getElementById('devs');
+  document.getElementById('count').textContent=devices.length;
+  if(!devices.length){ el.innerHTML='<div class="empty">No device</div>'; return; }
+  el.innerHTML='';
+  devices.forEach((e)=>{
+    const d=document.createElement('div');d.className='dev';
+    d.innerHTML=`<span class="nm">${e.name}</span><span class="st">linked</span><span class="x" title="disconnect">✕</span>`;
+    d.querySelector('.x').onclick=()=>{ try{e.device.gatt.disconnect();}catch(_){}; devices=devices.filter(x=>x!==e); render(); };
+    el.appendChild(d);
+  });
+}
+function writeOne(e,status,d1,d2){const buf=midiBytes(status,d1,d2);
+  return (e.char.writeValueWithoutResponse?e.char.writeValueWithoutResponse(buf):e.char.writeValue(buf)).catch(()=>{});}
+async function sendAll(status,d1,d2){
+  if(!devices.length){ log('no devices'); return; }
+  await Promise.all(devices.map(e=>writeOne(e,status,d1,d2)));
+}
+function sendBPM(b){ sendAll(0xB0,CC_BPM,Math.max(0,Math.min(127,b-60))); }
+
+const bpm=document.getElementById('bpm');
+let bpmTimer=null;
+bpm.oninput=()=>{ document.getElementById('bpmv').textContent=bpm.value;
+  clearTimeout(bpmTimer); bpmTimer=setTimeout(()=>{ sendBPM(+bpm.value); log('BPM '+bpm.value+' → all'); },120); };
+document.getElementById('btnPlay').onclick=()=>{ sendAll(0xB0,CC_PLAY_STOP,1); log('play all'); };
+document.getElementById('btnStop').onclick=()=>{ sendAll(0xB0,CC_PLAY_STOP,0); log('stop all'); };
+// 頭出し: 全台停止 → 再生を並列で一斉発射(台間ズレ最小化)。残るズレはBLE接続間隔ぶん。
+document.getElementById('btnAlign').onclick=async()=>{
+  if(!devices.length){ log('no devices'); return; }
+  log('cue: stop → simultaneous start');
+  await Promise.all(devices.map(e=>writeOne(e,0xB0,CC_PLAY_STOP,0)));
+  await new Promise(r=>setTimeout(r,60));
+  await Promise.all(devices.map(e=>writeOne(e,0xB0,CC_PLAY_STOP,1)));
+  log('cue done (BLE jitter remains)');
+};
+</script>
+</body>
+</html>

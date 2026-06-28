@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>シーケンス</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ===== ニュートラル・ダーク (Sync アプリと統一): Inter スリム / 2色=ティール+レッド / 1px細線 / 角なし / グローなし ===== */
+  :root{
+    --bg:#0e0f12; --panel:#15171b; --panel2:#1b1e23; --line:#272a30; --txt:#cbced4; --dim:#6b6f76;
+    --teal:#6fb0b8; --red:#c96a5e;
+    /* 旧名エイリアス(既存CSS/インライン互換) */
+    --cream:#0e0f12; --paper:#15171b; --ink:#cbced4; --soft:#272a30;
+    --blue:#6fb0b8; --acc:#6fb0b8; --acc2:#6fb0b8; --bad:#c96a5e; --yellow:#6fb0b8; --warn:#6fb0b8; --burg:#c96a5e;
+  }
+  *{box-sizing:border-box;border-radius:0}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:14px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
+  header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 12px 0 0;font-weight:400;letter-spacing:.08em;color:var(--txt)}
+  h2{font-size:11px;color:var(--dim);margin:0 0 10px;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
+  b{font-weight:500;color:var(--txt)}
+  button{font:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:8px 13px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button:disabled{opacity:.35;cursor:default;background:transparent;color:var(--dim);border-color:var(--line)}
+  button.primary,button.blue{border-color:var(--teal);color:var(--teal);background:transparent}
+  button.primary:hover,button.blue:hover{background:rgba(111,176,184,.12);border-color:var(--teal)}
+  button.danger{border-color:var(--red);color:var(--red);background:transparent}
+  button.danger:hover{background:rgba(201,106,94,.12);border-color:var(--red)}
+  button.ghost{background:transparent;border-color:var(--line)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;background:transparent;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .pad{padding:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);padding:14px}
+  .top{display:grid;grid-template-columns:320px 1fr;gap:14px}
+  @media(max-width:900px){.top{grid-template-columns:1fr}}
+  /* slot library */
+  .libgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .loopcell{aspect-ratio:1.15;border:1px solid var(--line);background:var(--panel2);
+            display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--dim);position:relative;user-select:none;font-weight:400}
+  .loopcell.has{color:var(--txt)}
+  .loopcell.sel{background:rgba(111,176,184,.12);border-color:var(--teal);color:var(--teal)}
+  .loopcell.sel .ix{color:var(--teal)}
+  .loopcell .ix{font-size:10px;opacity:.7;letter-spacing:.04em}
+  .loopcell .nm{font-weight:500;font-size:12px;margin-top:2px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .libhint{font-size:11.5px;color:var(--dim);margin:6px 0;line-height:1.5}
+  /* sequence */
+  .seqwrap{display:flex;gap:8px;overflow-x:auto;padding:6px 2px 10px}
+  .seqslot{flex:0 0 108px;height:122px;border:1px dashed var(--line);background:var(--panel2);
+           display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;color:var(--dim);font-weight:400}
+  .seqslot.fill{border-style:solid;border-color:var(--line);color:var(--txt);cursor:pointer;justify-content:flex-start;padding:15px 7px 7px}
+  .seqslot.playing{outline:1px solid var(--teal)}
+  .seqslot .pos{position:absolute;top:3px;left:8px;font-size:11px;color:var(--dim)}
+  .seqslot .x{position:absolute;top:2px;right:6px;cursor:pointer;color:var(--dim);font-size:13px;z-index:2}
+  .seqslot .x:hover{color:var(--red)}
+  .seqslot .slab{font-weight:500;font-size:11px;text-align:center;margin-top:5px;max-width:98px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .seqslot.add{cursor:pointer;font-size:24px;color:var(--dim);flex:0 0 56px;border-style:solid;border-color:var(--line)}
+  .seqslot.add:hover{color:var(--teal);border-color:var(--teal)}
+  /* mini pattern monitor (7 parts × 16 steps): ティール=ドラム / レッド=シンセ on 黒 */
+  .mini{display:grid;grid-template-columns:repeat(16,1fr);grid-template-rows:repeat(7,1fr);gap:1px;
+        width:100%;height:62px;background:#0a0b0e;padding:3px}
+  .mini i{background:#23262c}
+  .mini i.d{background:var(--teal)}   /* drum on */
+  .mini i.s{background:var(--red)}    /* synth on */
+  /* editor */
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+  .lab{font-size:11px;color:var(--dim);width:48px;flex:none}
+  .grid{display:grid;gap:2px}
+  .cell{width:100%;aspect-ratio:1;background:var(--panel2);border:1px solid var(--line);cursor:pointer}
+  .cell.on{background:var(--teal);border-color:var(--teal)}
+  .cell.col0,.cell.col4,.cell.col8,.cell.col12{background:#22262d}
+  .cell.on.col0,.cell.on.col4,.cell.on.col8,.cell.on.col12{background:var(--teal)}
+  .tabs{display:flex;gap:5px;margin-bottom:6px}
+  .tab{padding:5px 12px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:12px;color:var(--txt)}
+  .tab.act{border-color:var(--teal);color:var(--teal)}
+  input[type=text],input[type=number],select{font:inherit;background:var(--panel2);color:var(--txt);
+       border:1px solid var(--line);padding:6px 9px}
+  input[type=text]:focus,select:focus{outline:none;border-color:var(--teal)}
+  input[type=range]{accent-color:var(--teal);vertical-align:middle}
+  /* piano roll */
+  /* 行間マージンを排し、レーンを行いっぱいに広げて隙間(クリック無反応域)をなくす */
+  .pr-row{position:relative;height:18px;margin:0;display:flex;align-items:stretch}
+  .pr-key{width:30px;flex:none;font-size:10px;color:var(--dim);display:flex;align-items:center}
+  .pr-lane{position:relative;flex:1;background:
+      repeating-linear-gradient(90deg,#15181d 0,#15181d calc(100%/16 - 1px),#1c2026 calc(100%/16 - 1px),#1c2026 calc(100%/16));
+      border:1px solid var(--line);border-top:none;cursor:crosshair}
+  .pr-lane .beat{position:absolute;top:0;bottom:0;width:1px;background:#33383f}
+  .pr-note{position:absolute;top:1px;bottom:1px;background:var(--red);cursor:pointer;min-width:4px}
+  .pr-note:hover{background:#d98679}
+  .mute-seg{display:inline-flex;gap:5px;flex-wrap:wrap}
+  .ms{display:flex;gap:4px;align-items:center;background:var(--panel2);border:1px solid var(--line);padding:2px 8px;font-size:11px}
+  .ms button{padding:1px 7px;font-size:11px}
+  .ms button.m.on{background:transparent;border-color:var(--red);color:var(--red)}
+  .ms button.s.on{background:transparent;border-color:var(--teal);color:var(--teal)}
+  .log{height:92px;overflow:auto;background:#0a0b0e;border:1px solid var(--line);padding:8px;
+       font:12px/1.6 ui-monospace,monospace;color:var(--dim);font-weight:300}
+  .hint{font-size:12px;color:var(--dim)}
+  .sync{font-size:12px}
+  #btnNewLoop{border-color:var(--teal);color:var(--teal)}
+  #btnNewLoop:hover{background:rgba(111,176,184,.12);border-color:var(--teal);color:var(--teal)}
+</style>
+</head>
+<body>
+<header>
+  <h1>シーケンス</h1>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <button id="btnEnter" disabled title="接続時に自動で実行されます">入場</button>
+  <button id="btnExit" disabled>退場</button>
+  <span style="width:2px;height:22px;background:var(--ink);opacity:.25"></span>
+  <button id="btnPlay" class="primary" disabled>▶</button>
+  <button id="btnStop" disabled>■</button>
+  <label class="hint">BPM <input type="range" id="bpm" min="60" max="187" value="120" style="width:110px"><b id="bpmv">120</b></label>
+  <span class="sync pill" id="syncPill">自動同期: —</span>
+  <span style="flex:1"></span>
+  <button class="ghost" id="btnExport">書き出し</button>
+  <button class="ghost" id="btnImport">読み込み</button>
+  <input type="file" id="file" accept="application/json" style="display:none">
+</header>
+
+<!-- ===== TOP: library + sequence ===== -->
+<div class="pad top">
+  <div class="panel" id="libPanel">
+    <h2>スロット <span style="text-transform:none">(1〜160)</span> <span class="pill" id="libCount">0</span></h2>
+    <div class="libhint">クリックで下に編集。ダブルクリックでシーケンスに追加。選択して <b>Ctrl/⌘+C</b> コピー → 別スロットで <b>+V</b> で複製。</div>
+    <div class="libgrid" id="libgrid"></div>
+    <div class="row">
+      <button id="btnPrev">◀</button><span id="page" class="hint">1–16</span><button id="btnNext">▶</button>
+      <button id="btnNewLoop">＋新規</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>シーケンス (スロットシーケンス) <span class="pill" id="seqInfo"></span></h2>
+    <div class="libhint">スロットを<b>ダブルクリック</b>で末尾に追加。✕で削除。＋でコマを増やす。各コマ内はそのスロットのパターン(7パート×16ステップ)のモニタ。変更は自動で本体へ。</div>
+    <div class="seqwrap" id="seqwrap"></div>
+  </div>
+</div>
+
+<!-- ===== BOTTOM: pattern editor ===== -->
+<div class="pad" style="padding-top:0">
+  <div class="panel">
+    <div class="row">
+      <h2 style="margin:0">スロット編集</h2>
+      <span class="pill" id="editIx">スロット1</span>
+      <input type="text" id="loopName" placeholder="名前" style="width:130px">
+      <label class="hint">長さ<select id="loopLen"><option value="64">1小節</option><option value="32">1/2</option><option value="16">1/4</option></select></label>
+      <button class="danger ghost" id="btnClearLoop">このスロットを消去</button>
+      <span style="flex:1"></span>
+      <span class="hint">ミュート/ソロ:</span>
+      <span class="mute-seg" id="muteSeg"></span>
+    </div>
+
+    <h2 style="margin-top:10px">ドラム</h2>
+    <div id="drumGrid"></div>
+
+    <h2 style="margin-top:14px">シンセ (バー表示・グリッド外の音もそのまま表示)</h2>
+    <div class="row">
+      <div class="tabs" id="synthTabs"></div>
+      <label class="hint">オクターブ <input type="range" id="oct" min="-8" max="7" value="0"><b id="octv">0</b></label>
+      <label class="hint">音価 <select id="dur"><option value="4">1ステップ</option><option value="8">2</option><option value="2">半</option><option value="16">4</option></select></label>
+      <span class="hint">レーンをクリックで音を置く / バーをクリックで消す</span>
+    </div>
+    <div id="pianoRoll"></div>
+
+    <h2 style="margin-top:14px">ログ</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================ 定数 (ファーム一致)
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
+const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
+const SONG_MAGIC=0x5A, S_ENTER=0x01, S_EXIT=0x02, S_LOAD_SLOT=0x04, S_SET_SEQ=0x05, S_SET_MUTE=0x06;
+const CC_PLAY_STOP=0x40, CC_BPM=0x41;
+const DBG_CMD_MAGIC=0xA6, DBG_LOG_ENABLE_ALL=0x01, DBG_PKT_MAGIC=0xA5, CAT_SONG=0x09, EV_SLOT_EDIT=0x08;
+const DEVICE_SLOTS=16, LIB_MAX=160, PAGE_SIZE=16;
+const PARTS=['KICK','SNARE','HAT','TOM','BASS','LEAD','PAD'], SYNTH=['BASS','LEAD','PAD'];
+// ファームのパート色(KICK赤/SNARE緑/HAT青/TOMマゼンタ/BASSシアン/LEAD黄/PADオレンジ)を
+// 彩度を落とした落ち着いたトーンにしてUIへ反映。
+const PART_COLORS=['#c96a5e','#7fa06b','#5f8bbf','#a673a8','#5fb0b0','#c2a85a','#cc8a5e'];
+
+// ============================================================ 状態
+const store={ loops:[], seq:[], seqCap:8, mute:0, solo:0, bpm:120 };
+let sel=0, page=0, synthTab=0;
+let dev,gatt,midiCh,cmdCh,logCh, connected=false;
+const chunkAsm={}; let slotMap=[];
+const LS='ponkey_song_v02';
+function emptyLoop(){return{name:'',loopLen:64,oct:[0,0,0],drums:[],synth:[]};}
+function save(){try{localStorage.setItem(LS,JSON.stringify(store));}catch(e){}}
+function load(){try{const o=JSON.parse(localStorage.getItem(LS));if(o&&o.loops)Object.assign(store,o);}catch(e){}
+  if(!store.loops.length)store.loops=[emptyLoop()]; if(!store.loops[0])store.loops[0]=emptyLoop();
+  if(!store.seqCap)store.seqCap=8;
+  if(!store.seq||!store.seq.length)store.seq=[0];   // 初期: スロット1 をシーケンスに入れておく
+}
+function log(m){const e=document.getElementById('log');e.innerHTML+=`[${new Date().toLocaleTimeString()}] ${m}<br>`;e.scrollTop=e.scrollHeight;}
+function loopHasData(L){return L&&(L.drums.length||L.synth.length);}
+function curLoop(){if(!store.loops[sel])store.loops[sel]=emptyLoop();return store.loops[sel];}
+
+// ============================================================ BLE
+document.getElementById('btnConnect').onclick=async()=>{ try{
+  log('デバイス選択…');
+  dev=await navigator.bluetooth.requestDevice({filters:[{name:'PONKEY_PT2'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
+  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断 (本体は自動でソングモードを退場し、切断時のスロットを単体ループ継続)');});
+  gatt=await dev.gatt.connect();
+  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  const ds=await gatt.getPrimaryService(DBG_SERVICE);
+  cmdCh=await ds.getCharacteristic(DBG_CMD); logCh=await ds.getCharacteristic(DBG_LOG);
+  await logCh.startNotifications(); logCh.addEventListener('characteristicvaluechanged',onLog);
+  await writeCmd([DBG_CMD_MAGIC,DBG_LOG_ENABLE_ALL,0x00]);
+  setConn(true); log('接続完了');
+  await autoStart();          // 接続したら 自動で 入場→同期→再生
+}catch(e){log('接続エラー: '+e);} };
+// 接続時のシームレス起動: 入場 → スロット/シーケンス送信 → BPM → 再生。
+async function autoStart(){
+  try{
+    await writeCmd([SONG_MAGIC,S_ENTER,0x00]); log('自動入場');
+    await fullSync();
+    await writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,store.bpm-60)));
+    await writeMIDI(0xB0,CC_PLAY_STOP,1); log('自動再生');
+  }catch(e){log('自動起動エラー: '+e);}
+}
+function setConn(c){connected=c;
+  document.getElementById('conn').textContent=c?'接続済み':'未接続';
+  document.getElementById('conn').className='pill '+(c?'ok':'ng');
+  ['btnEnter','btnExit','btnPlay','btnStop'].forEach(id=>document.getElementById(id).disabled=!c);
+  setSync(c?'待機':'—');
+}
+async function writeCmd(b){if(!cmdCh)return;const u=Uint8Array.from(b);
+  try{cmdCh.writeValueWithoutResponse?await cmdCh.writeValueWithoutResponse(u):await cmdCh.writeValue(u);}
+  catch(e){try{await cmdCh.writeValue(u);}catch(_){}}}
+async function writeMIDI(s,d1,d2){if(!midiCh)return;const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  try{await midiCh.writeValueWithoutResponse(u);}catch(e){try{await midiCh.writeValue(u);}catch(_){}}}
+function setSync(t){document.getElementById('syncPill').textContent='自動同期: '+t;}
+
+// ============================================================ エンコード
+function encodeLoop(L){const b=[L.loopLen||64,L.oct[0]&0xff,L.oct[1]&0xff,L.oct[2]&0xff];
+  b.push(L.drums.length); for(const[p,s]of L.drums)b.push(((p&0xf)<<4)|(s&0xf));
+  b.push(L.synth.length); for(const[l,k,sub,du]of L.synth)b.push(((l&0xf)<<4)|(k&0xf),sub&0x3f,du&0x3f);
+  return b;}
+
+// ============================================================ 自動同期 (随時送信)
+let syncTimer=null, loopPushTimer=null;
+function scheduleSync(){ if(!connected)return; setSync('送信予約…');
+  clearTimeout(syncTimer); syncTimer=setTimeout(fullSync,250); }
+async function fullSync(){
+  if(!connected){return;}
+  const distinct=[...new Set(store.seq)]; const use=distinct.slice(0,DEVICE_SLOTS);
+  slotMap=use.slice(); const l2s=new Map(use.map((li,si)=>[li,si]));
+  for(let si=0;si<use.length;si++) await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,si&0xf,...encodeLoop(store.loops[use[si]])]);
+  const seqSlots=store.seq.map(li=>l2s.has(li)?l2s.get(li):0);
+  if(seqSlots.length) await writeCmd([SONG_MAGIC,S_SET_SEQ,0x00,seqSlots.length&0xff,...seqSlots.map(s=>s&0xf)]);
+  await writeCmd([SONG_MAGIC,S_SET_MUTE,0x00,store.mute&0x7f,store.solo&0x7f]);
+  setSync(`✓ ${use.length}ループ/${seqSlots.length}小節`+(distinct.length>DEVICE_SLOTS?' ⚠16超':''));
+}
+// 1ループだけの軽量プッシュ (編集中ループが本体に乗っていれば)
+function pushLoop(li){ if(!connected)return; const si=slotMap.indexOf(li); if(si<0){ scheduleSync(); return; }
+  clearTimeout(loopPushTimer); loopPushTimer=setTimeout(async()=>{ setSync('送信…');
+    await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,si&0xf,...encodeLoop(store.loops[li])]); setSync('✓ ループ更新'); },150); }
+async function sendMute(){ if(connected) await writeCmd([SONG_MAGIC,S_SET_MUTE,0x00,store.mute&0x7f,store.solo&0x7f]); }
+
+// ============================================================ トランスポート
+document.getElementById('btnEnter').onclick=async()=>{await writeCmd([SONG_MAGIC,S_ENTER,0x00]);log('入場');await fullSync();};
+document.getElementById('btnExit').onclick=()=>{writeCmd([SONG_MAGIC,S_EXIT,0x00]);log('退場');};
+document.getElementById('btnPlay').onclick=()=>writeMIDI(0xB0,CC_PLAY_STOP,1);
+document.getElementById('btnStop').onclick=()=>writeMIDI(0xB0,CC_PLAY_STOP,0);
+const bpm=document.getElementById('bpm');
+bpm.oninput=()=>{document.getElementById('bpmv').textContent=bpm.value;store.bpm=+bpm.value;save();};
+bpm.onchange=()=>writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,+bpm.value-60)));
+
+// ============================================================ 受信 (本体→アプリ 後勝ち)
+function onLog(e){const b=new Uint8Array(e.target.value.buffer);
+  if(b.length<11||b[0]!==DBG_PKT_MAGIC)return; if(b[8]!==CAT_SONG||b[9]!==EV_SLOT_EDIT)return;
+  const dl=b[10],data=b.slice(11,11+dl); if(dl===0){log('⚠ 本体編集を検知も大きすぎて送れず');return;}
+  const gen=data[0],idx=data[1],cnt=data[2],part=data.slice(3);
+  let a=chunkAsm[gen]; if(!a||a.cnt!==cnt){a={cnt,parts:{}};chunkAsm[gen]=a;} a.parts[idx]=part;
+  if(Object.keys(a.parts).length<cnt)return;
+  let tot=0;for(let c=0;c<cnt;c++)tot+=a.parts[c].length; const full=new Uint8Array(tot);
+  let off=0;for(let c=0;c<cnt;c++){full.set(a.parts[c],off);off+=a.parts[c].length;} delete chunkAsm[gen];
+  applyDeviceEdit(full);
+}
+function applyDeviceEdit(d){let i=0;const slotIdx=d[i++],loopLen=d[i++];
+  const oct=[d[i++],d[i++],d[i++]].map(v=>(v<<24)>>24);
+  const dc=d[i++],drums=[];for(let n=0;n<dc;n++){const x=d[i++];drums.push([(x>>4)&0xf,x&0xf]);}
+  const sc=d[i++],synth=[];for(let n=0;n<sc;n++){const x=d[i++],s=d[i++],du=d[i++];synth.push([(x>>4)&0xf,x&0xf,s,du]);}
+  const li=slotMap[slotIdx]; if(li==null){log(`本体編集 slot${slotIdx}(対応ループ不明・無視)`);return;}
+  const L=store.loops[li]; L.loopLen=loopLen;L.oct=oct;L.drums=drums;L.synth=synth; save(); // 後勝ち
+  log(`◀ 本体編集を反映: slot${slotIdx}→#${li} (drum${dc}/syn${sc})`);
+  if(li===sel)renderEditor(); renderLibrary(); renderSeq();
+}
+
+// ============================================================ ライブラリ
+function renderLibrary(){const g=document.getElementById('libgrid');g.innerHTML='';
+  for(let i=0;i<PAGE_SIZE;i++){const idx=page*PAGE_SIZE+i,L=store.loops[idx];
+    const c=document.createElement('div');c.className='loopcell'+(loopHasData(L)?' has':'')+(idx===sel?' sel':'');
+    c.innerHTML=`<span class="ix">スロット${idx+1}</span><span class="nm">${L&&L.name?L.name:(loopHasData(L)?'(無名)':'空')}</span>`;
+    c.onclick=()=>{if(!store.loops[idx])store.loops[idx]=emptyLoop();sel=idx;renderAll();};
+    c.ondblclick=()=>addToSeq(idx);
+    g.appendChild(c);}
+  document.getElementById('page').textContent=`${page*PAGE_SIZE+1}–${page*PAGE_SIZE+PAGE_SIZE}`;
+  document.getElementById('libCount').textContent=store.loops.filter(loopHasData).length;
+}
+document.getElementById('btnPrev').onclick=()=>{if(page>0){page--;renderLibrary();}};
+document.getElementById('btnNext').onclick=()=>{if((page+1)*PAGE_SIZE<LIB_MAX){page++;renderLibrary();}};
+document.getElementById('btnNewLoop').onclick=()=>{let idx=store.loops.findIndex(l=>!loopHasData(l));
+  if(idx<0){if(store.loops.length>=LIB_MAX){log('満杯');return;}idx=store.loops.length;}
+  store.loops[idx]=emptyLoop();sel=idx;page=Math.floor(idx/PAGE_SIZE);renderAll();save();};
+document.getElementById('btnClearLoop').onclick=()=>{store.loops[sel].drums=[];store.loops[sel].synth=[];renderAll();save();pushLoop(sel);};
+
+// ============================================================ シーケンス スロット
+// 各コマ内のミニパターン: 7パート(ドラム4+シンセ3)×16ステップを小さな点で描画(モニタ用)。
+function miniHTML(L){let h='';
+  for(let p=0;p<4;p++)for(let s=0;s<16;s++)h+=`<i${drumHas(L,p,s)?` style="background:${PART_COLORS[p]}"`:''}></i>`;            // KICK/SNARE/HAT/TOM
+  for(let l=0;l<3;l++)for(let s=0;s<16;s++){const on=L.synth.some(n=>n[0]===l&&Math.floor(n[2]/4)===s);                       // BASS/LEAD/PAD: そのステップに音があるか
+    h+=`<i${on?` style="background:${PART_COLORS[4+l]}"`:''}></i>`;}
+  return h;}
+function addToSeq(idx){ store.seq.push(idx); if(store.seq.length>store.seqCap)store.seqCap=store.seq.length;
+  renderSeq();save();scheduleSync(); }
+function renderSeq(){const w=document.getElementById('seqwrap');w.innerHTML='';
+  const n=Math.max(store.seqCap,store.seq.length);
+  for(let pos=0;pos<n;pos++){const li=store.seq[pos];
+    const s=document.createElement('div');
+    if(li==null){ s.className='seqslot'; s.innerHTML=`<span class="pos">${pos+1}</span><span style="font-size:11px">空</span>`; }
+    else{ const L=store.loops[li]; s.className='seqslot fill';
+      s.innerHTML=`<span class="pos">${pos+1}</span><span class="x">✕</span>`+
+        `<div class="mini">${miniHTML(L)}</div>`+
+        `<span class="slab">スロット${li+1}${L&&L.name?' '+L.name:''}</span>`;
+      s.querySelector('.x').onclick=(ev)=>{ev.stopPropagation();store.seq.splice(pos,1);renderSeq();save();scheduleSync();};
+      s.onclick=()=>{sel=li;page=Math.floor(li/PAGE_SIZE);renderAll();};
+    }
+    w.appendChild(s);}
+  const add=document.createElement('div');add.className='seqslot add';add.textContent='＋';
+  add.onclick=()=>{store.seqCap++;renderSeq();save();};
+  w.appendChild(add);
+  const distinct=[...new Set(store.seq)].length;
+  document.getElementById('seqInfo').textContent=store.seq.length?`${store.seq.length}小節 / 個別${distinct}種${distinct>DEVICE_SLOTS?' ⚠16超':''}`:'空';
+}
+
+// ============================================================ ミュート/ソロ
+function renderMute(){const el=document.getElementById('muteSeg');el.innerHTML='';
+  PARTS.forEach((nm,i)=>{const m=(store.mute>>i)&1,s=(store.solo>>i)&1;
+    const d=document.createElement('span');d.className='ms';
+    d.innerHTML=`<span style="color:${PART_COLORS[i]}">${nm}</span><button class="m${m?' on':''}" data-m="${i}">M</button><button class="s${s?' on':''}" data-s="${i}">S</button>`;
+    el.appendChild(d);});
+  el.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{store.mute^=(1<<+b.dataset.m);save();renderMute();sendMute();});
+  el.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{store.solo^=(1<<+b.dataset.s);save();renderMute();sendMute();});
+}
+
+// ============================================================ 編集: ドラム + シンセ(ピアノロール)
+function drumHas(L,p,s){return L.drums.some(d=>d[0]===p&&d[1]===s);}
+function toggleDrum(L,p,s){const i=L.drums.findIndex(d=>d[0]===p&&d[1]===s);if(i>=0)L.drums.splice(i,1);else L.drums.push([p,s]);}
+function steps(){return Math.max(4,Math.round((curLoop().loopLen||64)/4));}
+
+function renderEditor(){const L=curLoop();
+  document.getElementById('editIx').textContent='スロット'+(sel+1);
+  document.getElementById('loopName').value=L.name||'';
+  document.getElementById('loopLen').value=L.loopLen||64;
+  const st=steps();
+  // drum grid
+  const dg=document.getElementById('drumGrid');dg.innerHTML='';
+  for(let p=0;p<4;p++){const r=document.createElement('div');r.className='row';r.style.margin='3px 0';
+    const lab=document.createElement('span');lab.className='lab';lab.textContent=PARTS[p];lab.style.color=PART_COLORS[p];r.appendChild(lab);
+    const grid=document.createElement('div');grid.className='grid';grid.style.cssText=`grid-template-columns:repeat(${st},1fr);flex:1`;
+    for(let s=0;s<st;s++){const c=document.createElement('div');c.className='cell col'+(s%16);
+      if(drumHas(L,p,s)){c.classList.add('on');c.style.background=PART_COLORS[p];c.style.borderColor=PART_COLORS[p];}
+      c.onclick=()=>{toggleDrum(L,p,s);renderEditor();renderSeq();save();pushLoop(sel);};grid.appendChild(c);}
+    r.appendChild(grid);dg.appendChild(r);}
+  // synth tabs
+  const tb=document.getElementById('synthTabs');tb.innerHTML='';
+  SYNTH.forEach((nm,l)=>{const t=document.createElement('div');t.className='tab'+(l===synthTab?' act':'');t.textContent=nm;
+    const col=PART_COLORS[4+l]; t.style.color=col; if(l===synthTab)t.style.borderColor=col;
+    t.onclick=()=>{synthTab=l;renderEditor();};tb.appendChild(t);});
+  document.getElementById('oct').value=L.oct[synthTab]||0;document.getElementById('octv').textContent=L.oct[synthTab]||0;
+  renderPianoRoll(L,st);
+}
+// ピアノロール: 16キー(行)、横軸=substep。音は実 startSub 位置・dur 幅のバーで表示(グリッド外も表示される)。
+function renderPianoRoll(L,st){
+  const totalSub=st*4; const pr=document.getElementById('pianoRoll');pr.innerHTML='';
+  for(let k=15;k>=0;k--){
+    const row=document.createElement('div');row.className='pr-row';
+    const key=document.createElement('span');key.className='pr-key';key.textContent='k'+k;row.appendChild(key);
+    const lane=document.createElement('div');lane.className='pr-lane';
+    // 拍線 (4 step ごと)
+    for(let s=4;s<st;s+=4){const bl=document.createElement('div');bl.className='beat';bl.style.left=(s/st*100)+'%';lane.appendChild(bl);}
+    // 音バー
+    L.synth.filter(n=>n[0]===synthTab&&n[1]===k).forEach(n=>{
+      const [,, sub, du]=n; const bar=document.createElement('div');bar.className='pr-note';
+      bar.style.left=(sub/totalSub*100)+'%'; bar.style.width=Math.max(2,du/totalSub*100)+'%';
+      bar.style.background=PART_COLORS[4+synthTab];
+      bar.title=`sub${sub} 長さ${du}`;
+      bar.onclick=(ev)=>{ev.stopPropagation();const i=L.synth.indexOf(n);if(i>=0)L.synth.splice(i,1);renderEditor();renderSeq();save();pushLoop(sel);};
+      lane.appendChild(bar);
+    });
+    // クリックで配置 (16step にスナップ)
+    lane.onclick=(ev)=>{const rect=lane.getBoundingClientRect();const x=(ev.clientX-rect.left)/rect.width;
+      let step=Math.floor(x*st); if(step<0)step=0; if(step>=st)step=st-1; const sub=step*4;
+      const dur=+document.getElementById('dur').value;
+      const ex=L.synth.findIndex(n=>n[0]===synthTab&&n[1]===k&&n[2]===sub);
+      if(ex>=0)L.synth.splice(ex,1); else L.synth.push([synthTab,k,sub,dur]);
+      renderEditor();renderSeq();save();pushLoop(sel);};
+    row.appendChild(lane);pr.appendChild(row);
+  }
+}
+document.getElementById('loopName').oninput=e=>{curLoop().name=e.target.value;renderLibrary();renderSeq();save();};
+document.getElementById('loopLen').onchange=e=>{curLoop().loopLen=+e.target.value;renderEditor();renderSeq();save();pushLoop(sel);};
+document.getElementById('oct').oninput=e=>{curLoop().oct[synthTab]=+e.target.value;document.getElementById('octv').textContent=e.target.value;save();pushLoop(sel);};
+document.getElementById('dur').onchange=()=>renderEditor();
+
+// ============================================================ Export/Import
+document.getElementById('btnExport').onclick=()=>{const b=new Blob([JSON.stringify(store,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='ponkey-song.json';a.click();};
+document.getElementById('btnImport').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{Object.assign(store,JSON.parse(r.result));save();renderAll();scheduleSync();log('読み込み完了');}catch(err){log('読み込み失敗:'+err);}};r.readAsText(f);};
+
+// ============================================================ スロット複製 (Ctrl/⌘+C / +V)
+// スロット選択エリア(libPanel)が直近のクリック対象の時だけ有効。テキスト入力中は無効。
+let slotClip = null;       // コピーしたパターン
+let libActive = false;     // ライブラリ内が操作中スコープか
+// キャプチャフェーズで判定(セルの onclick が renderAll で DOM を作り直す前に、まだ繋がっている e.target で判定する)
+document.addEventListener('click', e=>{ libActive = !!(e.target.closest && e.target.closest('#libPanel')); }, true);
+document.addEventListener('keydown', e=>{
+  if(!libActive) return;
+  const t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  const k=e.key.toLowerCase();
+  if((e.ctrlKey||e.metaKey) && k==='c'){
+    const L=curLoop();
+    slotClip=JSON.parse(JSON.stringify({loopLen:L.loopLen,oct:L.oct,drums:L.drums,synth:L.synth}));
+    log(`スロット${sel+1} のパターンをコピー`); e.preventDefault();
+  } else if((e.ctrlKey||e.metaKey) && k==='v'){
+    if(!slotClip){log('コピーされたパターンがありません');return;}
+    const L=curLoop();
+    L.loopLen=slotClip.loopLen; L.oct=slotClip.oct.slice();
+    L.drums=JSON.parse(JSON.stringify(slotClip.drums)); L.synth=JSON.parse(JSON.stringify(slotClip.synth));
+    save(); renderAll(); pushLoop(sel);
+    log(`スロット${sel+1} にパターンを貼り付け(複製)`); e.preventDefault();
+  }
+});
+
+// ============================================================
+function renderAll(){renderLibrary();renderSeq();renderMute();renderEditor();}
+load();
+document.getElementById('bpm').value=store.bpm;document.getElementById('bpmv').textContent=store.bpm;
+renderAll();
+log('起動。接続→入場→ライブラリでループ作成→ダブルクリックで配置→再生。編集は自動で本体へ反映。');
+</script>
+</body>
+</html>
