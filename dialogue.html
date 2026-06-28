@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIALOGUE</title>
+<!--
+  ═══════════════════════════════════════════════════════════════
+  PONKEY DIALOGUE v3.2.0  (2026-06-11)
+  ═══════════════════════════════════════════════════════════════
+  v3 = 多チャンネル・サプライザル
+
+  「びっくりの一撃」を3つのチャンネルから選んで打つ:
+    音高 PITCH   : 予測外の跳躍 (v2と同じ)
+    和音 HARMONY : 突然の三和音/クラスター/転調
+    間   TIME    : ためらいの休符 / 倍速バースト
+  逸脱が「意図」として聴こえるのは他チャンネルが安定している時
+  だけ (Huron) なので、1返答につきスパイクは1チャンネルのみ。
+
+  単旋律の打破:
+    ・B は和音で答えられる (firmware の stagger queue が同時
+      ソレノイド発火を時分割吸収 → 物理「和音スタンプ」)
+    ・終止はトニック三和音 (確率 .55) = 物理カデンツ
+  Cメジャー固定の打破:
+    ・「モードのじゆう」ON → A の SAM を CC_SAM_MUTE(0x55) で
+      ミュートし、両者の声をアプリが合成。16キー=抽象度数
+      グリッドになり、任意の旋法 (Major/Dorian/Lydian/Mixo/
+      Minor) で解釈できる
+    ・B の和音スパイクとして「転調」がある。転調は持続する =
+      B が世界を塗り替え、A の同じキーの響きも変わる
+  フレーズ交替制の打破:
+    ・「かさね」モード: B が8ステップのグルーヴを敷き、A は
+      その上でソロ。B は A の音密度に追従し、小節境界で
+      サプライザル整形された変異 (裏拍ずらし/頭抜き/フィル/
+      和音スタブ) を打つ。グルーヴの bit は設計事前分布による
+      (リズムの学習モデル化は v3.x で深化予定)
+
+  v3.1.0: ノリゲージ — 演奏とやりとりでゲージが充填、満タンで
+  Bのソロ (あなたのフレーズ引用→3チャンネル連続スパイク→大カデンツ)。
+  ソロ中は割り込みに譲らない。かさねモード中は2小節の暴走フィル。
+
+  v2.0.1 から継承: サプライザル整形 / オンライン学習モデル /
+  BLE自動再接続 / びっくりカーブ / デモ入力
+  ═══════════════════════════════════════════════════════════════
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0e0b;--panel:#14170f;--line:#242a1e;
+  --dot:#bed2aa;--dot-dim:#5a6650;
+  --human:#ff8a3c;--human-dim:#7a4a26;
+  --time:#6db9ff;--harm:#c79bff;
+  --warn:#ff5d5d;--txt:#d8e0cc;--txt-dim:#7c8870;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --disp:'DotGothic16',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font-family:var(--disp);font-size:14px;line-height:1.6;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(190,210,170,.015) 2px 4px)}
+.wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:14px 16px 60px}
+
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:6px 2px 14px;border-bottom:1px solid var(--line)}
+h1{font-size:22px;letter-spacing:.16em;color:var(--dot)}
+h1 .x{color:var(--human)}
+.ver{font-family:var(--mono);font-size:11px;color:var(--txt-dim)}
+.world{font-size:12px;color:var(--harm)}
+.status-line{margin-left:auto;font-size:13px;color:var(--txt-dim);min-height:1.4em;transition:color .3s}
+.status-line.listening{color:var(--human)}
+.status-line.thinking,.status-line.talking{color:var(--dot)}
+
+.stage{display:grid;grid-template-columns:1fr minmax(220px,300px) 1fr;gap:14px;margin-top:16px}
+@media(max-width:840px){.stage{grid-template-columns:1fr 1fr}.tape-col{grid-column:1/-1;order:3}}
+@media(max-width:520px){.stage{grid-template-columns:1fr}}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.panel .who{display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between}
+.who .name{font-size:15px;letter-spacing:.1em}
+.panel.a .name{color:var(--human)}
+.panel.b .name{color:var(--dot)}
+.conn-btn{font-family:var(--disp);font-size:12px;letter-spacing:.08em;cursor:pointer;background:transparent;color:var(--txt-dim);border:1px solid var(--line);border-radius:5px;padding:5px 10px;transition:all .2s}
+.conn-btn:hover{color:var(--txt);border-color:var(--txt-dim)}
+.panel.a .conn-btn.on{color:var(--human);border-color:var(--human)}
+.panel.b .conn-btn.on{color:var(--dot);border-color:var(--dot)}
+.conn-btn:disabled{opacity:.4;cursor:wait}
+
+.avatar{height:84px;display:flex;align-items:flex-end}
+.avatar canvas{image-rendering:pixelated}
+.avatar.hit canvas{animation:hop .28s ease-out}
+@keyframes hop{0%{transform:translateY(0)}35%{transform:translateY(-9px)}100%{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.avatar.hit canvas{animation:none}}
+
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;max-width:220px;aspect-ratio:1;touch-action:none}
+.cell{border:1px solid var(--line);border-radius:6px;background:#0f120c;position:relative;cursor:pointer;transition:background .25s,border-color .25s,box-shadow .25s;user-select:none}
+.cell::after{content:'';position:absolute;inset:38%;border-radius:50%;background:var(--dot-dim);opacity:.35;transition:all .15s}
+.panel.a .cell.lit{border-color:var(--human);box-shadow:0 0 10px rgba(255,138,60,.35)}
+.panel.a .cell.lit::after{background:var(--human);opacity:1;inset:28%}
+.panel.b .cell{cursor:default}
+.panel.b .cell.lit{border-color:var(--dot);box-shadow:0 0 10px rgba(190,210,170,.35)}
+.panel.b .cell.lit::after{background:var(--dot);opacity:1;inset:28%}
+.panel.b .cell.spikeP{border-color:var(--human);box-shadow:0 0 14px rgba(255,138,60,.6)}
+.panel.b .cell.spikeP::after{background:var(--human);opacity:1;inset:24%}
+.panel.b .cell.spikeT{border-color:var(--time);box-shadow:0 0 14px rgba(109,185,255,.6)}
+.panel.b .cell.spikeT::after{background:var(--time);opacity:1;inset:24%}
+.panel.b .cell.spikeH{border-color:var(--harm);box-shadow:0 0 14px rgba(199,155,255,.6)}
+.panel.b .cell.spikeH::after{background:var(--harm);opacity:1;inset:24%}
+.hint{font-size:11px;color:var(--txt-dim)}
+.vocab{font-family:var(--mono);font-size:11px;color:var(--txt-dim)}
+.chip{font-size:12px;letter-spacing:.08em;color:var(--bg);background:var(--dot);border-radius:4px;padding:2px 10px;opacity:0;transition:opacity .3s;min-height:1.6em}
+.chip.show{opacity:1}
+.mini-btn{font-family:var(--disp);font-size:11px;background:transparent;color:var(--txt-dim);border:1px solid var(--line);border-radius:4px;padding:3px 8px;cursor:pointer}
+.mini-btn:hover{color:var(--txt)}
+
+.tape-col{display:flex;flex-direction:column;gap:8px;min-height:300px}
+.gauge-wrap{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt-dim)}
+.gauge{flex:1;display:grid;grid-template-columns:repeat(16,1fr);gap:3px;height:14px}
+.gseg{background:#1a1f15;border:1px solid var(--line);border-radius:2px;transition:background .25s,box-shadow .25s}
+.gseg.lit{background:var(--dot);border-color:var(--dot)}
+.gseg.lit.hot{background:var(--human);border-color:var(--human)}
+.gauge.full .gseg.lit{animation:gpulse .5s ease-in-out infinite alternate}
+@keyframes gpulse{from{box-shadow:0 0 2px rgba(255,138,60,.4)}to{box-shadow:0 0 10px rgba(255,138,60,.95)}}
+@media(prefers-reduced-motion:reduce){.gauge.full .gseg.lit{animation:none}}
+.tape-head{font-size:12px;color:var(--txt-dim);letter-spacing:.14em;text-align:center}
+.tape{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 10px;overflow-y:auto;max-height:380px;display:flex;flex-direction:column;gap:10px}
+.tape:empty::before{content:'PONKEY A をひくと\AB が あなたのことばを おぼえていく';color:var(--txt-dim);font-size:12px;text-align:center;margin:auto;white-space:pre-wrap;padding:0 10px}
+.utter{display:flex;flex-direction:column;gap:3px;max-width:92%}
+.utter.a{align-self:flex-start}
+.utter.b{align-self:flex-end;align-items:flex-end}
+.utter .meta{font-size:10px;font-family:var(--mono);color:var(--txt-dim)}
+.utter.a .meta{color:var(--human-dim)}
+.utter canvas{border:1px solid var(--line);border-radius:5px;background:#0f120c;image-rendering:pixelated}
+
+.curve-box{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.curve-box h2{font-size:13px;letter-spacing:.14em;color:var(--txt-dim);margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px}
+.curve-box h2 .legend{font-family:var(--mono);font-size:10px}
+.legend .g{color:var(--dot)} .legend .o{color:var(--human)} .legend .b{color:var(--time)} .legend .p{color:var(--harm)} .legend .t{color:var(--txt-dim)}
+#curve{width:100%;height:110px;display:block}
+
+.below{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.below{grid-template-columns:1fr}}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.box h2{font-size:13px;letter-spacing:.14em;color:var(--txt-dim);margin-bottom:10px}
+.srow{display:flex;align-items:center;gap:10px;margin:9px 0;font-size:13px}
+.srow .lbl{flex:0 0 9.5em}
+.srow input[type=range]{flex:1;accent-color:var(--dot);min-width:60px}
+.srow .val{font-family:var(--mono);font-size:11px;color:var(--txt-dim);min-width:4.5em;text-align:right}
+.srow select,.srow input[type=checkbox]{accent-color:var(--dot)}
+.srow select{background:#0f120c;color:var(--txt);border:1px solid var(--line);border-radius:4px;font-family:var(--disp);font-size:12px;padding:3px 6px}
+.log{font-family:var(--mono);font-size:10.5px;line-height:1.5;height:150px;overflow-y:auto;color:var(--txt-dim);white-space:pre-wrap;word-break:break-all}
+.log .ok{color:var(--dot)} .log .err{color:var(--warn)} .log .tx{color:#8aa0c0}
+.foot{margin-top:20px;font-size:11px;color:var(--txt-dim);text-align:center;letter-spacing:.06em}
+
+.drum-row{display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:14px;margin-top:14px}
+@media(max-width:700px){.drum-row{grid-template-columns:1fr}}
+.panel.c .name{color:var(--time)}
+.panel.c .conn-btn.on{color:var(--time);border-color:var(--time)}
+.panel.c .cgrid{display:flex;gap:14px;align-items:center;width:100%;justify-content:center}
+.panel.c .grid{max-width:150px}
+.panel.c .cell{cursor:default}
+.panel.c .cell.kick.lit{border-color:#ff5d5d;box-shadow:0 0 12px rgba(255,93,93,.7)}
+.panel.c .cell.kick.lit::after{background:#ff5d5d;opacity:1;inset:22%}
+.panel.c .cell.snare.lit{border-color:#bed2aa;box-shadow:0 0 12px rgba(190,210,170,.7)}
+.panel.c .cell.snare.lit::after{background:#bed2aa;opacity:1;inset:26%}
+.panel.c .cell.hat.lit{border-color:var(--time);box-shadow:0 0 8px rgba(109,185,255,.6)}
+.panel.c .cell.hat.lit::after{background:var(--time);opacity:1;inset:32%}
+.drum-info{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.drum-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.bpm-big{font-size:30px;color:var(--time);letter-spacing:.04em}
+.bpm-big small{font-size:13px;color:var(--txt-dim)}
+.conf{font-size:11px;color:var(--txt-dim);flex:1}
+.drumgrid{display:grid;grid-template-columns:auto repeat(8,1fr);gap:4px;align-items:center}
+.drumgrid .rlabel{font-size:11px;color:var(--txt-dim);font-family:var(--mono);padding-right:4px}
+.drumgrid .dcell{aspect-ratio:1;border:1px solid var(--line);border-radius:3px;background:#0f120c;min-height:20px;transition:background .1s,box-shadow .1s}
+.drumgrid .dcell.on.kick{background:#5a2424}
+.drumgrid .dcell.on.snare{background:#3f4a33}
+.drumgrid .dcell.on.hat{background:#1d3a52}
+.drumgrid .dcell.play{box-shadow:0 0 0 2px var(--human) inset}
+.drumgrid .dcell.beat{outline:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>DIALOGUE</h1>
+  <span class="ver">DIALOGUE v3.2.0 / + PONKEY C ドラマー</span>
+  <span class="world" id="worldLbl">せかい: メジャー</span>
+  <div class="status-line" id="statusLine">じゅんびOK</div>
+</header>
+
+<div class="stage">
+  <div class="panel a">
+    <div class="who"><span class="name">PONKEY A 〔ひと〕</span>
+      <button class="conn-btn" id="btnA" onclick="BLE.toggle('A')">つなぐ</button></div>
+    <div class="avatar" id="avA"><canvas id="faceA"></canvas></div>
+    <div class="grid" id="gridA"></div>
+    <div class="hint">タップ or qwer/asdf/zxcv でも ひける</div>
+  </div>
+
+  <div class="tape-col">
+    <div class="gauge-wrap"><span>ノリ</span><div class="gauge" id="gauge"></div></div>
+    <div class="tape-head">— かいわのきろく —</div>
+    <div class="tape" id="tape"></div>
+  </div>
+
+  <div class="panel b">
+    <div class="who"><span class="name">PONKEY B 〔AI〕</span>
+      <button class="conn-btn" id="btnB" onclick="BLE.toggle('B')">つなぐ</button></div>
+    <div class="avatar" id="avB"><canvas id="faceB"></canvas></div>
+    <div class="grid" id="gridB"></div>
+    <div class="vocab" id="vocab">ごい: 0パターン</div>
+    <div class="chip" id="chipB"></div>
+    <button class="mini-btn" onclick="testSweep()">テスト発火 (16キー)</button>
+  </div>
+</div>
+
+
+<div class="drum-row">
+  <div class="panel c">
+    <div class="who"><span class="name">PONKEY C 〔ドラム〕</span>
+      <button class="conn-btn" id="btnC" onclick="BLE.toggle('C')">つなぐ</button></div>
+    <div class="cgrid">
+      <div class="avatar" id="avC"><canvas id="faceC"></canvas></div>
+      <div class="grid" id="gridC"></div>
+    </div>
+  </div>
+  <div class="drum-info">
+    <div class="drum-head">
+      <span class="bpm-big" id="bpmBig">-- <small>bpm</small></span>
+      <span class="conf" id="confLbl">けんしゅつちゅう…</span>
+      <button class="conn-btn" id="btnDrum" onclick="Drummer.toggle()">ドラム ON</button>
+    </div>
+    <div class="drumgrid" id="drumgrid"></div>
+    <div class="hint">Aを8音くらい弾くと テンポとノリを つかむ</div>
+  </div>
+</div>
+
+<div class="curve-box">
+  <h2><span>びっくりカーブ — Bのへんじの「よそくできなさ」(bit)</span>
+    <span class="legend"><span class="g">■ふつう</span> <span class="o">■音高</span> <span class="b">■間</span> <span class="p">■和音</span> <span class="t">┄もくひょう</span></span></h2>
+  <canvas id="curve"></canvas>
+</div>
+
+<div class="below">
+  <div class="box">
+    <h2>せってい</h2>
+    <div class="srow"><span class="lbl">びっくりの強さ</span>
+      <input type="range" id="sMood" min="0" max="100" value="55">
+      <span class="val" id="vMood">55</span></div>
+    <div class="srow"><span class="lbl">セッション</span>
+      <select id="sSession"><option value="dialog">かけあい</option><option value="groove">かさね (グルーヴ)</option></select>
+      <span class="val" id="vBpm">—</span></div>
+    <div class="srow"><span class="lbl">モードのじゆう</span>
+      <input type="checkbox" id="sModal" checked>
+      <select id="sMode">
+        <option value="ionian">メジャー</option><option value="dorian">ドリアン</option>
+        <option value="lydian">リディアン</option><option value="mixolydian">ミクソリディアン</option>
+        <option value="aeolian">マイナー</option>
+      </select></div>
+    <div class="srow"><span class="lbl">フレーズのくぎり</span>
+      <select id="sGapMode"><option value="auto">じどう</option><option value="manual">てどう</option></select>
+      <input type="range" id="sGap" min="400" max="1600" step="50" value="800" disabled>
+      <span class="val" id="vGap">auto</span></div>
+    <div class="srow"><span class="lbl">へんじの ながさ上限</span>
+      <input type="range" id="sLen" min="6" max="24" value="16">
+      <span class="val" id="vLen">16</span></div>
+    <div class="srow"><span class="lbl">Bのこえ (ブラウザ音)</span>
+      <input type="checkbox" id="sVoice" checked>
+      <input type="range" id="sVol" min="0" max="100" value="70">
+      <span class="val" id="vVol">70</span></div>
+    <div class="srow"><span class="lbl">わりこまれたら ゆずる</span>
+      <input type="checkbox" id="sYield" checked></div>
+    <div class="srow"><span class="lbl">ぼうそうモード (ゲージ満タンでBのソロ)</span>
+      <input type="checkbox" id="sRampage" checked></div>
+    <div class="srow"><span class="lbl">Cの音 (ブラウザ・ドラム)</span>
+      <input type="checkbox" id="sCVoice" checked></div>
+    <div class="srow"><span class="lbl">A入力のかいしゃく</span>
+      <select id="sParse">
+        <option value="table">音名テーブル (v4.5標準)</option>
+        <option value="ki36">36+キー番号</option>
+      </select></div>
+  </div>
+  <div class="box"><h2>ログ</h2><div class="log" id="log"></div></div>
+</div>
+
+<div class="foot">大人も子どももAIも。— PONKEY / DOT P</div>
+</div>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════
+   定数・マッピング
+   ════════════════════════════════════════════ */
+const VERSION='3.2.0';
+const BLE_SERVICE='03b80e5a-ede8-4b33-a751-6ce34ec4c700';
+const BLE_CHAR   ='7772e5db-3868-4112-a1a9-f2669d106bf3';
+const CC_STATE_SYNC=0x51,CC_HEARTBEAT=0x52,CC_BAR_SYNC=0x54,CC_SAM_MUTE=0x55;
+const NOTE_NORMAL=[69,71,72,74,62,64,65,67,55,57,59,60,48,50,52,53];
+const NOTE_BASS  =[45,47,48,50,38,40,41,43,31,33,35,36,24,26,28,29];
+const SYNTH_CH=new Set([0,2,3,4]);
+const DEG_TO_KI=[12,13,14,15,8,9,10,11,4,5,6,7,0,1,2,3];
+const KI_TO_DEG=(()=>{const a=new Array(16);DEG_TO_KI.forEach((ki,d)=>a[ki]=d);return a;})();
+const LADDER_N=[...NOTE_NORMAL].sort((a,b)=>a-b);
+const LADDER_B=[...NOTE_BASS  ].sort((a,b)=>a-b);
+
+/*ENGINE-BEGIN*/
+/* ════════════════════════════════════════════
+   旋法 : 度数(0-15) → ピッチ
+   deg%7 を旋法の音程パターンに、deg/7 をオクターブに割る。
+   ionian は LADDER_N/B と完全一致 (= v2互換)。
+   ════════════════════════════════════════════ */
+const MODES={
+  ionian:    [0,2,4,5,7,9,11],
+  dorian:    [0,2,3,5,7,9,10],
+  lydian:    [0,2,4,6,7,9,11],
+  mixolydian:[0,2,4,5,7,9,10],
+  aeolian:   [0,2,3,5,7,8,10],
+};
+const MODE_JP={ionian:'メジャー',dorian:'ドリアン',lydian:'リディアン',mixolydian:'ミクソリディアン',aeolian:'マイナー'};
+function modalPitch(deg,mode,fam){
+  const base=fam==='B'?24:48;
+  return base+12*Math.floor(deg/7)+MODES[mode][deg%7];
+}
+
+const STAB=(()=>{const s=new Array(16).fill(1);
+  [0,7,14].forEach(d=>s[d]=3.0);[4,11].forEach(d=>s[d]=2.0);[2,9].forEach(d=>s[d]=1.6);
+  return s;})();
+const TONICS=[0,7,14];
+const BEAT_CLASSES=[0.5,1,1.5,2,3];
+
+/* ════════════════════════════════════════════
+   Model — 音高 (v2継承) + リズム (v3新規) のオンライン学習
+   ════════════════════════════════════════════ */
+function makeModel(){
+  return{
+    degCtx:new Map(),intCtx:new Map(),deg0:new Float64Array(16),nNotes:0,
+    beatCtx:new Map(),  // prevClass -> Map(class->count)
+    nBeats:0,
+    vocab(){return this.degCtx.size+this.intCtx.size+this.beatCtx.size;},
+
+    learn(degs,beats){
+      for(let i=0;i<degs.length;i++){
+        const d=degs[i];
+        this.deg0[d]++;this.nNotes++;
+        for(let k=1;k<=3;k++){
+          if(i-k<0)break;
+          const key=k+'|'+degs.slice(i-k,i).join(',');
+          let t=this.degCtx.get(key);
+          if(!t){t=new Float64Array(16);this.degCtx.set(key,t);}
+          t[d]++;
+        }
+        if(i>=1){
+          const ints=[];for(let x=Math.max(1,i-2);x<=i;x++)ints.push(degs[x]-degs[x-1]);
+          const cur=ints[ints.length-1];
+          for(let j=1;j<=2;j++){
+            const ctxI=ints.slice(-1-j,-1);
+            if(ctxI.length<j)break;
+            const key=j+'|'+ctxI.join(',');
+            let m=this.intCtx.get(key);
+            if(!m){m=new Map();this.intCtx.set(key,m);}
+            m.set(cur,(m.get(cur)||0)+1);
+          }
+        }
+      }
+      if(beats)for(let i=1;i<beats.length;i++){
+        const prev=beats[i-1],cur=beats[i];
+        let m=this.beatCtx.get(prev);
+        if(!m){m=new Map();this.beatCtx.set(prev,m);}
+        m.set(cur,(m.get(cur)||0)+1);
+        this.nBeats++;
+      }
+    },
+
+    dist(ctx){
+      const p=new Float64Array(16);
+      const last=ctx.length?ctx[ctx.length-1]:7;
+      let priorSum=0;const prior=new Float64Array(16);
+      for(let d=0;d<16;d++){
+        let v=Math.exp(-Math.abs(d-last)/2.2)*STAB[d];
+        if(d===last)v*=.55;
+        prior[d]=v;priorSum+=v;
+      }
+      const W_PRIOR=.9;
+      for(let d=0;d<16;d++)p[d]=W_PRIOR*prior[d]/priorSum;
+      if(this.nNotes>0){
+        const w0=.3*this.nNotes/(this.nNotes+8);
+        for(let d=0;d<16;d++)p[d]+=w0*(this.deg0[d]+.1)/(this.nNotes+1.6);
+      }
+      const KW=[0,.8,1.6,3.2];
+      for(let k=1;k<=3;k++){
+        if(ctx.length<k)break;
+        const t=this.degCtx.get(k+'|'+ctx.slice(-k).join(','));
+        if(!t)continue;
+        let n=0;for(let d=0;d<16;d++)n+=t[d];
+        const w=KW[k]*n/(n+1.5);
+        for(let d=0;d<16;d++)p[d]+=w*(t[d]+.05)/(n+.8);
+      }
+      const JW=[0,1.0,2.0];
+      if(ctx.length>=2){
+        const ints=[];for(let x=1;x<ctx.length;x++)ints.push(ctx[x]-ctx[x-1]);
+        for(let j=1;j<=2;j++){
+          if(ints.length<j)break;
+          const m=this.intCtx.get(j+'|'+ints.slice(-j).join(','));
+          if(!m)continue;
+          let n=0;m.forEach(c=>n+=c);
+          const w=JW[j]*n/(n+1.5);
+          m.forEach((c,iv)=>{
+            const d=last+iv;
+            if(d>=0&&d<16)p[d]+=w*c/n;
+          });
+        }
+      }
+      let s=0;for(let d=0;d<16;d++)s+=p[d];
+      for(let d=0;d<16;d++)p[d]/=s;
+      return p;
+    },
+
+    // リズム: P(class | prevClass)。事前 = 同クラス維持バイアス
+    beatDist(prev){
+      const p=new Map();
+      let s=0;
+      for(const c of BEAT_CLASSES){
+        let v=c===prev?1.6:(Math.abs(c-prev)<=0.5?0.7:0.35);
+        v/= (c>=2?1.6:1);            // 長い間はもともと珍しい
+        p.set(c,v);s+=v;
+      }
+      for(const c of BEAT_CLASSES)p.set(c,0.8*p.get(c)/s);
+      const m=this.beatCtx.get(prev);
+      if(m){
+        let n=0;m.forEach(x=>n+=x);
+        const w=1.4*n/(n+2);
+        m.forEach((cnt,c)=>{if(p.has(c))p.set(c,p.get(c)+w*cnt/n);});
+      }
+      let s2=0;p.forEach(v=>s2+=v);
+      p.forEach((v,c)=>p.set(c,v/s2));
+      return p;
+    },
+    beatSurprisal(cls,prev){return -Math.log2(this.beatDist(prev).get(cls)||1e-9);}
+  };
+}
+
+/* ════════════════════════════════════════════
+   Composer v3 — チャンネル選択つきサプライザル整形
+   返答1つにつきスパイクは1チャンネル:
+     pitch   : v2と同じ (目標bitに最も近い度数)
+     time    : ため(長い間) or 倍速バースト。bitはリズムモデルで実測
+     harmony : 三和音(梯子3度堆積=自動的にダイアトニック) /
+               クラスター / 転調。bitは設計事前分布
+               (和声言語の学習モデル化は今後: コメント参照)
+   終止: トニック三和音 p=.55 = 物理カデンツ
+   ════════════════════════════════════════════ */
+const HARM_MOVES=[
+  {kind:'triad',  bits:3.6, jp:'わおん一撃'},
+  {kind:'cluster',bits:5.6, jp:'ぶつけた!'},
+  {kind:'shift',  to:'aeolian',   bits:5.2, jp:'せかいがマイナーになった'},
+  {kind:'shift',  to:'lydian',    bits:4.4, jp:'せかいがリディアンになった'},
+  {kind:'shift',  to:'mixolydian',bits:3.4, jp:'せかいがミクソになった'},
+  {kind:'shift',  to:'dorian',    bits:4.0, jp:'せかいがドリアンになった'},
+];
+function foldDeg(d){while(d>15)d-=7;while(d<0)d+=7;return d;}
+function triadOf(d){return[d,foldDeg(d+2),foldDeg(d+4)];}
+
+function composeV3(model,humanDegs,humanBeats,opts){
+  const{mood=.55,maxLen=16,K=120,modalOK=true,curMode='ionian',lastChannel='',
+        forceChannel=null,exactLen=0,noCadence=false,rnd=Math.random}=opts||{};
+  const n=humanDegs.length;
+  const L=exactLen?Math.max(4,exactLen)
+                  :Math.max(4,Math.min(maxLen,Math.round(n*(0.9+mood*0.7))+(n<4?2:0)));
+  const doSpike=(mood>0.12&&L>=5)||!!forceChannel;
+  const spikeIdx=doSpike?Math.min(L-3,Math.max(2,Math.round(L*(0.55+rnd()*0.2)))):-1;
+  const spikeBits=1.6+1.5+mood*5.0;
+
+  // ── チャンネル選択 ──
+  let channel='none';
+  if(doSpike){
+    if(forceChannel)channel=forceChannel;
+    else{
+      const w={pitch:1.0,time:0.9,harmony:0.85};
+      if(!modalOK)w.harmony*=0.6;           // 転調が使えないと和音の引き出しが減る
+      if(w[lastChannel])w[lastChannel]*=0.25;
+      const ks=Object.keys(w),tot=ks.reduce((s,k)=>s+w[k],0);
+      let r=rnd()*tot;
+      for(const k of ks){r-=w[k];if(r<=0){channel=k;break;}}
+    }
+  }
+
+  // ── 音高ターゲットカーブ (pitchチャンネル時のみ山を作る) ──
+  const baseline=1.6;
+  const target=new Array(L).fill(baseline);
+  if(!noCadence)for(let i=L-2;i<L;i++)target[i]=baseline*0.6;
+  if(channel==='pitch')target[spikeIdx]=spikeBits;
+  const wgt=new Array(L).fill(1);
+  if(channel==='pitch')wgt[spikeIdx]=3;
+  if(!noCadence){wgt[L-1]=2.5;wgt[L-2]=1.5;}
+
+  // ── リズム生成 (リズムモデルから連鎖サンプル) ──
+  const hb=humanBeats&&humanBeats.length?humanBeats:[1];
+  let prevB=hb[hb.length-1];
+  const beats=[],beatSurps=[];
+  for(let i=0;i<L;i++){
+    const bd=model.beatDist(prevB);
+    let cls;
+    let r=rnd();let acc=0;cls=1;
+    for(const[c,p]of bd){acc+=p;if(r<=acc){cls=c;break;}}
+    beats.push(cls);beatSurps.push(model.beatSurprisal(cls,prevB));
+    prevB=cls;
+  }
+  // timeスパイク: 直前の間を「目標bitに最も近いクラス」に置換
+  let timeMove=null;
+  if(channel==='time'&&spikeIdx>0){
+    const prev=beats[spikeIdx-2]??hb[hb.length-1];
+    let best=null;
+    for(const c of BEAT_CLASSES){
+      const b=model.beatSurprisal(c,prev);
+      const e=Math.abs(b-spikeBits*0.85);
+      if(!best||e<best.e)best={c,b,e};
+    }
+    if(best.c<=0.5){ // 倍速バースト: spike周辺3音を細かく
+      beats[spikeIdx-1]=0.5;beats[spikeIdx]=0.5;
+      timeMove={jp:'はやくち!',bits:best.b};
+    }else{           // ため: spike直前に長い沈黙
+      beats[spikeIdx-1]=Math.max(best.c,2.5);
+      timeMove={jp:'ためた…',bits:best.b};
+    }
+    beatSurps[spikeIdx-1]=best.b;
+  }
+
+  // ── 音高: 候補K本生成→カーブ採点 ──
+  let best=null;
+  for(let c=0;c<K;c++){
+    const ctx=humanDegs.slice(-3);
+    const seq=[],surps=[];
+    for(let i=0;i<L;i++){
+      const p=model.dist(ctx);
+      let d;
+      if(channel==='pitch'&&i===spikeIdx){
+        const cand=[];
+        for(let x=0;x<16;x++)cand.push([x,Math.abs(-Math.log2(p[x])-spikeBits)]);
+        cand.sort((a,b)=>a[1]-b[1]);
+        d=cand[Math.floor(rnd()*Math.min(3,cand.length))][0];
+        if(seq.length&&d===seq[seq.length-1])d=cand[3]?cand[3][0]:d;
+      }else if(i===L-1&&!noCadence){
+        const last=ctx[ctx.length-1];
+        let bd=-1,bs=-1;
+        for(const t of TONICS.concat([4,11])){
+          const sc=p[t]*Math.exp(-Math.abs(t-last)/4);
+          if(sc>bs){bs=sc;bd=t;}
+        }
+        d=bd;
+      }else{
+        const T=0.65+mood*0.35;
+        const q=new Float64Array(16);let qs=0;
+        for(let x=0;x<16;x++){
+          let v=Math.pow(p[x],1/T);
+          if(i>=L-3&&!noCadence)v*=Math.sqrt(STAB[x]);
+          q[x]=v;qs+=v;
+        }
+        let r=rnd()*qs;d=0;
+        for(let x=0;x<16;x++){r-=q[x];if(r<=0){d=x;break;}}
+      }
+      surps.push(-Math.log2(p[d]));
+      seq.push(d);ctx.push(d);
+      if(ctx.length>4)ctx.shift();
+    }
+    let score=0;
+    for(let i=0;i<L;i++){const e=surps[i]-target[i];score-=wgt[i]*e*e;}
+    score-=0.6*Math.max(0,Math.abs(seq[0]-humanDegs[n-1])-4);
+    const mean=seq.reduce((s,x)=>s+x,0)/L;
+    score-=0.3*Math.max(0,Math.abs(mean-7.5)-5);
+    if(!best||score>best.score)best={seq,surps,score};
+  }
+
+  // ── 出力ノート列の組立 ──
+  const notes=best.seq.map((deg,i)=>({deg,beat:beats[i],chord:null,modeShift:null,
+    spikeCh:(i===spikeIdx&&channel!=='none')?channel:null}));
+  let chipText='おだやかに',spikeShownBits=0;
+  if(channel==='pitch'){
+    chipText=`とんだ! ${best.surps[spikeIdx].toFixed(1)}bit @${spikeIdx+1}音目`;
+    spikeShownBits=best.surps[spikeIdx];
+  }
+  if(channel==='time'&&timeMove){
+    chipText=`${timeMove.jp} ${timeMove.bits.toFixed(1)}bit`;
+    spikeShownBits=timeMove.bits;
+  }
+  let newMode=null;
+  if(channel==='harmony'){
+    // 転調は「たまの大事件」: 30%ゲートを通った時だけ候補に入る
+    const allowShift=rnd()<0.30;
+    const moves=HARM_MOVES.filter(m=>m.kind!=='shift'||(allowShift&&modalOK&&m.to!==curMode));
+    // 目標bitを表のレンジ(3.4-5.6)に写像し、ジッタで単調回避
+    const hTarget=3.2+Math.min(1,(spikeBits-3)/5)*2.6;
+    let bm=null;
+    for(const m of moves){
+      const e=Math.abs(m.bits-hTarget)+rnd()*1.6;
+      if(!bm||e<bm.e)bm={...m,e};
+    }
+    const d=notes[spikeIdx].deg;
+    if(bm.kind==='triad')notes[spikeIdx].chord=triadOf(d);
+    else if(bm.kind==='cluster')notes[spikeIdx].chord=[d,foldDeg(d+1)];
+    else{notes[spikeIdx].modeShift=bm.to;newMode=bm.to;}
+    chipText=`${bm.jp} ${bm.bits.toFixed(1)}bit`;
+    spikeShownBits=bm.bits;
+    best.surps[spikeIdx]=bm.bits;          // カーブにも反映
+  }
+  // 物理カデンツ: 終止トニック三和音 p=.55 (中間セグメントでは省略)
+  if(!noCadence&&rnd()<0.55)notes[L-1].chord=triadOf(notes[L-1].deg);
+  // ためらい(v2継承): pitchスパイクのみ。timeは自前の間を持つ
+  if(channel==='pitch'&&spikeIdx>0)notes[spikeIdx-1].beat+=0.5;
+  if(!noCadence)notes[L-1].beat=2;
+
+  return{notes,surps:best.surps,beatSurps,target,spikeIdx,channel,chipText,newMode};
+}
+
+/* ════════════════════════════════════════════
+   Groove — 「かさね」モードのグルーヴエンジン
+   8ステップ(8分音符)の周回。小節境界で確率的に変異。
+   各変異の bit は設計事前分布 (将来: 観測リズムから学習)。
+   A の音密度に追従 (= 聴いて合わせる)。
+   ════════════════════════════════════════════ */
+const GROOVE_MUTS=[
+  {kind:'sync',  bits:2.0, jp:'うらにずらした'},
+  {kind:'add',   bits:1.5, jp:'音をたした'},
+  {kind:'remove',bits:1.8, jp:'音をぬいた'},
+  {kind:'stab',  bits:3.5, jp:'和音スタブ'},
+  {kind:'drop1', bits:5.0, jp:'頭をぬいた!'},
+  {kind:'fill',  bits:4.2, jp:'フィル!'},
+];
+function makeGroovePattern(){
+  // 低音域 (deg0-6) の基本オスティナート: 1拍目root、3拍目5度…
+  const P=new Array(8).fill(null);
+  P[0]={deg:0,chord:null};P[2]={deg:4,chord:null};
+  P[4]={deg:0,chord:null};P[6]={deg:2,chord:null};
+  return P;
+}
+function mutateGroove(P,targetBits,rnd){
+  let bm=null;
+  for(const m of GROOVE_MUTS){
+    const e=Math.abs(m.bits-targetBits)+rnd()*0.6;  // 同bitsの単調回避にジッタ
+    if(!bm||e<bm.e)bm={...m,e};
+  }
+  const Q=P.map(c=>c?{...c}:null);
+  const filled=[],empty=[];
+  Q.forEach((c,i)=>{(c?filled:empty).push(i);});
+  const pick=a=>a[Math.floor(rnd()*a.length)];
+  switch(bm.kind){
+    case 'sync':{if(filled.length){const i=pick(filled.filter(x=>x%2===0&&!Q[x+1])); 
+      if(i!==undefined&&i<7){Q[i+1]=Q[i];Q[i]=null;}}break;}
+    case 'add':{if(empty.length){const i=pick(empty);Q[i]={deg:pick([0,2,4,5]),chord:null};}break;}
+    case 'remove':{const c=filled.filter(x=>x!==0);if(c.length)Q[pick(c)]=null;break;}
+    case 'stab':{if(filled.length){const i=pick(filled);Q[i]={deg:Q[i].deg,chord:triadOf(Q[i].deg)};}break;}
+    case 'drop1':{Q[0]=null;break;}
+    case 'fill':{Q[6]={deg:5,chord:null};Q[7]={deg:6,chord:null};break;}
+  }
+  return{pattern:Q,move:bm};
+}
+
+/* ════════════════════════════════════════════
+   BeatTracker — A/B の発音時刻から BPM とグルーヴを推定
+   ・onsets[] に全発音時刻(ms)を貯める (Aの演奏 + Bの返事)
+   ・estimateBPM: IOI を集め、8分音符仮定でテンポ化 → 80-180 へ折畳み。
+     直近の推定との指数移動平均で安定化 (倍/半テンポのちらつき防止)
+   ・groove: 各 onset を現在 BPM の8分グリッド(0-7)に量子化し、
+     位相ヒストグラムを作る = 「その人がよく食う場所」
+   理論: full のビート誘導モデルではなく、展示で破綻しない実用版。
+   IOI ヒストグラム + 位相投票という枯れた手法の最小実装。
+   ════════════════════════════════════════════ */
+function makeBeatTracker(){
+  return{
+    onsets:[],            // {t, accent} 直近のみ保持
+    bpm:0, eighthMs:0, phaseHist:new Float64Array(8), conf:0,
+    note(t,accent=1){
+      this.onsets.push({t,accent});
+      const cut=t-6000;
+      while(this.onsets.length&&this.onsets[0].t<cut)this.onsets.shift();
+    },
+    estimate(){
+      const n=this.onsets.length;
+      if(n<3){this.conf=0;return this.bpm;}
+      // IOI 収集
+      const iois=[];
+      for(let i=1;i<n;i++){
+        const d=this.onsets[i].t-this.onsets[i-1].t;
+        if(d>=70&&d<=2000)iois.push(d);
+      }
+      if(iois.length<2){this.conf=0;return this.bpm;}
+      iois.sort((a,b)=>a-b);
+      const med=iois[Math.floor(iois.length/2)];
+      // med を「8分音符の長さ」とみなす。範囲外なら倍/半して 150-500ms に収める
+      let eM=med;
+      while(eM>500)eM/=2;
+      while(eM<150)eM*=2;
+      let bpm=60000/(eM*2);            // 8分×2 = 4分 = 1拍
+      while(bpm>180)bpm/=2;
+      while(bpm<80)bpm*=2;
+      // 指数移動平均で安定化
+      if(this.bpm>0&&Math.abs(bpm-this.bpm)<this.bpm*0.5)
+        bpm=this.bpm*0.6+bpm*0.4;
+      this.bpm=bpm;this.eighthMs=30000/bpm;   // 8分音符=半拍のms
+      // 位相ヒストグラム (8分グリッド)
+      this.phaseHist=new Float64Array(8);
+      const t0=this.onsets[0].t;
+      for(const o of this.onsets){
+        const ph=Math.round((o.t-t0)/this.eighthMs)%8;
+        const idx=((ph%8)+8)%8;
+        this.phaseHist[idx]+=o.accent;
+      }
+      // 信頼度: IOI のばらつきが小さいほど高い
+      const mean=iois.reduce((a,b)=>a+b,0)/iois.length;
+      const varc=iois.reduce((a,b)=>a+(b-mean)*(b-mean),0)/iois.length;
+      this.conf=Math.max(0,Math.min(1,1-Math.sqrt(varc)/mean));
+      return this.bpm;
+    }
+  };
+}
+
+/* ════════════════════════════════════════════
+   buildDrumMap — BPM とグルーヴ位相から8ステップのドラム譜を作る
+   返り値: steps[8] = {kick,snare,hat} の真偽
+   方針:
+    ・HAT  : 8分で常時 (にぎやかさで間引き)
+    ・KICK : 1拍目固定 + グルーヴで人がよく食う位相に追従
+    ・SNARE: 2・4拍目 (バックビート) 固定
+    ・density 0-1: 低いとHAT間引き&装飾減、高いと増し
+   サプライザル整形との接続: fill/抜きは Drummer 側で小節境界に。
+   ════════════════════════════════════════════ */
+function buildDrumMap(phaseHist,density){
+  density=density==null?0.6:density;
+  const steps=Array.from({length:8},()=>({kick:false,snare:false,hat:false}));
+  // HAT: 8分。density 低いと表拍(偶数)のみ
+  for(let i=0;i<8;i++)steps[i].hat=(density>0.45)?true:(i%2===0);
+  // SNARE: バックビート (step2 = 2拍目, step6 = 4拍目)
+  steps[2].snare=true;steps[6].snare=true;
+  // KICK: 1拍目 (step0) 固定
+  steps[0].kick=true;
+  // グルーヴ追従: phaseHist の上位を見て、裏の食いがあればキック追加
+  if(phaseHist){
+    const total=phaseHist.reduce((a,b)=>a+b,0)||1;
+    // step4 (3拍目) は基本入れる。さらに人がよく食う非バックビート位相にキック
+    steps[4].kick=true;
+    const cand=[1,3,5,7];               // 裏拍
+    let bestPh=-1,bestV=0;
+    for(const ph of cand){
+      if(phaseHist[ph]/total>0.12&&phaseHist[ph]>bestV){bestV=phaseHist[ph];bestPh=ph;}
+    }
+    if(bestPh>=0&&density>0.4)steps[bestPh].kick=true;   // シンコペーション
+  }else{steps[4].kick=true;}
+  return steps;
+}
+/*ENGINE-END*/
+
+/* ════════════════════════════════════════════
+   ログ / ステータス / 設定
+   ════════════════════════════════════════════ */
+const $=id=>document.getElementById(id);
+function log(msg,cls=''){const el=$('log');const t=new Date().toTimeString().slice(0,8);
+  el.insertAdjacentHTML('beforeend',`<div class="${cls}">[${t}] ${msg}</div>`);
+  while(el.children.length>200)el.firstChild.remove();el.scrollTop=el.scrollHeight;}
+function setStatus(text,mode=''){const s=$('statusLine');s.textContent=text;s.className='status-line '+mode;}
+
+const cfg={mood:.55,session:'dialog',modal:true,gapMode:'auto',gapMs:800,maxLen:16,
+           voice:true,vol:.7,yield:true,rampage:true,parse:'table'};
+let currentMode='ionian';
+function setWorld(mode,announce){
+  currentMode=mode;
+  $('worldLbl').textContent='せかい: '+MODE_JP[mode];
+  $('sMode').value=mode;
+  if(announce)log('mode → '+mode,'ok');
+}
+$('sMood').oninput=e=>{cfg.mood=e.target.value/100;$('vMood').textContent=e.target.value;};
+$('sSession').onchange=e=>{cfg.session=e.target.value;
+  if(cfg.session==='groove')Groove.start();else Groove.stop();};
+$('sModal').onchange=e=>{cfg.modal=e.target.checked;applyModalMute();
+  if(!cfg.modal)setWorld('ionian');};
+$('sMode').onchange=e=>setWorld(e.target.value,true);
+$('sGapMode').onchange=e=>{cfg.gapMode=e.target.value;$('sGap').disabled=cfg.gapMode==='auto';
+  $('vGap').textContent=cfg.gapMode==='auto'?'auto':cfg.gapMs+'ms';};
+$('sGap').oninput=e=>{cfg.gapMs=+e.target.value;$('vGap').textContent=cfg.gapMs+'ms';};
+$('sLen').oninput=e=>{cfg.maxLen=+e.target.value;$('vLen').textContent=e.target.value;};
+$('sVoice').onchange=e=>cfg.voice=e.target.checked;
+$('sVol').oninput=e=>{cfg.vol=e.target.value/100;$('vVol').textContent=e.target.value;};
+$('sYield').onchange=e=>cfg.yield=e.target.checked;
+$('sParse').onchange=e=>cfg.parse=e.target.value;
+$('sRampage').onchange=e=>cfg.rampage=e.target.checked;
+$('sCVoice').onchange=e=>Drummer.voice=e.target.checked;
+
+/* ════════════════════════════════════════════
+   BLE (v2.0.1 自動再接続を継承 + SAMミュート制御)
+   ════════════════════════════════════════════ */
+const BLE={
+  dev:{A:null,B:null,C:null},char:{A:null,B:null,C:null},
+  q:{A:Promise.resolve(),B:Promise.resolve(),C:Promise.resolve()},
+  wanted:{A:false,B:false,C:false},retryN:{A:0,B:0,C:0},retryT:{A:null,B:null,C:null},
+
+  async toggle(slot){
+    const btn=$('btn'+slot);
+    if(this.wanted[slot]){
+      this.wanted[slot]=false;
+      clearTimeout(this.retryT[slot]);
+      if(slot==='A'&&this.char.A){      // 切る前にSAMミュート解除 (v33作法)
+        this.send('A',[0xB0,CC_SAM_MUTE,0]);
+        await new Promise(r=>setTimeout(r,120));
+      }
+      try{this.dev[slot]?.gatt.disconnect();}catch(e){}
+      this.dev[slot]=null;this.char[slot]=null;
+      btn.textContent='つなぐ';btn.classList.remove('on');
+      log(`${slot} disconnected (manual)`);
+      return;
+    }
+    if(!navigator.bluetooth){alert('Web Bluetooth が使えない環境です。\nMacのChrome/Edgeで開いてください。\n(ハード無しでも画面タップで遊べます)');return;}
+    btn.disabled=true;
+    try{
+      log(`scan ${slot}…`);
+      const device=await navigator.bluetooth.requestDevice({
+        filters:[{services:[BLE_SERVICE]}],optionalServices:[BLE_SERVICE]});
+      device.addEventListener('gattserverdisconnected',()=>this.onDisconnect(slot));
+      this.dev[slot]=device;
+      this.wanted[slot]=true;
+      await this.attach(slot);
+      log(`${slot} "${device.name||'PONKEY'}" connected`,'ok');
+    }catch(e){
+      log(`connect ${slot}: ${e.message}`,'err');
+      this.wanted[slot]=false;this.dev[slot]=null;
+      btn.textContent='つなぐ';btn.classList.remove('on');
+    }
+    btn.disabled=false;
+  },
+
+  async attach(slot){
+    const device=this.dev[slot];
+    const server=await device.gatt.connect();
+    const service=await server.getPrimaryService(BLE_SERVICE);
+    const char=await service.getCharacteristic(BLE_CHAR);
+    this.char[slot]=char;
+    this.q[slot]=Promise.resolve();
+    await char.startNotifications();
+    char.addEventListener('characteristicvaluechanged',
+      slot==='A'?e=>onMidiFromA(e):()=>{});  // B/C は受信読み捨て
+    this.retryN[slot]=0;
+    setTimeout(()=>{
+      this.send(slot,[0xB0,CC_STATE_SYNC,127]);
+      if(slot==='A')setTimeout(()=>applyModalMute(),150);
+    },300);
+    const btn=$('btn'+slot);
+    btn.textContent='せつぞく中';btn.classList.add('on');
+  },
+
+  onDisconnect(slot){
+    this.char[slot]=null;
+    const btn=$('btn'+slot);
+    if(!this.wanted[slot]){
+      this.dev[slot]=null;
+      btn.textContent='つなぐ';btn.classList.remove('on');
+      return;
+    }
+    const delay=Math.min(8000,1000*Math.pow(2,this.retryN[slot]++));
+    btn.textContent='さいせつぞく…';btn.classList.remove('on');
+    log(`${slot} lost — retry in ${delay/1000}s (#${this.retryN[slot]})`);
+    setStatus(`PONKEY ${slot} と はぐれた… さがしています`);
+    clearTimeout(this.retryT[slot]);
+    this.retryT[slot]=setTimeout(async()=>{
+      if(!this.wanted[slot])return;
+      try{
+        await this.attach(slot);
+        log(`${slot} reconnected`,'ok');
+        setStatus(`PONKEY ${slot} が もどってきた!`);
+      }catch(e){this.onDisconnect(slot);}
+    },delay);
+  },
+
+  send(slot,bytes){
+    const c=this.char[slot];if(!c)return;
+    const pkt=new Uint8Array([0x80,0x80,...bytes]);
+    this.q[slot]=this.q[slot]
+      .then(()=>c.writeValueWithoutResponse(pkt))
+      .then(()=>new Promise(r=>setTimeout(r,12)))
+      .catch(e=>log(`TX ${slot}: ${e.message}`,'err'));
+  }
+};
+// モードのじゆうON = AのSAMをミュートし、Aの声もアプリが合成する
+function applyModalMute(){
+  if(!BLE.char.A)return;
+  BLE.send('A',[0xB0,CC_SAM_MUTE,cfg.modal?127:0]);
+  log('A SAM '+(cfg.modal?'muted (modal freedom ON)':'unmuted'),'tx');
+}
+
+function parseBLEMidi(raw){
+  const m=[];
+  if(raw.length<3)return m;
+  if(raw.length===5&&(raw[2]&0x80)&&raw[2]<0xF0&&!(raw[3]&0x80)){m.push([raw[2],raw[3],raw[4]]);return m;}
+  let i=1,run=0;
+  while(i<raw.length){
+    if(!(raw[i]&0x80)){i++;continue;}
+    i++;if(i>=raw.length)break;
+    if((raw[i]&0x80)&&raw[i]<0xF0){run=raw[i];i++;}
+    else if(raw[i]>=0xF0){i++;continue;}
+    if(!run)continue;
+    const cmd=run&0xF0,need=(cmd===0xC0||cmd===0xD0)?1:2,dd=[];
+    for(let n=0;n<need&&i<raw.length&&!(raw[i]&0x80);n++)dd.push(raw[i++]);
+    if(dd.length>=1){while(dd.length<2)dd.push(0);m.push([run,dd[0],dd[1]]);}
+  }
+  return m;
+}
+
+/* ════════════════════════════════════════════
+   A入力 → 度数 → Listener
+   ════════════════════════════════════════════ */
+let lastFamily='N';
+const noteOnAt={};
+function resolveDegree(pitch,ch){
+  if(pitch<16)return{deg:KI_TO_DEG[pitch],fam:ch===0?'B':'N'};
+  if(cfg.parse==='ki36'&&pitch>=36&&pitch<=51)return{deg:KI_TO_DEG[pitch-36],fam:'N'};
+  const fam=ch===0?'B':'N';
+  const lad=fam==='B'?LADDER_B:LADDER_N;
+  let p=pitch;
+  while(p>lad[15])p-=12;while(p<lad[0])p+=12;
+  let best=0,bd=999;
+  for(let d=0;d<16;d++){const e=Math.abs(lad[d]-p);if(e<bd){bd=e;best=d;}}
+  return{deg:best,fam};
+}
+function onMidiFromA(ev){
+  const raw=[];for(let i=0;i<ev.target.value.byteLength;i++)raw.push(ev.target.value.getUint8(i));
+  for(const[st,d1,d2]of parseBLEMidi(raw)){
+    const cmd=st&0xF0,ch=st&0x0F;
+    if(cmd===0xB0){if(d1!==CC_HEARTBEAT&&d1!==CC_BAR_SYNC)log(`A CC ${d1.toString(16)}=${d2}`,'tx');continue;}
+    if(ch===9)continue;
+    if(cmd===0x90&&d2>0){
+      if(!SYNTH_CH.has(ch)&&d1>=16)continue;
+      const{deg,fam}=resolveDegree(d1,ch);
+      lastFamily=fam;noteOnAt[d1]=performance.now();
+      // モードのじゆうON: AのSAMは黙っているのでアプリがAの声を出す
+      if(cfg.modal&&cfg.voice){initAudio();aVoice(modalPitch(deg,currentMode,fam));}
+      Listener.noteOn(deg);
+    }else if(cmd===0x80||(cmd===0x90&&d2===0)){
+      const t0=noteOnAt[d1];
+      if(t0)Listener.noteOff(performance.now()-t0);
+      delete noteOnAt[d1];
+    }
+  }
+}
+
+const Listener={
+  notes:[],timer:null,
+  noteOn(deg){
+    initAudio();
+    if(Performer.active&&cfg.yield&&cfg.session==='dialog'&&!Solo.active)Performer.cancel('わりこみ');
+    Gauge.add(1.2);
+    const tn=performance.now();
+    this.notes.push({deg,t:tn,dur:140});
+    beat.note(tn,1);beat.estimate();Drummer.update();
+    uiFire('A',DEG_TO_KI[deg]);avatarHit('A');
+    setStatus('きいています…','listening');
+    clearTimeout(this.timer);
+    this.timer=setTimeout(()=>this.finish(),this.gap());
+    if(this.notes.length>=24)this.finish();
+  },
+  noteOff(dur){
+    const last=this.notes[this.notes.length-1];
+    if(last)last.dur=Math.min(2000,Math.max(40,dur));
+  },
+  gap(){
+    if(cfg.gapMode==='manual')return cfg.gapMs;
+    const io=[];for(let i=1;i<this.notes.length;i++)io.push(this.notes[i].t-this.notes[i-1].t);
+    if(!io.length)return 750;
+    const med=median(io);
+    return Math.min(1400,Math.max(600,med*2.2));
+  },
+  finish(){
+    clearTimeout(this.timer);
+    if(!this.notes.length)return;
+    const phrase=this.notes;this.notes=[];
+    Tape.add('A',phrase);
+    Conductor.hear(phrase);
+  }
+};
+function median(a){const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)];}
+
+/* ════════════════════════════════════════════
+   Conductor
+   ════════════════════════════════════════════ */
+const model=makeModel();
+const beat=makeBeatTracker();
+let lastChannel='';
+let lastPulse=320;
+const humanMemory=[];   // ソロ引用用のモチーフ記憶
+const Conductor={
+  hear(phrase){
+    const degs=phrase.map(n=>n.deg);
+    const iois=[];for(let i=1;i<phrase.length;i++)iois.push(phrase[i].t-phrase[i-1].t);
+    let pulse=320;
+    if(iois.length){const m=median(iois);if(m>=110&&m<=1100)pulse=m;}
+    const beats=iois.map(io=>{
+      const q=Math.max(.5,Math.round(io/pulse*2)/2);
+      return BEAT_CLASSES.reduce((a,b)=>Math.abs(b-q)<Math.abs(a-q)?b:a);
+    });
+    beats.push(beats.length?beats[beats.length-1]:1);
+    // 学習 (音高 + リズム)
+    model.learn(degs,beats);
+    $('vocab').textContent=`ごい: ${model.vocab()}パターン`;
+    lastPulse=pulse;
+    humanMemory.push({degs:degs.slice(0,8),beats:beats.slice(0,8),
+                      durs:phrase.slice(0,8).map(n=>n.dur)});
+    if(humanMemory.length>10)humanMemory.shift();
+    Gauge.add(5);
+    if(Solo.active)return;             // ソロ中は聞いて覚えるだけ (グイグイ)
+
+    if(cfg.session==='groove'){       // かさね: グルーヴがAに追従
+      Groove.adapt(phrase,pulse);
+      return;
+    }
+    const durs=phrase.map(n=>n.dur);
+    setStatus('かんがえちゅう…','thinking');
+    const breath=Math.max(300,pulse);
+    setTimeout(()=>{
+      const r=composeV3(model,degs,beats,
+        {mood:cfg.mood,maxLen:cfg.maxLen,modalOK:cfg.modal,curMode:currentMode,lastChannel});
+      if(!r)return;
+      lastChannel=r.channel!=='none'?r.channel:lastChannel;
+      drawCurve(r);
+      const seq=r.notes.map((nt,i)=>({...nt,dur:durs[i%durs.length]}));
+      seq[seq.length-1].dur=Math.max(420,durs[durs.length-1]*1.8);
+      Performer.play(seq,pulse,r.chipText);
+    },breath);
+  }
+};
+
+/* ════════════════════════════════════════════
+   Performer (和音・転調イベント対応)
+   ════════════════════════════════════════════ */
+const Performer={
+  active:false,gen:0,
+  async play(seq,pulse,label){
+    const my=++this.gen;this.active=true;
+    if(!Solo.active)setStatus('PONKEY B のへんじ','talking');
+    const chip=$('chipB');chip.textContent=label;chip.classList.add('show');
+    const played=[];
+    const t0=performance.now();let tCur=0;
+    for(const note of seq){
+      if(this.gen!==my)break;
+      if(note.modeShift){               // 転調 = 世界が変わる
+        setWorld(note.modeShift,true);
+        setStatus('せかいが '+MODE_JP[note.modeShift]+' になった','talking');
+      }
+      const durMs=Math.min(900,Math.max(70,note.dur||150));
+      const degsToPlay=note.chord||[note.deg];
+      beat.note(performance.now(),0.5);    // Bの発音もグルーヴ推定に寄与(軽め)
+      degsToPlay.forEach((d,ci)=>{
+        const ki=DEG_TO_KI[d];
+        BLE.send('B',[0x90,ki,127]);    // 和音=連続write、fw側staggerが時分割
+        uiFire('B',ki,note.spikeCh);
+        if(cfg.voice)setTimeout(()=>bVoice(modalPitch(d,currentMode,lastFamily),durMs,!!note.spikeCh),ci*18);
+      });
+      avatarHit('B');
+      played.push({deg:note.deg,dur:durMs,spike:!!note.spikeCh,chord:!!note.chord});
+      tCur+=note.beat*pulse+(Math.random()*24-12);
+      const wait=t0+tCur-performance.now();
+      if(wait>0)await sleep(wait);
+    }
+    if(this.gen===my){
+      this.active=false;
+      Tape.add('B',played,label);
+      if(!Solo.active){
+        setStatus('つぎは あなたのばん','');
+        setTimeout(()=>chip.classList.remove('show'),2200);
+      }
+    }
+  },
+  cancel(why){
+    if(!this.active)return;
+    this.gen++;this.active=false;
+    $('chipB').classList.remove('show');
+    log(`B yield (${why})`);
+  }
+};
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+/* ════════════════════════════════════════════
+   ノリゲージ — たまったらBが がまんできなくなる
+   増える: Aの音(+1.2) / フレーズ(+5) / グルーヴ変異(+bits)
+   減る: 4秒さわらないと冷めていく
+   ════════════════════════════════════════════ */
+const Gauge={
+  value:0,MAX:100,lastAdd:0,
+  add(x){
+    this.value=Math.min(this.MAX,this.value+x);
+    this.lastAdd=performance.now();
+    this.render();
+    if(this.value>=this.MAX&&cfg.rampage&&!Solo.active){
+      if(cfg.session==='groove'){Groove.rampage=2;this.value=this.MAX;}
+      else Solo.start();
+    }
+  },
+  reset(){this.value=12;this.render();},
+  render(){
+    const g=$('gauge');
+    const lit=Math.round(this.value/this.MAX*16);
+    [...g.children].forEach((seg,i)=>{
+      seg.className='gseg'+(i<lit?' lit':'')+(i>=10&&i<lit?' hot':'');
+    });
+    g.classList.toggle('full',this.value>=this.MAX);
+  },
+  tick(){
+    if(!Solo.active&&performance.now()-this.lastAdd>4000&&this.value>0){
+      this.value=Math.max(0,this.value-0.9);this.render();
+    }
+  }
+};
+setInterval(()=>Gauge.tick(),600);
+
+/* ════════════════════════════════════════════
+   Solo — Bのソロタイム (グイグイ)
+   1) あなたの過去フレーズを引用
+   2) 音高/間/和音 3連スパイクのセグメントを連結
+   3) 大きなカデンツで締め → ゲージリセット
+   割り込まれても止まらない (聞いて覚えてはいる)
+   ════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════
+   Drummer — PONKEY C を駆動するドラム自走クロック
+   ・beat tracker が出した BPM で 8分グリッドを自走
+   ・各ステップで drumMap を見て C の該当 keyIndex を発火
+     (KICK→ki12, SNARE→ki14, HAT→ki3。d1<16 直送でソレノイド発火)
+   ・GMドラム音はブラウザ音源で同時に鳴らす(体感用)。実機Cが
+     samMuted=false なら C 自身の SAM でも鳴る (二重を避けたい時は
+     「Cの音」OFF)
+   ・BPM更新は次の小節頭で滑らかに乗り換え (急な位相飛びを防ぐ)
+   ・小節境界で density とノリゲージに応じ fill / 抜きの装飾
+   ════════════════════════════════════════════ */
+const DRUM_KI={kick:12,snare:14,hat:3};
+const Drummer={
+  on:false,step:0,nextAt:0,timer:null,
+  curBpm:0,pendingBpm:0,drumMap:null,density:0.6,bar:0,voice:true,
+  toggle(){
+    if(this.on)this.stop();else this.start();
+  },
+  start(){
+    if(this.on)return;
+    initAudio();
+    this.on=true;this.step=0;this.bar=0;
+    this.curBpm=beat.bpm>0?beat.bpm:110;
+    this.drumMap=buildDrumMap(beat.phaseHist,this.density);
+    this.nextAt=performance.now()+120;
+    $('btnDrum').textContent='ドラム OFF';$('btnDrum').classList.add('on');
+    renderDrumMap(this.drumMap,-1);
+    this.tick();
+    log('drummer start @'+Math.round(this.curBpm)+'bpm','ok');
+  },
+  stop(){
+    this.on=false;clearTimeout(this.timer);
+    $('btnDrum').textContent='ドラム ON';$('btnDrum').classList.remove('on');
+    renderDrumMap(this.drumMap,-1);
+    log('drummer stop');
+  },
+  // beat tracker 更新時に呼ばれる: BPM と密度を受け取り、次小節で反映予約
+  update(){
+    if(beat.bpm>0){
+      $('bpmBig').innerHTML=Math.round(beat.bpm)+' <small>bpm</small>';
+      $('confLbl').textContent='ノリ検出 '+Math.round(beat.conf*100)+'%';
+      if(this.on&&Math.abs(beat.bpm-this.curBpm)>1)this.pendingBpm=beat.bpm;
+    }
+    // 密度 = 直近2秒の発音数を正規化
+    const recent=beat.onsets.filter(o=>performance.now()-o.t<2000).length;
+    this.density=Math.max(0.25,Math.min(1,recent/12));
+    if(this.on)this.drumMap=buildDrumMap(beat.phaseHist,this.density);
+  },
+  eighthMs(){return 30000/this.curBpm;},
+  tick(){
+    if(!this.on)return;
+    const now=performance.now();
+    if(now>=this.nextAt-2){
+      const cell=this.drumMap[this.step];
+      if(cell){
+        if(cell.kick)this.hit('kick');
+        if(cell.snare)this.hit('snare');
+        if(cell.hat)this.hit('hat');
+      }
+      renderDrumMap(this.drumMap,this.step);
+      this.step=(this.step+1)%8;
+      this.nextAt+=this.eighthMs();
+      if(this.step===0){                 // 小節境界
+        this.bar++;
+        if(this.pendingBpm>0){this.curBpm=this.pendingBpm;this.pendingBpm=0;
+          log('drummer → '+Math.round(this.curBpm)+'bpm');}
+        // 装飾: ゲージが高い/密度が高いと たまにフィル
+        const heat=Gauge.value/Gauge.MAX;
+        if(Math.random()<0.12+heat*0.35){
+          this.drumMap=buildDrumMap(beat.phaseHist,this.density);
+          this.drumMap[7].snare=true;this.drumMap[7].kick=true; // 小節末フィル
+          if(heat>0.7)this.drumMap[5].snare=true;
+        }else{
+          this.drumMap=buildDrumMap(beat.phaseHist,this.density);
+        }
+      }
+    }
+    this.timer=setTimeout(()=>this.tick(),Math.max(4,this.nextAt-performance.now()-2));
+  },
+  hit(part){
+    const ki=DRUM_KI[part];
+    BLE.send('C',[0x90,ki,127]);          // C のソレノイド発火 (物理リズム音)
+    drumFire(part,ki);
+    if(this.voice&&cfg.voice)drumVoice(part);
+  }
+};
+
+const Solo={
+  active:false,
+  async start(){
+    if(this.active)return;
+    this.active=true;
+    initAudio();
+    setStatus('Bが がまんできなくなった! ソロ!','talking');
+    log('SOLO start','ok');
+    const pulse=Math.max(150,Math.min(450,lastPulse*0.78));
+    try{
+      // ① 引用: 覚えているあなたのモチーフ
+      const mem=humanMemory.length
+        ? humanMemory[Math.floor(Math.random()*humanMemory.length)]
+        : {degs:[0,2,4,7],beats:[1,1,1,1],durs:[180,180,180,300]};
+      const quote=mem.degs.map((deg,i)=>({deg,beat:mem.beats[i]||1,chord:null,
+        modeShift:null,spikeCh:null,dur:mem.durs[i]||180}));
+      await Performer.play(quote,pulse,'きみのフレーズ、もらった!');
+      if(!this.active)return;
+      // ② 3セグメント: チャンネルをシャッフルして全部使う
+      const chans=['pitch','time','harmony'].sort(()=>Math.random()-.5);
+      let ctxDegs=mem.degs,ctxBeats=mem.beats;
+      for(let i=0;i<3;i++){
+        const r=composeV3(model,ctxDegs,ctxBeats,{
+          mood:Math.max(cfg.mood,.85),exactLen:7+Math.floor(Math.random()*3),
+          modalOK:cfg.modal,curMode:currentMode,
+          forceChannel:chans[i],noCadence:i<2});
+        if(!r)break;
+        drawCurve(r);
+        const seq=r.notes.map((nt,x)=>({...nt,dur:mem.durs[x%mem.durs.length]||160}));
+        if(i===2)seq[seq.length-1].dur=600;
+        if(r.newMode)lastChannel='harmony';
+        await Performer.play(seq,pulse*(i===2?1.05:0.95),'ソロ! '+r.chipText);
+        if(!this.active)return;
+        ctxDegs=r.notes.map(n=>n.deg);ctxBeats=r.notes.map(n=>n.beat);
+      }
+      $('chipB').textContent='すっきりした';
+      setStatus('…すっきりした。つぎは あなたのばん','');
+    }finally{
+      this.active=false;
+      Gauge.reset();
+    }
+  }
+};
+async function testSweep(){
+  initAudio();
+  for(let ki=0;ki<16;ki++){
+    BLE.send('B',[0x90,ki,127]);uiFire('B',ki);
+    if(cfg.voice)bVoice(modalPitch(KI_TO_DEG[ki],currentMode,'N'),120);
+    await sleep(130);
+  }
+  log('test sweep 0-15 done','ok');
+}
+
+/* ════════════════════════════════════════════
+   Groove 実行系 (かさね)
+   ════════════════════════════════════════════ */
+const Groove={
+  on:false,pattern:null,step:0,pulse:280,nextAt:0,timer:null,bar:0,rampage:0,
+  barBits:[],            // 小節ごとの変異bit (カーブ表示用)
+  start(){
+    if(this.on)return;
+    initAudio();
+    this.on=true;this.pattern=makeGroovePattern();this.step=0;this.bar=0;this.barBits=[];
+    this.nextAt=performance.now()+200;
+    this.tick();
+    setStatus('かさね: Bがグルーヴをしく — うえでソロして','talking');
+    log('groove start','ok');
+  },
+  stop(){
+    this.on=false;clearTimeout(this.timer);
+    $('vBpm').textContent='—';
+    log('groove stop');
+  },
+  tick(){
+    if(!this.on)return;
+    const now=performance.now();
+    if(now>=this.nextAt-2){
+      const cell=this.pattern[this.step];
+      if(cell){
+        const degs=cell.chord||[cell.deg];
+        degs.forEach((d,ci)=>{
+          const ki=DEG_TO_KI[d];
+          BLE.send('B',[0x90,ki,127]);
+          uiFire('B',ki);
+          if(cfg.voice)setTimeout(()=>bVoice(modalPitch(d,currentMode,'B'),160,false,true),ci*16);
+        });
+      }
+      this.step=(this.step+1)%8;
+      this.nextAt+=this.pulse;
+      if(this.step===0){               // 小節境界
+        this.bar++;
+        const mood=cfg.mood;
+        const ramp=this.rampage>0;
+        if(ramp)this.rampage--;
+        if(ramp||Math.random()<0.3+mood*0.45){
+          const{pattern,move}=mutateGroove(this.pattern,ramp?5:(2+mood*3.5),Math.random);
+          this.pattern=pattern;
+          this.barBits.push(move.bits);
+          const chip=$('chipB');chip.textContent=(ramp?'ぼうそう! ':'')+move.jp+` ${move.bits.toFixed(1)}bit`;
+          chip.classList.add('show');
+          setTimeout(()=>chip.classList.remove('show'),1500);
+          Gauge.add(move.bits*0.8);
+          if(ramp&&this.rampage===0){Gauge.reset();setStatus('すっきりした','');}
+        }else this.barBits.push(0.4);  // 反復 = 低サプライザル
+        if(this.barBits.length>24)this.barBits.shift();
+        drawGrooveCurve(this.barBits);
+      }
+    }
+    this.timer=setTimeout(()=>this.tick(),Math.max(4,this.nextAt-performance.now()-2));
+  },
+  adapt(phrase,pulse){
+    // テンポ追従 (人間の8分 ≈ 検出パルス)
+    this.pulse=Math.min(600,Math.max(140,pulse));
+    $('vBpm').textContent=Math.round(60000/(this.pulse*2))+'bpm';
+    // 密度追従: Aが密→セルを足す / 疎→抜く (頭は守る)
+    const density=phrase.length/Math.max(1,(phrase[phrase.length-1].t-phrase[0].t)/1000);
+    const filled=this.pattern.filter(Boolean).length;
+    if(density>4&&filled<6){
+      const empty=[];this.pattern.forEach((c,i)=>{if(!c)empty.push(i);});
+      if(empty.length)this.pattern[empty[Math.floor(Math.random()*empty.length)]]={deg:[0,2,4][Math.floor(Math.random()*3)],chord:null};
+    }else if(density<1.5&&filled>2){
+      const f=[];this.pattern.forEach((c,i)=>{if(c&&i!==0)f.push(i);});
+      if(f.length)this.pattern[f[Math.floor(Math.random()*f.length)]]=null;
+    }
+  }
+};
+
+/* ════════════════════════════════════════════
+   カーブ描画 (チャンネル色つき)
+   ════════════════════════════════════════════ */
+const CH_COLOR={pitch:'#ff8a3c',time:'#6db9ff',harmony:'#c79bff'};
+function drawCurve(r){
+  const cv=$('curve');
+  const W=cv.clientWidth||600,H=110;
+  cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;
+  const ctx=cv.getContext('2d');ctx.scale(devicePixelRatio,devicePixelRatio);
+  ctx.clearRect(0,0,W,H);
+  const L=r.surps.length;
+  const maxBits=Math.max(8,...r.surps,...r.target)+0.5;
+  const x=i=>14+(W-28)*(i+.5)/L, y=b=>H-12-(H-26)*b/maxBits;
+  ctx.strokeStyle='#7c8870';ctx.setLineDash([3,3]);ctx.lineWidth=1;
+  ctx.beginPath();
+  r.target.forEach((b,i)=>{i?ctx.lineTo(x(i),y(b)):ctx.moveTo(x(i),y(b));});
+  ctx.stroke();ctx.setLineDash([]);
+  const bw=Math.min(18,(W-28)/L*.55);
+  r.surps.forEach((b,i)=>{
+    ctx.fillStyle=(i===r.spikeIdx&&r.channel!=='none')?(CH_COLOR[r.channel]||'#ff8a3c'):'#bed2aa';
+    ctx.fillRect(x(i)-bw/2,y(b),bw,H-12-y(b));
+  });
+  ctx.fillStyle='#7c8870';ctx.font='9px monospace';
+  ctx.fillText('0',2,H-10);ctx.fillText(maxBits.toFixed(0)+'bit',2,12);
+}
+function drawGrooveCurve(bits){
+  const cv=$('curve');
+  const W=cv.clientWidth||600,H=110;
+  cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;
+  const ctx=cv.getContext('2d');ctx.scale(devicePixelRatio,devicePixelRatio);
+  ctx.clearRect(0,0,W,H);
+  const L=Math.max(1,bits.length);
+  const maxBits=6;
+  const x=i=>14+(W-28)*(i+.5)/L, y=b=>H-12-(H-26)*Math.min(b,maxBits)/maxBits;
+  const bw=Math.min(18,(W-28)/L*.55);
+  bits.forEach((b,i)=>{
+    ctx.fillStyle=b>1?'#6db9ff':'#5a6650';
+    ctx.fillRect(x(i)-bw/2,y(b),bw,H-12-y(b));
+  });
+  ctx.fillStyle='#7c8870';ctx.font='9px monospace';
+  ctx.fillText('小節→',2,H-1);ctx.fillText(maxBits+'bit',2,12);
+}
+
+/* ════════════════════════════════════════════
+   Audio
+   ════════════════════════════════════════════ */
+let AC=null,master=null,delayWet=null;
+function initAudio(){
+  if(AC){if(AC.state==='suspended')AC.resume();return;}
+  AC=new(window.AudioContext||window.webkitAudioContext)();
+  master=AC.createGain();master.gain.value=.8;
+  const comp=AC.createDynamicsCompressor();
+  comp.threshold.value=-14;comp.ratio.value=6;
+  master.connect(comp);comp.connect(AC.destination);
+  const dl=AC.createDelay(1);dl.delayTime.value=.22;
+  const fb=AC.createGain();fb.gain.value=.24;
+  delayWet=AC.createGain();delayWet.gain.value=.16;
+  delayWet.connect(dl);dl.connect(fb);fb.connect(dl);dl.connect(master);
+}
+
+/* ドラム音 (ブラウザ合成): KICK=サイン下降, SNARE=ノイズ, HAT=高域ノイズ短 */
+let noiseBuf=null;
+function getNoise(){
+  if(noiseBuf)return noiseBuf;
+  const len=AC.sampleRate*0.4;
+  noiseBuf=AC.createBuffer(1,len,AC.sampleRate);
+  const d=noiseBuf.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  return noiseBuf;
+}
+function drumVoice(part){
+  if(!AC)return;
+  const t=AC.currentTime;
+  if(part==='kick'){
+    const o=AC.createOscillator();o.type='sine';
+    o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(48,t+.12);
+    const g=AC.createGain();const pk=.9*cfg.vol;
+    g.gain.setValueAtTime(pk,t);g.gain.exponentialRampToValueAtTime(.001,t+.18);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+.2);
+  }else if(part==='snare'){
+    const src=AC.createBufferSource();src.buffer=getNoise();
+    const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=1800;bp.Q.value=.7;
+    const g=AC.createGain();const pk=.5*cfg.vol;
+    g.gain.setValueAtTime(pk,t);g.gain.exponentialRampToValueAtTime(.001,t+.14);
+    // 胴鳴り
+    const o=AC.createOscillator();o.type='triangle';o.frequency.value=180;
+    const go=AC.createGain();go.gain.setValueAtTime(.25*cfg.vol,t);go.gain.exponentialRampToValueAtTime(.001,t+.1);
+    src.connect(bp);bp.connect(g);g.connect(master);o.connect(go);go.connect(master);
+    src.start(t);src.stop(t+.16);o.start(t);o.stop(t+.12);
+  }else{ // hat
+    const src=AC.createBufferSource();src.buffer=getNoise();
+    const hp=AC.createBiquadFilter();hp.type='highpass';hp.frequency.value=7000;
+    const g=AC.createGain();const pk=.28*cfg.vol;
+    g.gain.setValueAtTime(pk,t);g.gain.exponentialRampToValueAtTime(.001,t+.05);
+    src.connect(hp);hp.connect(g);g.connect(master);src.start(t);src.stop(t+.06);
+  }
+}
+
+/* C グリッド: 該当キーをドラム色で光らせる */
+const KI_TO_PART={12:'kick',14:'snare',3:'hat'};
+function drumFire(part,ki){
+  const cell=$('gridC').children[ki];if(!cell)return;
+  cell.className='cell '+part+' lit';
+  avatarHit('C');
+  clearTimeout(cell._t);
+  cell._t=setTimeout(()=>{cell.className='cell '+part;},part==='hat'?90:180);
+}
+
+/* ドラム譜ビュー (8ステップ × 3パート) */
+let drumGridBuilt=false;
+function buildDrumGridDOM(){
+  const g=$('drumgrid');g.innerHTML='';
+  const rows=[['kick','KICK'],['snare','SNARE'],['hat','HAT']];
+  for(const [key,label] of rows){
+    const l=document.createElement('div');l.className='rlabel';l.textContent=label;
+    l.dataset.part=key;g.appendChild(l);
+    for(let i=0;i<8;i++){
+      const d=document.createElement('div');
+      d.className='dcell '+key+(i%2===0?' beat':'');
+      d.dataset.part=key;d.dataset.step=i;
+      g.appendChild(d);
+    }
+  }
+  drumGridBuilt=true;
+}
+function renderDrumMap(map,playStep){
+  if(!drumGridBuilt)buildDrumGridDOM();
+  if(!map)return;
+  const cells=$('drumgrid').querySelectorAll('.dcell');
+  cells.forEach(c=>{
+    const part=c.dataset.part,step=+c.dataset.step;
+    const on=map[step]&&map[step][part];
+    c.classList.toggle('on',!!on);
+    c.classList.toggle('play',step===playStep);
+  });
+}
+
+function bVoice(pitch,durMs,spike,low){
+  if(!AC)return;
+  const f=440*Math.pow(2,(pitch-69)/12);
+  const t=AC.currentTime,end=t+Math.max(.1,durMs/1000)+.25;
+  const o1=AC.createOscillator();o1.type='triangle';o1.frequency.value=f;
+  const o2=AC.createOscillator();o2.type='square';o2.frequency.value=f;o2.detune.value=spike?14:7;
+  const g2=AC.createGain();g2.gain.value=spike?.34:.22;
+  const lp=AC.createBiquadFilter();lp.type='lowpass';lp.Q.value=.8;
+  lp.frequency.setValueAtTime(low?1400:(spike?5200:3200),t);
+  lp.frequency.exponentialRampToValueAtTime(low?320:700,t+.18);
+  const g=AC.createGain();
+  const peak=(low?.26:(spike?.4:.32))*cfg.vol;
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(peak,t+.006);
+  g.gain.exponentialRampToValueAtTime(Math.max(.001,peak*.4),t+.12);
+  g.gain.exponentialRampToValueAtTime(.0008,end);
+  o1.connect(lp);o2.connect(g2);g2.connect(lp);lp.connect(g);
+  g.connect(master);if(!low)g.connect(delayWet);
+  o1.start(t);o2.start(t);o1.stop(end);o2.stop(end);
+}
+function aVoice(pitch){
+  if(!AC)return;
+  const f=440*Math.pow(2,(pitch-69)/12),t=AC.currentTime;
+  const o=AC.createOscillator();o.type='sine';o.frequency.value=f;
+  const g=AC.createGain();const pk=.28*cfg.vol;
+  g.gain.setValueAtTime(pk,t);g.gain.exponentialRampToValueAtTime(.001,t+.35);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+.4);
+}
+
+/* ════════════════════════════════════════════
+   UI : グリッド・アバター・テープ・デモ入力
+   ════════════════════════════════════════════ */
+function buildGrid(id,interactive){
+  const g=$(id);
+  for(let ki=0;ki<16;ki++){
+    const c=document.createElement('div');c.className='cell';c.dataset.ki=ki;
+    if(interactive){
+      c.addEventListener('pointerdown',e=>{e.preventDefault();demoOn(ki);});
+      c.addEventListener('pointerup',()=>demoOff(ki));
+      c.addEventListener('pointerleave',()=>demoOff(ki));
+    }
+    g.appendChild(c);
+  }
+}
+const SPIKE_CLS={pitch:'spikeP',time:'spikeT',harmony:'spikeH'};
+function uiFire(slot,ki,spikeCh){
+  const cell=$('grid'+slot).children[ki];if(!cell)return;
+  cell.classList.add('lit');
+  const sc=spikeCh?SPIKE_CLS[spikeCh]:null;
+  if(sc)cell.classList.add(sc);
+  clearTimeout(cell._t);
+  cell._t=setTimeout(()=>{cell.className='cell';},sc?420:220);
+}
+function avatarHit(slot){
+  const av=$('av'+slot);av.classList.remove('hit');void av.offsetWidth;av.classList.add('hit');
+}
+const demoHeld={};
+function demoOn(ki){
+  if(demoHeld[ki])return;demoHeld[ki]=performance.now();
+  lastFamily='N';
+  Listener.noteOn(KI_TO_DEG[ki]);
+  initAudio();
+  if(cfg.voice)aVoice(modalPitch(KI_TO_DEG[ki],currentMode,'N'));
+}
+function demoOff(ki){
+  if(!demoHeld[ki])return;
+  Listener.noteOff(performance.now()-demoHeld[ki]);
+  delete demoHeld[ki];
+}
+const KEY_PAD={'q':0,'w':1,'e':2,'r':3,'a':4,'s':5,'d':6,'f':7,
+               'z':8,'x':9,'c':10,'v':11,'b':12,'n':13,'m':14,',':15};
+addEventListener('keydown',e=>{
+  if(e.repeat||e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  const ki=KEY_PAD[e.key.toLowerCase()];
+  if(ki!==undefined){demoOn(ki);uiFire('A',ki);}
+});
+addEventListener('keyup',e=>{
+  const ki=KEY_PAD[e.key.toLowerCase()];
+  if(ki!==undefined)demoOff(ki);
+});
+
+const Tape={
+  add(speaker,notes,label){
+    if(!notes.length)return;
+    const tape=$('tape');
+    const div=document.createElement('div');
+    div.className='utter '+speaker.toLowerCase();
+    const cw=Math.min(260,Math.max(60,notes.length*14+10));
+    const cv=document.createElement('canvas');
+    cv.width=cw;cv.height=70;cv.style.width=cw+'px';cv.style.height='70px';
+    const ctx=cv.getContext('2d');
+    notes.forEach((n,i)=>{
+      const x=6+i*14,y=58-(n.deg||0)*3.4;
+      ctx.fillStyle=speaker==='A'?'#ff8a3c':'#bed2aa';
+      ctx.fillRect(x,y,8,5);
+      if(n.chord){ctx.fillRect(x,y-7,8,5);ctx.fillRect(x,y-14,8,5);} // 和音=積み
+      if(n.spike){ctx.strokeStyle='#ff8a3c';ctx.strokeRect(x-2,y-2,12,9);}
+    });
+    const meta=document.createElement('div');meta.className='meta';
+    meta.textContent=(speaker==='A'?'ひと':'AI'+(label?'・'+label:''))+` ${notes.length}音`;
+    div.appendChild(speaker==='A'?cv:meta);
+    div.appendChild(speaker==='A'?meta:cv);
+    tape.appendChild(div);
+    while(tape.children.length>40)tape.firstChild.remove();
+    tape.scrollTop=tape.scrollHeight;
+  }
+};
+
+const FACE_A=[
+"..#.......#..",".###.....###.","..#########..",".###########.","#############",
+"###..###..###","###..###..###","#############","####.....####",".####...####.","..#########..",
+];
+const FACE_B=[
+"..#.......#..","..#.......#..",".#.........#.","..#########..",".###########.",
+"#############","###..###..###","###..###..###","#############","####.....####","..#########..",
+];
+const FACE_C=[
+"#####...#####","#...#...#...#","#...#####...#","#...#...#...#","#############",
+"#############","##.##.##.##.#","#############","####.....####","#...........#","#############",
+];
+function drawFace(id,rows,color){
+  const cv=$(id),s=6,gap=1;
+  cv.width=rows[0].length*(s+gap);cv.height=rows.length*(s+gap);
+  cv.style.width=cv.width+'px';cv.style.height=cv.height+'px';
+  const ctx=cv.getContext('2d');ctx.fillStyle=color;
+  rows.forEach((row,y)=>{[...row].forEach((ch,x)=>{
+    if(ch==='#')ctx.fillRect(x*(s+gap),y*(s+gap),s,s);});});
+}
+
+/* ════════════════════════════════════════════
+   起動
+   ════════════════════════════════════════════ */
+buildGrid('gridA',true);buildGrid('gridB',false);buildGrid('gridC',false);
+{const g=$('gauge');for(let i=0;i<16;i++){const d=document.createElement('div');d.className='gseg';g.appendChild(d);}}
+drawFace('faceA',FACE_A,'#ff8a3c');drawFace('faceB',FACE_B,'#bed2aa');drawFace('faceC',FACE_C,'#6db9ff');
+buildDrumGridDOM();renderDrumMap(buildDrumMap(null,0.6),-1);
+setWorld('ionian');
+log(`PONKEY SESSION v${VERSION} — multi-channel surprisal`,'ok');
+if(!navigator.bluetooth)log('Web Bluetooth なし → デモモード(画面入力)で動きます');
+setStatus('PONKEY A をひいてみて — Bが ことばを おぼえはじめる');
+</script>
+</body>
+</html>
