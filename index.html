@@ -8,46 +8,61 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0e0f12;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;}
+  :root{--bg:#0e0f12;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;--red:#c96a5e;}
   *{box-sizing:border-box}
   body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
-    font-weight:300;letter-spacing:.01em;max-width:640px;margin:0 auto;padding:34px 20px 60px;min-height:100vh}
-  h1{font-size:22px;font-weight:400;letter-spacing:.14em;margin:0 0 4px;text-transform:uppercase}
-  .sub{color:var(--dim);font-size:13px;margin-bottom:24px}
-  a.app{display:block;text-decoration:none;color:var(--txt);background:var(--panel);border:1px solid var(--line);
-    padding:16px 18px;margin:12px 0;transition:border-color .12s,background .12s}
+    font-weight:300;letter-spacing:.01em;max-width:560px;margin:0 auto;padding:34px 20px 60px;min-height:100vh}
+  h1{font-size:22px;font-weight:400;letter-spacing:.14em;margin:0 0 22px;text-transform:uppercase}
+  a.app{display:flex;gap:14px;align-items:center;text-decoration:none;color:var(--txt);
+    background:var(--panel);border:1px solid var(--line);padding:12px;margin:10px 0;transition:border-color .12s,background .12s}
   a.app:hover{border-color:var(--teal);background:#1a1d23}
-  .nm{font-size:17px;font-weight:400;color:var(--teal);letter-spacing:.02em}
-  .desc{font-size:13px;color:var(--dim);margin-top:5px;line-height:1.55}
-  .req{font-size:11px;color:var(--dim);margin-top:7px;letter-spacing:.04em}
-  footer{color:var(--dim);font-size:11.5px;margin-top:28px;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
+  .thumb{flex:0 0 56px;width:56px;height:56px;background:#0a0b0e;border:1px solid var(--line)}
+  .thumb svg{display:block;width:100%;height:100%}
+  .meta{flex:1;min-width:0}
+  .nm{font-size:16px;color:var(--teal);letter-spacing:.04em}
+  .desc{font-size:12.5px;color:var(--dim);margin-top:3px}
+  .tag{font-size:10px;color:var(--dim);border:1px solid var(--line);padding:1px 6px;letter-spacing:.04em;align-self:flex-start}
+  footer{color:var(--dim);font-size:11px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
 </style>
 </head>
 <body>
   <h1>PONKEY</h1>
-  <div class="sub">Web apps — Edge / Chrome で開いてください</div>
 
   <a class="app" href="sync.html">
-    <div class="nm">SYNC</div>
-    <div class="desc">複数台の PONKEY に同じ BPM を送ってテンポを揃える。「同期」で頭出し(同時スタート)。</div>
-    <div class="req">要 Web Bluetooth(Edge / Chrome)</div>
+    <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <line x1="7" y1="20" x2="49" y2="20" stroke="#2f343b" stroke-width="1.5"/>
+      <line x1="7" y1="36" x2="49" y2="36" stroke="#2f343b" stroke-width="1.5"/>
+      <g fill="#6fb0b8"><rect x="12" y="13" width="3.5" height="14"/><rect x="26" y="13" width="3.5" height="14"/><rect x="40" y="13" width="3.5" height="14"/>
+      <rect x="12" y="29" width="3.5" height="14"/><rect x="26" y="29" width="3.5" height="14"/><rect x="40" y="29" width="3.5" height="14"/></g>
+    </svg></div>
+    <div class="meta"><div class="nm">SYNC</div><div class="desc">複数台のBPMを合わせる・頭出し</div></div>
+    <span class="tag">Bluetooth</span>
   </a>
 
   <a class="app" href="sequence.html">
-    <div class="nm">SEQUENCE</div>
-    <div class="desc">ソングモード。スロット(1小節ループ)を編集し、シーケンスに並べて演奏。本体と双方向同期。</div>
-    <div class="req">要 Web Bluetooth(Edge / Chrome)</div>
+    <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <g fill="#6fb0b8"><rect x="9" y="10" width="8" height="8"/><rect x="33" y="10" width="8" height="8"/>
+      <rect x="9" y="22" width="8" height="8"/><rect x="45" y="22" width="2.5" height="8" fill="#23262c"/>
+      <rect x="21" y="34" width="8" height="8"/></g>
+      <g fill="#c96a5e"><rect x="21" y="10" width="8" height="8"/><rect x="33" y="34" width="8" height="8"/></g>
+      <g fill="#23262c"><rect x="45" y="10" width="8" height="8"/><rect x="21" y="22" width="8" height="8"/><rect x="33" y="22" width="8" height="8"/><rect x="9" y="34" width="8" height="8"/><rect x="45" y="34" width="8" height="8"/></g>
+    </svg></div>
+    <div class="meta"><div class="nm">SEQUENCE</div><div class="desc">ループを編集・配置して演奏</div></div>
+    <span class="tag">Bluetooth</span>
   </a>
 
   <a class="app" href="trance.html">
-    <div class="nm">TRANCE</div>
-    <div class="desc">PONKEY と Logic / Ableton 等を MIDI で連携(多台同期・クロック)。</div>
-    <div class="req">要 Web MIDI(Edge / Chrome)</div>
+    <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <rect x="7" y="20" width="15" height="16" rx="2" fill="none" stroke="#6fb0b8" stroke-width="2"/>
+      <rect x="34" y="20" width="15" height="16" rx="2" fill="none" stroke="#6fb0b8" stroke-width="2"/>
+      <line x1="22" y1="28" x2="34" y2="28" stroke="#6fb0b8" stroke-width="2"/>
+      <path d="M25 25 L22 28 L25 31 Z" fill="#6fb0b8"/><path d="M31 25 L34 28 L31 31 Z" fill="#6fb0b8"/>
+      <g fill="#c96a5e"><circle cx="11.5" cy="28" r="1.6"/><circle cx="44.5" cy="28" r="1.6"/></g>
+    </svg></div>
+    <div class="meta"><div class="nm">TRANCE</div><div class="desc">Logic/Ableton と MIDI 連携</div></div>
+    <span class="tag">MIDI</span>
   </a>
 
-  <footer>
-    Safari / Firefox は Web Bluetooth / Web MIDI 非対応です。<br>
-    PONKEY — pocket-sized MIDI instrument.
-  </footer>
+  <footer>Edge / Chrome で開いてください(Safari・Firefox 非対応)</footer>
 </body>
 </html>
