@@ -62,7 +62,7 @@ html,body{height:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--disp);font-size:14px;line-height:1.6;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(247,243,238,.02) 2px 4px)}
-.wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:14px 16px 60px}
+.wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:14px 16px 60px}
 
 header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:6px 2px 14px;border-bottom:1px solid var(--line)}
 h1{font-size:22px;letter-spacing:.16em;color:var(--dot)}
@@ -73,7 +73,7 @@ h1 .x{color:var(--human)}
 .status-line.listening{color:var(--human)}
 .status-line.thinking,.status-line.talking{color:var(--dot)}
 
-.stage{display:grid;grid-template-columns:1fr minmax(220px,300px) 1fr;gap:14px;margin-top:16px}
+.stage{display:grid;grid-template-columns:minmax(0,300px) minmax(190px,250px) minmax(0,300px);gap:14px;margin-top:16px;justify-content:center}
 @media(max-width:840px){.stage{grid-template-columns:1fr 1fr}.tape-col{grid-column:1/-1;order:3}}
 @media(max-width:520px){.stage{grid-template-columns:1fr}}
 
