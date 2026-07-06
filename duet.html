@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PONKEY AI Duet</title>
+<meta name="theme-color" content="#1a1714">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY DUET">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.58/Tone.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/1.2.8/tf.min.js"></script>
@@ -235,6 +243,8 @@ input[type=range]::-webkit-slider-thumb {
 <div class="error-banner" id="errorBanner"></div>
 
 <div class="wrap">
+
+  <a href="index.html" style="display:inline-block;font-size:12px;letter-spacing:.12em;color:var(--muted);text-decoration:none;margin-bottom:14px" title="アプリ一覧へ">‹ PONKEY</a>
 
   <!-- Connect buttons -->
   <div class="connect-row">
