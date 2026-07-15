@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PONKEY SOUND GUIDE — 木の机のテクノ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Kiwi+Maru:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#faf6ee;
+    --ink:#3b3630;
+    --graphite:#8b8478;
+    --line:#ddd6c6;
+    --key:#e8862e;        /* PONKEYのオレンジの鍵 */
+    --key-soft:#f8e6cf;
+    --mist:#7fa79a;       /* 霧・環境音楽の色 */
+    --mist-soft:#e4eeea;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:'Zen Kaku Gothic New',sans-serif;
+    line-height:1.85;font-size:15px;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:0 22px 120px}
+  ::selection{background:var(--key-soft)}
+
+  /* ============ hero ============ */
+  header{padding:72px 0 48px;text-align:center}
+  .eyebrow{
+    font-family:'Kiwi Maru',serif;font-size:12px;letter-spacing:.3em;
+    color:var(--graphite);margin-bottom:18px;
+  }
+  h1{
+    font-family:'Shippori Mincho',serif;font-weight:800;
+    font-size:clamp(30px,7vw,48px);line-height:1.35;letter-spacing:.03em;
+  }
+  h1 em{font-style:normal;color:var(--key)}
+  .lede{margin:20px auto 0;color:var(--graphite);max-width:32em;font-size:14px}
+
+  /* ============ mini PONKEY ============ */
+  .toy{margin:40px auto 8px;width:min(320px,84vw)}
+  .board{
+    background:#fff;border:1.5px solid var(--line);border-radius:22px;
+    padding:22px;box-shadow:0 6px 0 rgba(59,54,48,.06);
+  }
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .k{
+    aspect-ratio:1;border-radius:50% 50% 44% 44%;
+    background:#e9e2d3;border:none;cursor:pointer;
+    transition:background .15s;position:relative;
+    -webkit-tap-highlight-color:transparent;touch-action:none;
+  }
+  .k::after{ /* きのこの影 */
+    content:"";position:absolute;inset:auto 14% -7% 14%;height:22%;
+    background:rgba(59,54,48,.08);border-radius:50%;z-index:-1;
+  }
+  .k.orange{background:var(--key)}
+  .k.fire{animation:pop .3s ease-out}
+  .k.held{background:var(--graphite);transform:translateY(3px)}
+  .k.held.struggle{animation:struggle .28s ease-in-out}
+  @keyframes pop{0%{transform:translateY(0)}35%{transform:translateY(-10px)}100%{transform:translateY(0)}}
+  @keyframes struggle{0%,100%{transform:translateY(3px)}25%{transform:translateY(0px) rotate(-2deg)}55%{transform:translateY(2px) rotate(2deg)}}
+  @media (prefers-reduced-motion: reduce){.k.fire,.k.held.struggle{animation:none}}
+  .toy-note{
+    text-align:center;font-family:'Kiwi Maru',serif;font-size:12px;
+    color:var(--graphite);margin-top:14px;
+  }
+  .sound-btn{
+    display:block;margin:10px auto 0;
+    font-family:'Kiwi Maru',serif;font-size:13px;color:var(--ink);
+    background:var(--key-soft);border:1.5px solid var(--key);border-radius:99px;
+    padding:7px 22px;cursor:pointer;transition:background .15s;
+  }
+  .sound-btn:hover{background:#fff}
+  .sound-btn:focus-visible{outline:2px solid var(--key);outline-offset:2px}
+
+  /* ============ sections ============ */
+  section{padding-top:72px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+  .sec-num{font-family:'Kiwi Maru',serif;color:var(--key);font-size:14px;letter-spacing:.1em}
+  h2{font-family:'Shippori Mincho',serif;font-weight:700;font-size:23px;letter-spacing:.03em}
+  .sec-note{color:var(--graphite);font-size:13.5px;max-width:38em;margin-bottom:18px}
+
+  /* 三原則 */
+  .rules{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}
+  @media(max-width:560px){.rules{grid-template-columns:1fr}}
+  .rule{
+    background:#fff;border:1.5px solid var(--line);border-radius:16px;
+    padding:18px 16px;text-align:center;
+  }
+  .rule b{font-family:'Shippori Mincho',serif;font-size:16px;display:block;margin-bottom:6px}
+  .rule span{font-size:12.5px;color:var(--graphite);line-height:1.7;display:block}
+
+  /* 避ける/向かう */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+  @media(max-width:560px){.vs{grid-template-columns:1fr}}
+  .vs .col{border-radius:16px;padding:18px 18px 14px;border:1.5px solid var(--line)}
+  .vs .no{background:#f1ede3}
+  .vs .yes{background:var(--mist-soft);border-color:var(--mist)}
+  .vs h3{font-family:'Kiwi Maru',serif;font-size:13px;letter-spacing:.16em;margin-bottom:10px}
+  .vs .no h3{color:var(--graphite)}
+  .vs .yes h3{color:var(--mist)}
+  .vs p{font-size:13.5px;line-height:2}
+  .formula{
+    margin-top:22px;text-align:center;
+    font-family:'Shippori Mincho',serif;font-weight:700;
+    font-size:clamp(15px,4vw,19px);
+    background:#fff;border:1.5px dashed var(--key);border-radius:16px;
+    padding:18px 12px;
+  }
+  .formula small{display:block;font-family:'Zen Kaku Gothic New',sans-serif;font-weight:400;color:var(--graphite);font-size:12px;margin-top:6px}
+
+  /* ジャンル名カード */
+  .names{display:grid;gap:10px;margin-top:8px}
+  .name{
+    background:#fff;border:1.5px solid var(--line);border-radius:14px;
+    padding:14px 18px;
+  }
+  .name b{font-family:'Shippori Mincho',serif;font-size:15.5px}
+  .name .use{
+    font-family:'Kiwi Maru',serif;font-size:11px;color:var(--key);
+    border:1px solid var(--key);border-radius:99px;padding:1px 10px 2px;
+    margin-left:10px;white-space:nowrap;
+  }
+  .name p{font-size:13px;color:var(--graphite);margin-top:4px;line-height:1.8}
+
+  /* 実装ハイライト */
+  .impl{display:grid;gap:10px;margin-top:8px}
+  .impl .row{
+    display:flex;gap:14px;align-items:flex-start;
+    background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 18px;
+  }
+  .impl .dot{
+    flex:0 0 12px;width:12px;height:12px;border-radius:50%;
+    background:var(--key);margin-top:8px;
+  }
+  .impl b{font-size:14.5px}
+  .impl p{font-size:13px;color:var(--graphite);line-height:1.8}
+  .impl .ref{font-size:12px;color:var(--graphite);margin-top:14px;text-align:right}
+  .impl .ref code{
+    font-family:'Kiwi Maru',serif;background:#fff;border:1px solid var(--line);
+    border-radius:6px;padding:1px 8px;font-size:11.5px;
+  }
+
+  /* ============ artists ============ */
+  .genre-note{
+    font-family:'Kiwi Maru',serif;font-size:12px;color:var(--mist);
+    letter-spacing:.14em;margin:34px 0 4px;
+  }
+  .artist{border-bottom:1px solid var(--line);padding:22px 0}
+  .artist:last-of-type{border-bottom:none}
+  .a-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .a-name{font-family:'Shippori Mincho',serif;font-weight:700;font-size:17.5px}
+  .a-origin{font-size:11.5px;color:var(--graphite);letter-spacing:.06em}
+  .badge{
+    font-family:'Kiwi Maru',serif;font-size:11px;letter-spacing:.1em;color:var(--key);
+    border:1px solid var(--key);border-radius:99px;padding:1px 10px 2px;white-space:nowrap;
+  }
+  .badge.mist{color:var(--mist);border-color:var(--mist)}
+  .a-desc{margin-top:6px;font-size:13.5px;max-width:40em}
+  .a-desc b{font-weight:700}
+  .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .links a{
+    display:inline-block;text-decoration:none;font-size:12.5px;letter-spacing:.03em;
+    color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:99px;
+    padding:5px 14px 6px;transition:border-color .15s,background .15s;
+  }
+  .links a:hover{border-color:var(--key);background:var(--key-soft)}
+  .links a:focus-visible{outline:2px solid var(--key);outline-offset:2px}
+  .links a.play::before{content:"▶";font-size:9px;margin-right:7px;color:var(--key)}
+  .links a.sp::before{content:"●";font-size:9px;margin-right:7px;color:var(--graphite)}
+
+  footer{
+    margin-top:88px;padding-top:26px;border-top:1.5px solid var(--line);
+    color:var(--graphite);font-size:12.5px;text-align:center;
+  }
+  footer .sig{color:var(--key);font-family:'Kiwi Maru',serif}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">PONKEY SOUND &amp; LISTENING GUIDE</p>
+  <h1>倉庫のテクノじゃなく、<br><em>木の机のテクノ。</em></h1>
+  <p class="lede">PONKEYの音の世界観を、チームの共通言語にするための一枚。方針・ジャンルの呼び方・実装の要点・そして耳を揃えるための17組。</p>
+
+  <div class="toy">
+    <div class="board">
+      <div class="grid" id="grid" aria-label="ミニPONKEY。鍵を押さえると黙り、離すと戻ります"></div>
+    </div>
+    <p class="toy-note">↑ 押さえると黙る。離すと戻ってくる。</p>
+    <button class="sound-btn" id="soundBtn">♪ 音を出してみる</button>
+  </div>
+</header>
+
+<!-- ============ 1 方針 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>音の三原則</h2></div>
+  <p class="sec-note">迷ったらこの3つに戻る。逆に、この3つを満たさない音・映像・コピーはPONKEYの声ではない。</p>
+  <div class="rules">
+    <div class="rule"><b>クリーンな音色</b><span>歪ませない。ギラギラは各パレットの隅に1枠だけ隔離</span></div>
+    <div class="rule"><b>深く柔らかい残響</b><span>残響が標準、ドライが例外。乾いたピコピコは「ゲーム機」、残響をまとったピコピコは「思い出」</span></div>
+    <div class="rule"><b>休符を恐れない</b><span>リズムは音じゃなく「穴」でできている。間と静けさは仕様</span></div>
+  </div>
+
+  <div class="vs">
+    <div class="col no">
+      <h3>さける — 倉庫の世界</h3>
+      <p>ダーク / インダストリアル / ストロボ / 黒 / 歪み / 圧迫 / 隙間を埋める / 夜のギラギラ</p>
+    </div>
+    <div class="col yes">
+      <h3>むかう — 机の世界</h3>
+      <p>余白 / 紙 / 木 / 昼の光 / 機構音(ポコッ)は消さず調える / 呼吸 / 霧 / 部屋</p>
+    </div>
+  </div>
+
+  <div class="formula">
+    トイトロニカ × 環境音楽 × ひとつまみの8bit
+    <small>骨格はかわいさと霧。8bitは香辛料(配合率は構造で保証: 各音色パレット16枠のうち末尾4枠だけ)</small>
+  </div>
+</section>
+
+<!-- ============ 2 ジャンルの呼び方 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>ジャンルの呼び方(相手別)</h2></div>
+  <p class="sec-note">同じ音を指す言葉を、話す相手で使い分ける。</p>
+  <div class="names">
+    <div class="name"><b>Kankyō Ongaku(環境音楽)</b><span class="use">海外プレス・SXSW後の物語</span>
+      <p>80年代日本の環境音楽(吉村弘、細野晴臣ら)。2019年のコンピ「Kankyō Ongaku」以来、海外で日本語のまま通じるジャンル名。もともと公共空間のために設計された音楽で、PONKEY PARKと出自レベルで一致。日本発プロダクトが名乗る物語として最強。</p></div>
+    <div class="name"><b>トイトロニカ</b><span class="use">かわいさを強調したいとき</span>
+      <p>おもちゃの音色×エレクトロニカ(Lullatoneなど)。「おもちゃの音で、大人が聴ける音楽」が成立する証明。PONKEYの見た目と一直線。</p></div>
+    <div class="name"><b>アンビエント・ミニマル</b><span class="use">国内の機材好き・SNSタグ</span>
+      <p>一番説明不要で通じる汎用語。</p></div>
+    <div class="name"><b>木の机のテクノ</b><span class="use">チーム内部の合言葉</span>
+      <p>ボイラールーム的な「倉庫のテクノ」の反対語として。デザイン・映像・コピーの判断基準に使う。</p></div>
+  </div>
+</section>
+
+<!-- ============ 3 実装ハイライト ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>音への落とし込み(決定事項)</h2></div>
+  <p class="sec-note">方針は既にファームウェアの仕様に翻訳済み。要点だけ。</p>
+  <div class="impl">
+    <div class="row"><span class="dot"></span><div><b>電源オンの第一声はオルゴール</b>
+      <p>リード系のデフォルト音色を Music Box に。第一声がブランドの声。ベースも「木」側(Acoustic Bass)へ。</p></div></div>
+    <div class="row"><span class="dot"></span><div><b>ドラムは「机の上の小物たち」</b>
+      <p>ドン・パン・チッ(ドラムセット)→ ポン・コツッ・チン(コンガ、リムショット、トライアングル)。バンド系の音も各パレットの隅に残すので、選べば戻れる。</p></div></div>
+    <div class="row"><span class="dot"></span><div><b>残響が標準、ドライが例外</b>
+      <p>起動時からリバーブ深め。8bit音色にもあえて残響をかけたままにする。</p></div></div>
+    <div class="row"><span class="dot"></span><div><b>「ぷぅ」は実在した</b>
+      <p>音源チップの中にクイーカ(鳴き太鼓)という「ぷぅ」と鳴く打楽器を発見。将来、鍵が握られたときの「負け声」候補としてマーク済み。</p></div></div>
+  </div>
+  <p class="impl ref">実装仕様の全文 → <code>PONKEY_VOICE_PALETTE_SPEC.md</code></p>
+</section>
+
+<!-- ============ 4 リスニング ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>耳を揃える17組</h2></div>
+  <p class="sec-note">リンクはすべて検索結果に飛ぶので、リンク切れなく今日の映像に届きます。まずはオレンジのバッジの4組から。</p>
+
+  <p class="genre-note">〇 まず霧から — ダブテクノ(同じ文法を、ささやき声で)</p>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Basic Channel / Rhythm &amp; Sound</span><span class="a-origin">ベルリン</span></div>
+    <p class="a-desc">ダブテクノの創始者。キックは霧の向こう、演奏はディレイへの出し入れ。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=basic+channel+quadrant+dub" target="_blank" rel="noopener">Quadrant Dub</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=rhythm+and+sound+mango+drive" target="_blank" rel="noopener">Mango Drive</a>
+      <a class="sp" href="https://open.spotify.com/search/basic%20channel" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">GAS (Wolfgang Voigt)</span><span class="a-origin">ケルン</span></div>
+    <p class="a-desc">キックすらほぼ消えた「森のテクノ」。アンビエントテクノの金字塔。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=gas+pop+wolfgang+voigt+full+album" target="_blank" rel="noopener">アルバム「Pop」</a>
+      <a class="sp" href="https://open.spotify.com/search/GAS%20wolfgang%20voigt" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">DeepChord / Echospace</span><span class="a-origin">デトロイト</span></div>
+    <p class="a-desc">アメリカ側のダブテクノ。テープとスプリングリバーブの質感。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=deepchord+echospace+liumin" target="_blank" rel="noopener">Liumin</a>
+      <a class="sp" href="https://open.spotify.com/search/deepchord" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <p class="genre-note">一 モダンクラシカル本流(機構の音を「調音」する人たち)</p>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Ólafur Arnalds</span><span class="a-origin">アイスランド・1986</span><span class="badge mist">委ねる側の完成形</span></div>
+    <p class="a-desc">元ハードコアバンドのドラマー。自作システム<b>Stratus</b>=本人の演奏に2台の自動演奏ピアノがリアルタイムで弾き返す。<b>AI Duetのコンサートホール版</b>。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=olafur+arnalds+re%3Amember+live" target="_blank" rel="noopener">re:member (Stratus)</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=olafur+arnalds+saman" target="_blank" rel="noopener">Saman</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=olafur+arnalds+island+songs" target="_blank" rel="noopener">Island Songs</a>
+      <a class="sp" href="https://open.spotify.com/search/olafur%20arnalds" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Nils Frahm</span><span class="a-origin">ベルリン・1982</span><span class="badge mist">握る側の完成形</span></div>
+    <p class="a-desc">ピアノ・Juno・テープエコー・オルガンを円形に並べ、一人で駆け回って層を積む。ハンマーの機構音やテープのヒスを<b>楽器の声として愛する</b>先駆者。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=nils+frahm+says+live" target="_blank" rel="noopener">Says</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=nils+frahm+live+at+funkhaus" target="_blank" rel="noopener">Live at Funkhaus</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=nils+frahm+toilet+brushes+live" target="_blank" rel="noopener">Toilet Brushes(トイレブラシでピアノを叩く名演)</a>
+      <a class="sp" href="https://open.spotify.com/search/nils%20frahm" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Hania Rani</span><span class="a-origin">ポーランド</span><span class="badge">優先</span></div>
+    <p class="a-desc">今この分野で一番勢いがある人。立ったままピアノとシンセを同時に弾くライブ映像が入口として最高。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=hania+rani+live+from+studio+s2" target="_blank" rel="noopener">Live from Studio S2</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=hania+rani+ghosts" target="_blank" rel="noopener">Ghosts</a>
+      <a class="sp" href="https://open.spotify.com/search/hania%20rani" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Kelly Moran</span><span class="a-origin">ニューヨーク</span></div>
+    <p class="a-desc">プリペアドピアノ+自動演奏ピアノ<b>Disklavier</b>との共演で作曲する人。「人間と機械ピアノの二重奏」の現在形。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=kelly+moran+moves+in+the+field" target="_blank" rel="noopener">Moves in the Field</a>
+      <a class="sp" href="https://open.spotify.com/search/kelly%20moran" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Max Richter</span><span class="a-origin">ベルリン/ロンドン</span></div>
+    <p class="a-desc">この分野の長老格。8時間半の睡眠用コンサート「Sleep」=<b>音楽の聴き方自体を設計する</b>発想。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=max+richter+on+the+nature+of+daylight" target="_blank" rel="noopener">On the Nature of Daylight</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=max+richter+sleep+documentary" target="_blank" rel="noopener">Sleepドキュメンタリー</a>
+      <a class="sp" href="https://open.spotify.com/search/max%20richter" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">吉村弘</span><span class="a-origin">日本・1940-2003</span><span class="badge">Kankyō Ongakuの中心</span></div>
+    <p class="a-desc">日本の環境音楽の中心人物。「Green」「Music for Nine Post Cards」に、PONKEYが鳴らすべき音の答えがほぼそのままある。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=hiroshi+yoshimura+green+full+album" target="_blank" rel="noopener">Green</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=hiroshi+yoshimura+music+for+nine+post+cards" target="_blank" rel="noopener">Nine Post Cards</a>
+      <a class="sp" href="https://open.spotify.com/search/hiroshi%20yoshimura" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">坂本龍一(晩年作品)</span><span class="a-origin">東京/NY</span></div>
+    <p class="a-desc">「async」以降=楽器の機構音・ノイズを慈しむ方向の日本側の到達点。ソレノイド音を「消す」でなく「調える」思想の後ろ盾。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=坂本龍一+async+andata" target="_blank" rel="noopener">andata</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=ryuichi+sakamoto+coda+documentary" target="_blank" rel="noopener">映画「CODA」</a>
+      <a class="sp" href="https://open.spotify.com/search/ryuichi%20sakamoto%20async" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <p class="genre-note">二 機械と共演する人たち(「委ねる演奏」の系譜)</p>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Suzanne Ciani</span><span class="a-origin">アメリカ・1946</span><span class="badge">優先・源流</span></div>
+    <p class="a-desc">70年代からBuchlaシンセと「対話」する即興の女王。80歳近い今も現役。委ねる演奏の元祖。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=suzanne+ciani+buchla+live+performance" target="_blank" rel="noopener">Buchlaライブ</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=suzanne+ciani+a+sonic+womb" target="_blank" rel="noopener">A Sonic Womb</a>
+      <a class="sp" href="https://open.spotify.com/search/suzanne%20ciani" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Kaitlyn Aurelia Smith</span><span class="a-origin">アメリカ</span></div>
+    <p class="a-desc">モジュラーで作る有機的でカラフルな音響。<b>世界観がかわいい</b>。PONKEYのトンマナに一番近いかもしれない人。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=kaitlyn+aurelia+smith+an+intention" target="_blank" rel="noopener">An Intention</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=kaitlyn+aurelia+smith+live+modular" target="_blank" rel="noopener">モジュラーライブ</a>
+      <a class="sp" href="https://open.spotify.com/search/kaitlyn%20aurelia%20smith" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Colin Benders</span><span class="a-origin">オランダ</span></div>
+    <p class="a-desc">巨大モジュラーの即興ライブ配信。レイヤーが積み上がる過程を隠さず全部見せる人。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=colin+benders+modular+live" target="_blank" rel="noopener">モジュラーライブ</a>
+      <a class="sp" href="https://open.spotify.com/search/colin%20benders" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <p class="genre-note">三 小さい機械と遊ぶ人たち(トイトロニカ側・PONKEYを送る相手リスト)</p>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Lullatone</span><span class="a-origin">名古屋</span><span class="badge">トイトロニカの本丸</span></div>
+    <p class="a-desc">「おもちゃの音で、大人が聴ける音楽」を成立させた実例。パジャマポップの自称通り、かわいさと音楽的な深さの両立の証明。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=lullatone+while+the+kettle+boils" target="_blank" rel="noopener">While the Kettle Boils</a>
+      <a class="sp" href="https://open.spotify.com/search/lullatone" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">True Cuckoo</span><span class="a-origin">スウェーデン</span><span class="badge mist">品質基準</span></div>
+    <p class="a-desc">OP-1やPO系でTeenage Engineering人気を作った立役者。<b>「Cuckooが遊びたくなる機械」=PONKEYの品質基準</b>。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=true+cuckoo+op-1+field" target="_blank" rel="noopener">OP-1 Field</a>
+      <a class="sp" href="https://www.youtube.com/@truecuckoo" target="_blank" rel="noopener">チャンネル</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Hainbach</span><span class="a-origin">ベルリン</span><span class="badge">優先・送る相手</span></div>
+    <p class="a-desc">中古の測定器や古いテープ機でアンビエントを作るYouTuber兼作家。<b>「本来楽器でないものが歌う」ことの伝道師</b>。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=hainbach+test+equipment+music" target="_blank" rel="noopener">測定器の音楽</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=hainbach+tape+loops+ambient" target="_blank" rel="noopener">テープループ</a>
+      <a class="sp" href="https://open.spotify.com/search/hainbach" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Red Means Recording</span><span class="a-origin">アメリカ</span></div>
+    <p class="a-desc">小型機材で1台完結の楽曲を作る動画。語り口が詩的で、機材動画なのに読後感がある。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=red+means+recording+one+synth+one+song" target="_blank" rel="noopener">One Synth One Song</a>
+      <a class="sp" href="https://www.youtube.com/@RedMeansRecording" target="_blank" rel="noopener">チャンネル</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Look Mum No Computer</span><span class="a-origin">イギリス</span></div>
+    <p class="a-desc">自作シンセの狂気側。1000個のオシレーターでオルガンを作った人。<b>「機械を作ること自体が表現」</b>の代表。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=look+mum+no+computer+1000+oscillator+megadrone" target="_blank" rel="noopener">1000 Oscillator Megadrone</a>
+      <a class="sp" href="https://www.youtube.com/@LOOKMUMNOCOMPUTER" target="_blank" rel="noopener">チャンネル</a>
+    </div>
+  </div>
+
+  <div class="artist">
+    <div class="a-head"><span class="a-name">Open Reel Ensemble / 和田永</span><span class="a-origin">東京</span><span class="badge">優先・国内の隣人</span></div>
+    <p class="a-desc">オープンリールを「演奏」するグループ。和田永さんの<b>「エレクトロニコス・ファンタスティコス!」</b>(古家電の楽器化祭り)は、<b>PONKEY PARKを「展示」でなく「祭り」として設計するときの国内最良の先行事例</b>。</p>
+    <div class="links">
+      <a class="play" href="https://www.youtube.com/results?search_query=open+reel+ensemble+live" target="_blank" rel="noopener">Open Reel Ensemble</a>
+      <a class="play" href="https://www.youtube.com/results?search_query=エレクトロニコスファンタスティコス+和田永" target="_blank" rel="noopener">エレクトロニコス・ファンタスティコス!</a>
+      <a class="sp" href="https://open.spotify.com/search/open%20reel%20ensemble" target="_blank" rel="noopener">Spotify</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>聴く順番の提案: 吉村弘「Green」→ Hania Rani → Suzanne Ciani → Lullatone → Hainbach。夜は霧(〇)を流しっぱなしで。</p>
+  <p style="margin-top:8px">にぎれる音楽。 <span class="sig">PONKEY</span> — 2026.07</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  const grid = document.getElementById('grid');
+  const btn  = document.getElementById('soundBtn');
+  const STEP_MS = 300;
+  // Cメジャーペンタトニック: 上の行ほど高く(実機のノートテーブルと同じ向き)
+  const FREQS = [
+    1046.5, 1174.7, 1318.5, 1568.0,   // C6 D6 E6 G6
+     783.99, 659.25, 587.33, 523.25,  // G5 E5 D5 C5 (蛇行で滑らかに)
+     392.00, 440.00, 493.88, 523.25,  // G4 A4 B4 C5
+     329.63, 293.66, 261.63, 196.00   // E4 D4 C4 G3
+  ];
+  const keys = [];
+  const held = new Array(16).fill(false);
+  let step = 0, audioOn = false, ctx = null, delay = null, master = null;
+
+  for (let i = 0; i < 16; i++) {
+    const b = document.createElement('button');
+    b.className = 'k' + (i === 6 ? ' orange' : '');
+    b.setAttribute('aria-label', '鍵 ' + (i + 1));
+    const down = e => { e.preventDefault(); held[i] = true; b.classList.add('held'); };
+    const up   = () => { held[i] = false; b.classList.remove('held','struggle'); };
+    b.addEventListener('pointerdown', down);
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
+    grid.appendChild(b);
+    keys.push(b);
+  }
+
+  function initAudio(){
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0.5;
+    // 「残響が標準」: フィードバックディレイで部屋を作る
+    delay = ctx.createDelay(1.0); delay.delayTime.value = 0.29;
+    const fb = ctx.createGain(); fb.gain.value = 0.38;
+    const wet = ctx.createGain(); wet.gain.value = 0.45;
+    delay.connect(fb); fb.connect(delay);
+    delay.connect(wet); wet.connect(ctx.destination);
+    master.connect(ctx.destination); master.connect(delay);
+  }
+
+  function pluck(freq){
+    if (!audioOn || !ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.28, t + 0.006);   // オルゴールの立ち上がり
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);   // 長い減衰
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 1.5);
+  }
+
+  setInterval(() => {
+    const k = keys[step];
+    if (held[step]) {
+      // 握られている: 鳴かずに、手の中でもがく
+      k.classList.remove('struggle'); void k.offsetWidth; k.classList.add('struggle');
+    } else {
+      k.classList.remove('fire'); void k.offsetWidth; k.classList.add('fire');
+      pluck(FREQS[step]);
+    }
+    step = (step + 1) % 16;
+  }, STEP_MS);
+
+  btn.addEventListener('click', () => {
+    if (!ctx) initAudio();
+    if (ctx.state === 'suspended') ctx.resume();
+    audioOn = !audioOn;
+    btn.textContent = audioOn ? '♪ 鳴っています(タップで止める)' : '♪ 音を出してみる';
+  });
+})();
+</script>
+</body>
+</html>
