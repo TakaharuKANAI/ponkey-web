@@ -52,6 +52,10 @@
   .status .sub{font-size:12px;color:var(--dim);letter-spacing:.08em}
   .status .hold{font-size:12px;color:var(--orange);letter-spacing:.08em;display:none;font-weight:500}
   .status.holding .hold{display:inline}
+  /* 再生/停止の下にメトロノームトグル */
+  .transport{display:flex;flex-direction:column;gap:6px}
+  #btnMetro{font-size:12px;padding:7px 10px}
+  #btnMetro.on{background:var(--teal);border-color:var(--teal);color:var(--panel)}
   /* ピンレイヤー */
   #pinlayer{position:relative;height:44px;flex:none;touch-action:none}
   #pin{position:absolute;top:6px;left:0;font-size:26px;line-height:1;color:var(--orange);transform:translateX(-50%);
@@ -101,8 +105,14 @@
       <span class="sub">LOOPS</span>
       <span class="hold">▼ ホールド中</span>
       <span style="flex:1"></span>
-      <button id="btnPlay">▶</button>
-      <button class="red" id="btnStop">■</button>
+      <span class="sub">BPM <b id="bpmv" style="font-size:22px;color:var(--teal);font-weight:400">–</b></span>
+      <div class="transport" style="align-self:center">
+        <div style="display:flex;gap:6px">
+          <button id="btnPlay">▶</button>
+          <button class="red" id="btnStop">■</button>
+        </div>
+        <button id="btnMetro" title="BPMに合わせてクリック音を鳴らす">♩ クリック</button>
+      </div>
     </div>
     <div id="pinlayer"><span id="pin">▼</span></div>
     <div id="track"></div>
@@ -119,7 +129,7 @@
 const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
 const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001", DBG_CMD="504f4e4b-4559-4442-5047-445443000003";
 const SONG_MAGIC=0x5A, S_ENTER=0x01, S_SET_SEQ=0x05;
-const CC_PLAY_STOP=0x40, CC_BAR_SYNC=0x54;
+const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54;
 const RAIL=16;                       // レールのコマ数 = 本体スロット数
 
 // ============================================================ 状態
@@ -197,20 +207,55 @@ function sendHold(k){
 document.getElementById('btnPlay').onclick=()=>{midiAll(0xB0,CC_PLAY_STOP,1);log('play all');};
 document.getElementById('btnStop').onclick=()=>{midiAll(0xB0,CC_PLAY_STOP,0);prevStep=null;log('stop all');};
 
-// ============================================================ 受信: P1 の再生位置 (CC_BAR_SYNC=毎ステップ通知)
-// ステップ値が小さい方へ折り返したら小節 (=1ループ) の頭 → 次のループへ進める。
+// ============================================================ 受信: P1 の再生位置と BPM
+// CC_BAR_SYNC: 毎ステップ通知。値が小さい方へ折り返したら小節 (=1ループ) の頭 → 次のループへ。
+// CC_BPM: 本体の接続時ステートシンクと Fn×P2 での変更時に届く (val+60=BPM)。
 function onMidi(entry,ev){
-  if(entry!==devices[0])return;                       // ピンの追跡は P1 のみに従属
+  if(entry!==devices[0])return;                       // P1 のみに従属
   const b=new Uint8Array(ev.target.value.buffer);
   for(let i=0;i+2<b.length;i++){
-    if(b[i]===0xB0&&b[i+1]===CC_BAR_SYNC&&b[i+2]<0x80){onStep(b[i+2]);i+=2;}
+    if(b[i]!==0xB0||b[i+2]>=0x80)continue;
+    if(b[i+1]===CC_BAR_SYNC){onStep(b[i+2]);i+=2;}
+    else if(b[i+1]===CC_BPM){ccBpm=b[i+2]+60;setBpm(ccBpm);i+=2;}
   }
 }
+let ccBpm=null, stepMs=null, lastStepAt=null;
+function setBpm(v){document.getElementById('bpmv').textContent=v==null?'–':v;}
 function onStep(s){
   if(prevStep!=null&&s<prevStep&&!held){pos=(pos+1)%order.length;cur=order[pos];render();}
   prevStep=s;
   stepFill(s);
+  // メトロノーム: 拍頭 (4ステップごと) でクリック、小節頭はアクセント
+  if(metroOn&&s%4===0)click(s===0);
+  // BPM 推定 (CC_BPM 未受信時のフォールバック): ステップ間隔の移動平均から算出
+  const now=performance.now();
+  if(lastStepAt!=null){const dt=now-lastStepAt;
+    if(dt>40&&dt<2000){stepMs=stepMs==null?dt:stepMs*.8+dt*.2;
+      if(ccBpm==null)setBpm(Math.round(60000/(stepMs*4)));}}
+  lastStepAt=now;
 }
+
+// ============================================================ メトロノーム (WebAudio クリック)
+let metroOn=false, audioCtx=null;
+function ensureAudio(){
+  if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();
+}
+function click(accent){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime, o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type='square'; o.frequency.value=accent?1760:1320;
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(accent?.5:.35,t+.002);
+  g.gain.exponentialRampToValueAtTime(.001,t+.05);
+  o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+.06);
+}
+document.getElementById('btnMetro').onclick=()=>{
+  metroOn=!metroOn; ensureAudio();
+  document.getElementById('btnMetro').classList.toggle('on',metroOn);
+  if(metroOn)click(true);                              // 動作確認を兼ねて1発鳴らす
+  log('メトロノーム '+(metroOn?'ON':'OFF'));
+};
 
 // ============================================================ UI: トラック / ピン / ハンドル
 const track=document.getElementById('track'), pin=document.getElementById('pin'),
