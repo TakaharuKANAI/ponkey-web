@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>STEP INVADERS</title>
+<meta name="theme-color" content="#E2E3DC">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="STEP INVADERS">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ライトテーマ (LOOPS/SYNC/TRANCE と同系の紙色)。横画面前提。 */
+  :root{
+    --bg:#E2E3DC; --panel:#E9EAE3; --panel2:#D9DAD3; --line:#BFC0B9; --txt:#1A1A1A; --dim:#6E6F68;
+    --teal:#3E7B83; --red:#B0533F; --orange:#E8862E;
+  }
+  *{box-sizing:border-box}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0 auto;color:var(--txt);background:var(--bg);
+    max-width:980px;padding:12px 18px 24px;font-weight:300;letter-spacing:.01em;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  h1{font-size:20px;font-weight:400;letter-spacing:.28em;margin:0;color:var(--txt);text-transform:uppercase}
+  h2{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
+  header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  header .back{font-size:12px;letter-spacing:.14em;color:var(--dim);text-decoration:none}
+  .card{background:var(--panel);border:1px solid var(--line);padding:14px 16px;margin:8px 0}
+  button{font-family:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:9px 14px;
+    border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:var(--panel2);border-color:#9a9b94}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:rgba(62,123,131,.1);border-color:var(--teal)}
+  button.red{border-color:var(--red);color:var(--red)}
+  .pbadge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--teal);color:var(--teal);
+    font-size:12px;font-weight:500;letter-spacing:.08em;padding:6px 10px;user-select:none;background:rgba(62,123,131,.06)}
+  .pbadge .x{cursor:pointer;color:var(--dim);font-size:13px}
+  .pbadge .x:hover{color:var(--red)}
+  .noplayers{font-size:12px;color:var(--dim);letter-spacing:.06em}
+  /* ===== ゲーム面: 左=4x4ボード / 右=スコアと操作 ===== */
+  .game{display:flex;gap:18px;align-items:stretch}
+  #board{position:relative;aspect-ratio:1;height:min(62vh,340px);flex:none;
+    display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:5px;touch-action:manipulation}
+  .cell{position:relative;border:1px solid var(--line);background:var(--panel2);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none}
+  .cell .kn{position:absolute;bottom:2px;right:5px;font-size:9px;color:var(--dim)}
+  .cell svg{width:62%;height:62%;display:block}
+  .cell.flash{background:rgba(62,123,131,.28)}
+  .cell.bad{background:rgba(176,83,63,.3)}
+  /* ビートパルス: ボード枠が拍で脈打つ */
+  #board.pulse{outline:2px solid var(--teal);outline-offset:2px}
+  .side{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
+  .scorerow{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  .scorerow .big{font-size:38px;font-weight:300;color:var(--teal);line-height:1}
+  .scorerow .lab{font-size:10px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
+  .meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--dim);letter-spacing:.06em}
+  .meta b{color:var(--txt);font-weight:500}
+  .meta .combo{color:var(--orange);font-weight:500}
+  #lives{letter-spacing:.2em;color:var(--red);font-size:14px}
+  .ctrl{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+  #btnMetro.on{background:var(--teal);border-color:var(--teal);color:var(--panel)}
+  #msg{font-size:12px;color:var(--dim);letter-spacing:.04em;min-height:18px}
+  .groove{color:var(--teal);font-weight:500}
+  /* ゲームオーバー オーバーレイ */
+  #over{position:absolute;inset:0;background:rgba(226,227,220,.92);display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:5;text-align:center}
+  #over.show{display:flex}
+  #over .t{font-size:15px;letter-spacing:.3em;color:var(--txt)}
+  #over .s{font-size:34px;font-weight:300;color:var(--teal)}
+  #rotate{display:none;font-size:11.5px;color:var(--dim);letter-spacing:.06em;margin:2px 0 6px}
+  @media (orientation:portrait){ #rotate{display:block} }
+  .console{height:70px;overflow:auto;background:#1A1A1A;border:1px solid var(--line);padding:8px 10px;
+    font-size:12px;line-height:1.6;color:#B8C2A4;font-weight:300}
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="index.html">‹</a>
+    <h1>STEP INVADERS</h1>
+    <span style="flex:1"></span>
+    <span id="players" class="noplayers">未接続</span>
+    <button class="primary" id="btnConnect">＋ コネクト</button>
+  </header>
+  <div id="rotate">↻ 横向きでの使用がおすすめです</div>
+
+  <main class="card">
+    <div class="game">
+      <div id="board"><div id="over">
+        <span class="t">GAME OVER</span><span class="s" id="finalScore">0</span>
+        <span style="font-size:11px;color:var(--dim)" id="finalBest"></span>
+        <button class="primary" id="btnRetry">もう一回</button>
+      </div></div>
+      <div class="side">
+        <div class="scorerow">
+          <span><span class="big" id="score">0</span> <span class="lab">Score</span></span>
+          <span id="lives">◆◆◆</span>
+        </div>
+        <div class="meta">
+          <span>LV <b id="level">1</b></span>
+          <span class="combo" id="combo"></span>
+          <span>BPM <b id="bpmv">–</b></span>
+          <span>BEST <b id="best">0</b></span>
+        </div>
+        <div id="msg">グリッドに現れるインベーダーを、同じ位置の鍵で撃つ。拍ピッタリなら GROOVE ×2。</div>
+        <div class="ctrl">
+          <button class="primary" id="btnStart">▶ スタート</button>
+          <button id="btnMetro" title="拍に合わせてクリック音">♩ クリック</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="card" style="padding:10px 16px;margin-top:40vh">
+    <h2 style="margin-bottom:6px">Console</h2>
+    <div class="console" id="log"></div>
+  </div>
+
+<script>
+// ============================================================ 定数 (ファーム PT2 v4.5.x 一致 — FW変更なしで動く)
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54;
+// シンセパートの音階テーブル (グリッド左下=低音)。音高 → 鍵番号 (0-15) の逆引きに使う
+const NOTE_TABLE_BASS  =[45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
+const NOTE_TABLE_NORMAL=[69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];
+function buildReverse(t){const m=new Map();t.forEach((n,i)=>{if(!m.has(n))m.set(n,i)});return m;}
+const PART_BY_CHANNEL={0:buildReverse(NOTE_TABLE_BASS),3:buildReverse(NOTE_TABLE_NORMAL),4:buildReverse(NOTE_TABLE_NORMAL)};
+// オクターブシフト中でも当てられるよう ±12 半音まで探す (TRANCE と同じ方式)
+function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
+  if(rev.has(note))return rev.get(note);
+  for(let d=1;d<=12;d++){if(rev.has(note-d))return rev.get(note-d);if(rev.has(note+d))return rev.get(note+d);}
+  return null;}
+
+// ============================================================ 状態
+let devices=[];                    // {device,midiCh,name} devices[0]=P1
+let bpm=120, ccBpm=null, stepMs=null, lastStepAt=0, prevStep=null;
+let playing=false, score=0, lives=3, kills=0, combo=0, level=1;
+let cells=[], invaders=new Array(16).fill(null);   // invaders[k]={age}
+let beatCount=0, lastBeatAt=0, nextBeat=0;
+let best=0; try{best=+localStorage.getItem('ponkey_inv_best')||0;}catch(e){}
+function log(m){const e=document.getElementById('log');e.innerHTML+=`> ${m}<br>`;e.scrollTop=e.scrollHeight;}
+
+// ============================================================ BLE (入力: NoteOn / クロック: CC_BAR_SYNC / BPM: CC_BPM)
+function writeMIDI(e,s,d1,d2){const b=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  return (e.midiCh.writeValueWithoutResponse?e.midiCh.writeValueWithoutResponse(b):e.midiCh.writeValue(b)).catch(()=>{});}
+document.getElementById('btnConnect').onclick=async()=>{ try{
+  log('スキャン…');
+  const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
+  const gatt=await dev.gatt.connect();
+  const midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  const entry={device:dev,midiCh,name:dev.name||'PONKEY'};
+  dev.addEventListener('gattserverdisconnected',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();log(entry.name+' 切断');});
+  await midiCh.startNotifications();
+  midiCh.addEventListener('characteristicvaluechanged',ev=>onMidi(entry,ev));
+  devices.push(entry); renderPlayers();
+  log('P'+devices.length+' 接続: '+entry.name+' — シンセパート (P5〜P7) で遊んでね');
+}catch(e){log('接続エラー: '+e);} };
+function renderPlayers(){
+  const el=document.getElementById('players');
+  if(!devices.length){el.className='noplayers';el.textContent='未接続 (画面タップでも遊べる)';return;}
+  el.className='';el.innerHTML='';
+  devices.forEach((e,i)=>{const b=document.createElement('span');b.className='pbadge';b.style.marginRight='6px';
+    b.innerHTML=`P${i+1}<span class="x">✕</span>`;
+    b.querySelector('.x').onclick=()=>{try{e.device.gatt.disconnect();}catch(_){}devices=devices.filter(x=>x!==e);renderPlayers();};
+    el.appendChild(b);});
+}
+function onMidi(entry,ev){
+  const b=new Uint8Array(ev.target.value.buffer);
+  for(let i=0;i+2<b.length;i++){
+    const st=b[i];
+    if((st&0xF0)===0x90&&b[i+1]<0x80&&b[i+2]>0){          // NoteOn (vel>0) → 鍵番号へ逆引き
+      const k=lookupKey(st&0x0F,b[i+1]); if(k!=null)hit(k); i+=2; continue;
+    }
+    if(entry===devices[0]&&st===0xB0&&b[i+2]<0x80){        // クロック/BPM は P1 に従属
+      if(b[i+1]===CC_BAR_SYNC){onStep(b[i+2]);i+=2;}
+      else if(b[i+1]===CC_BPM){ccBpm=b[i+2]+60;bpm=ccBpm;setBpmView();i+=2;}
+    }
+  }
+}
+function setBpmView(){document.getElementById('bpmv').textContent=Math.round(bpm);}
+function onStep(s){
+  const now=performance.now();
+  if(prevStep!=null&&s<prevStep)onBar();
+  prevStep=s;
+  if(s%4===0)onBeat(now,true);
+  if(lastStepAt){const dt=now-lastStepAt;
+    if(dt>40&&dt<2000){stepMs=stepMs==null?dt:stepMs*.8+dt*.2;
+      if(ccBpm==null){bpm=60000/(stepMs*4);setBpmView();}}}
+  lastStepAt=now;
+}
+
+// ============================================================ ゲームクロック
+// P1 が再生中なら本体のステップに同期。そうでなければ内蔵クロック (BPM) で駆動。
+const deviceClockActive=()=>performance.now()-lastStepAt<600;
+setInterval(()=>{
+  if(!playing||deviceClockActive())return;
+  const now=performance.now();
+  if(now>=nextBeat){onBeat(now,false);nextBeat=now+60000/bpm;
+    if(beatCount%4===0)onBar();}
+},25);
+function onBeat(now){
+  lastBeatAt=now;beatCount++;
+  if(metroOn)click(beatCount%4===1);
+  const bd=document.getElementById('board');
+  bd.classList.add('pulse');setTimeout(()=>bd.classList.remove('pulse'),90);
+  if(playing)spawnTick();
+}
+function onBar(){ if(!playing)return;
+  for(let k=0;k<16;k++){const v=invaders[k];if(!v)continue;
+    v.age++;
+    if(v.age>=4)escape(k);else drawCell(k);}
+}
+
+// ============================================================ ゲーム本体
+function spawnTick(){
+  const alive=invaders.filter(Boolean).length;
+  const cap=Math.min(2+level,8);
+  if(alive>=cap)return;
+  const p=Math.min(.22+level*.08,.8);
+  if(Math.random()>p)return;
+  const empty=[];for(let k=0;k<16;k++)if(!invaders[k])empty.push(k);
+  if(!empty.length)return;
+  const k=empty[Math.floor(Math.random()*empty.length)];
+  invaders[k]={age:0};drawCell(k);
+}
+function hit(k){
+  if(!playing)return;
+  const c=cells[k];
+  if(invaders[k]){
+    const now=performance.now(), beatMs=60000/bpm;
+    const off=Math.min(now-lastBeatAt,Math.max(0,lastBeatAt+beatMs-now));
+    const groove=off<90;
+    combo++;kills++;
+    const mult=1+Math.floor(combo/8);
+    const pts=100*mult*(groove?2:1);
+    score+=pts;
+    invaders[k]=null;drawCell(k);
+    c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),120);
+    zap(groove);
+    msg(groove?`<span class="groove">GROOVE! +${pts}</span>`:`+${pts}`);
+    if(kills%10===0){level++;log('LEVEL '+level);}
+    updateHud();
+  }else{
+    combo=0;updateHud();
+    c.classList.add('bad');setTimeout(()=>c.classList.remove('bad'),120);
+  }
+}
+function escape(k){
+  invaders[k]=null;drawCell(k);
+  lives--;combo=0;buzz();updateHud();
+  msg('<span style="color:var(--red)">逃げられた…</span>');
+  if(lives<=0)gameOver();
+}
+function start(){
+  score=0;lives=3;kills=0;combo=0;level=1;beatCount=0;
+  invaders.fill(null);cells.forEach((c,k)=>drawCell(k));
+  document.getElementById('over').classList.remove('show');
+  playing=true;nextBeat=performance.now();
+  ensureAudio();updateHud();msg('');
+  if(devices[0])writeMIDI(devices[0],0xB0,CC_PLAY_STOP,1);   // 本体のクロックを回す (P1)
+  log('スタート');
+}
+function gameOver(){
+  playing=false;
+  if(score>best){best=score;try{localStorage.setItem('ponkey_inv_best',best);}catch(e){}}
+  document.getElementById('finalScore').textContent=score;
+  document.getElementById('finalBest').textContent='BEST '+best;
+  document.getElementById('over').classList.add('show');
+  updateHud();log('ゲームオーバー: '+score);
+}
+function updateHud(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('level').textContent=level;
+  document.getElementById('best').textContent=best;
+  document.getElementById('combo').textContent=combo>1?combo+' COMBO':'';
+  document.getElementById('lives').textContent='◆'.repeat(lives)+'◇'.repeat(3-lives);
+}
+let msgTimer=null;
+function msg(h){const e=document.getElementById('msg');e.innerHTML=h;
+  clearTimeout(msgTimer);msgTimer=setTimeout(()=>{if(playing)e.innerHTML='';},900);}
+
+// ============================================================ ボード描画
+// インベーダーは古典型のドット絵 SVG。残り時間 (age) が進むほどオレンジ → レッドに。
+const AGE_COLORS=['#3E7B83','#8a7a45','#E8862E','#B0533F'];
+function invaderSVG(color){return `<svg viewBox="0 0 11 8" shape-rendering="crispEdges">
+  <g fill="${color}">
+  <rect x="2" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/>
+  <rect x="3" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/>
+  <rect x="2" y="2" width="7" height="1"/>
+  <rect x="1" y="3" width="2" height="1"/><rect x="4" y="3" width="3" height="1"/><rect x="8" y="3" width="2" height="1"/>
+  <rect x="0" y="4" width="11" height="1"/>
+  <rect x="0" y="5" width="1" height="1"/><rect x="2" y="5" width="7" height="1"/><rect x="10" y="5" width="1" height="1"/>
+  <rect x="0" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/>
+  <rect x="3" y="7" width="2" height="1"/><rect x="6" y="7" width="2" height="1"/>
+  </g></svg>`;}
+function drawCell(k){
+  const v=invaders[k];
+  cells[k].innerHTML=(v?invaderSVG(AGE_COLORS[Math.min(v.age,3)]):'')+`<span class="kn">${k+1}</span>`;
+}
+const board=document.getElementById('board');
+for(let k=0;k<16;k++){
+  const c=document.createElement('div');c.className='cell';
+  c.addEventListener('pointerdown',()=>hit(k));      // 画面タップでも遊べる (本体なしのフォールバック)
+  board.appendChild(c);cells.push(c);drawCell(k);
+}
+
+// ============================================================ サウンド (WebAudio)
+let audioCtx=null, metroOn=false;
+function ensureAudio(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();}
+function tone(f0,f1,dur,vol,type){if(!audioCtx)return;const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+dur+.02);}
+function zap(groove){tone(groove?1600:1100,180,.12,.4,'square');}
+function buzz(){tone(140,60,.3,.4,'sawtooth');}
+function click(accent){tone(accent?1760:1320,accent?1760:1320,.05,accent?.4:.28,'square');}
+document.getElementById('btnMetro').onclick=function(){
+  metroOn=!metroOn;ensureAudio();this.classList.toggle('on',metroOn);};
+document.getElementById('btnStart').onclick=start;
+document.getElementById('btnRetry').onclick=start;
+
+// ============================================================
+setBpmView();updateHud();renderPlayers();
+log('起動。コネクトして本体のシンセパート (P5〜P7) の鍵で撃つ。未接続なら画面タップで。');
+</script>
+</body>
+</html>
