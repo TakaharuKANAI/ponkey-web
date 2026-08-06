@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SYNC</title>
-<meta name="theme-color" content="#0e0f12">
+<meta name="theme-color" content="#E2E3DC">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  /* ニュートラル・ダーク。色は2色のみ: ティール(操作/強調) と レッド(停止)。他はグレー階調。 */
+  /* ライトテーマ (TRANCE と同系の紙色)。色は2色のみ: ティール(操作/強調) と レッド(停止)。 */
   :root{
-    --bg:#0e0f12; --panel:#15171b; --line:#272a30; --txt:#cbced4; --dim:#6b6f76;
-    --teal:#6fb0b8;   /* color 1 */
-    --red:#c96a5e;    /* color 2 */
+    --bg:#E2E3DC; --panel:#E9EAE3; --line:#BFC0B9; --txt:#1A1A1A; --dim:#6E6F68;
+    --teal:#3E7B83;   /* color 1 */
+    --red:#B0533F;    /* color 2 */
   }
   *{box-sizing:border-box}
   body{font-family:'Inter',-apple-system,sans-serif;margin:0;color:var(--txt);background:var(--bg);
@@ -30,12 +30,12 @@
   .card{background:var(--panel);border:1px solid var(--line);padding:16px;margin:14px 0}
   button{font-family:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:10px 15px;
     border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
-  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button:hover{background:#D9DAD3;border-color:#9a9b94}
   button:disabled{opacity:.35;cursor:default;background:transparent;border-color:var(--line)}
   button.primary{border-color:var(--teal);color:var(--teal)}
-  button.primary:hover{background:rgba(111,176,184,.12);border-color:var(--teal)}
+  button.primary:hover{background:rgba(62,123,131,.1);border-color:var(--teal)}
   button.red{border-color:var(--red);color:var(--red)}
-  button.red:hover{background:rgba(201,106,94,.12);border-color:var(--red)}
+  button.red:hover{background:rgba(176,83,63,.1);border-color:var(--red)}
   .dev{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:9px 12px;margin:7px 0}
   .dev .nm{flex:1;font-weight:400}
   .dev .st{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal)}
@@ -47,8 +47,8 @@
   input[type=range]{flex:1;accent-color:var(--teal);height:4px}
   .transport{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
   .count{color:var(--teal)}
-  .console{height:92px;overflow:auto;background:#0a0b0e;border:1px solid var(--line);padding:9px;margin-top:4px;
-    font-size:12px;line-height:1.65;color:var(--dim);font-weight:300}
+  .console{height:92px;overflow:auto;background:#1A1A1A;border:1px solid var(--line);padding:9px;margin-top:4px;
+    font-size:12px;line-height:1.65;color:#B8C2A4;font-weight:300}
 </style>
 </head>
 <body>
