@@ -19,7 +19,7 @@
   /* ライトテーマ (TRANCE と同系の紙色) + 横画面 (ランドスケープ) 前提のレイアウト */
   :root{
     --bg:#E2E3DC; --panel:#E9EAE3; --panel2:#D9DAD3; --line:#BFC0B9; --txt:#1A1A1A; --dim:#6E6F68;
-    --teal:#3E7B83; --red:#B0533F;
+    --teal:#3E7B83; --red:#B0533F; --orange:#E8862E;
   }
   *{box-sizing:border-box}
   body{font-family:'Inter',-apple-system,sans-serif;margin:0 auto;color:var(--txt);background:var(--bg);
@@ -50,13 +50,13 @@
   .status .big{font-size:36px;font-weight:300;color:var(--teal);line-height:1}
   .status .big b{font-weight:400}
   .status .sub{font-size:12px;color:var(--dim);letter-spacing:.08em}
-  .status .hold{font-size:12px;color:var(--red);letter-spacing:.08em;display:none;font-weight:500}
+  .status .hold{font-size:12px;color:var(--orange);letter-spacing:.08em;display:none;font-weight:500}
   .status.holding .hold{display:inline}
   /* ピンレイヤー */
   #pinlayer{position:relative;height:44px;flex:none;touch-action:none}
-  #pin{position:absolute;top:2px;left:0;font-size:30px;transform:translateX(-50%);
+  #pin{position:absolute;top:6px;left:0;font-size:26px;line-height:1;color:var(--orange);transform:translateX(-50%);
     transition:left .1s linear;cursor:grab;user-select:none;-webkit-user-select:none;z-index:3;
-    padding:0 12px}  /* padding でタッチ範囲を拡大 */
+    padding:0 14px}  /* padding でタッチ範囲を拡大 */
   #pin.held{transform:translateX(-50%) scale(1.22);transition:none;cursor:grabbing}
   /* トラック (16コマのレール、先頭N個が有効)。横画面で高さを稼ぐ */
   #track{position:relative;display:flex;height:clamp(72px,26vh,130px);flex:none;touch-action:none}
@@ -65,9 +65,9 @@
   .slot:first-child{border-left-width:1px}
   .slot.off{background:transparent;border-style:dashed;opacity:.35}
   .slot.cur{border-color:var(--teal);border-left-width:1px;color:var(--teal);z-index:1;background:#E0E4DC}
-  .slot.cur.hold{border-color:var(--red);color:var(--red)}
+  .slot.cur.hold{border-color:var(--orange);color:var(--orange)}
   .slot .fill{position:absolute;left:0;top:0;bottom:0;background:rgba(62,123,131,.16);width:0;pointer-events:none}
-  .slot.hold .fill{background:rgba(176,83,63,.16)}
+  .slot.hold .fill{background:rgba(232,134,46,.18)}
   .slot .num{position:relative;pointer-events:none}
   /* ループ数ハンドル (有効域の右端) */
   #handle{position:absolute;top:-8px;bottom:-8px;width:40px;transform:translateX(-50%);
@@ -84,7 +84,7 @@
 </head>
 <body>
   <header>
-    <a class="back" href="index.html">‹ PONKEY</a>
+    <a class="back" href="index.html">‹</a>
     <h1>LOOPS</h1>
     <button class="primary" id="btnConnect">＋ コネクト</button>
     <span id="players" class="noplayers">未接続</span>
@@ -99,13 +99,13 @@
     <div class="status" id="status">
       <span class="big"><b id="curv">–</b><span style="color:var(--dim);font-size:20px"> / </span><b id="nv">4</b></span>
       <span class="sub">LOOPS</span>
-      <span class="hold">📍 ホールド中</span>
+      <span class="hold">▼ ホールド中</span>
       <span style="flex:1"></span>
       <span class="sub">BPM・ループの中身は P1 に従属</span>
     </div>
-    <div id="pinlayer"><span id="pin">📍</span></div>
+    <div id="pinlayer"><span id="pin">▼</span></div>
     <div id="track"></div>
-    <div class="hint">バーの右端<span style="color:var(--teal)">‖</span>をドラッグ → ループ数 (1〜16)。📍を掴んでいる間はそのループを繰り返し、ドラッグで任意のループへ移動。各ループの中身は PONKEY 本体で編集。</div>
+    <div class="hint">バーの右端<span style="color:var(--teal)">‖</span>をドラッグ → ループ数 (1〜16)。<span style="color:var(--orange)">▼</span>を掴んでいる間はそのループを繰り返し、ドラッグで任意のループへ移動。各ループの中身は本体で編集。</div>
   </main>
 
   <div class="card" style="padding:10px 16px">
@@ -251,18 +251,18 @@ function onHandleDown(ev){
 // --- 📍ピン: 掴む=そのループをホールド / ドラッグで移動 / 離す=シーケンス再開 ---
 pin.addEventListener('pointerdown',ev=>{
   ev.preventDefault();pin.setPointerCapture(ev.pointerId);
-  held=true;sendHold(cur);log('📍 ホールド: ループ'+(cur+1));
+  held=true;sendHold(cur);log('▼ ホールド: ループ'+(cur+1));
   const move=e=>{const k=Math.max(0,Math.min(N-1,xToIndex(e.clientX)));
-    if(k!==cur){sendHold(k);log('📍 移動 → ループ'+(k+1));}};
+    if(k!==cur){sendHold(k);log('▼ 移動 → ループ'+(k+1));}};
   const up=()=>{pin.removeEventListener('pointermove',move);pin.removeEventListener('pointerup',up);
-    held=false;sendSeq(cur);log('📍 解放: ループ'+(cur+1)+'から続行');};
+    held=false;sendSeq(cur);log('▼ 解放: ループ'+(cur+1)+'から続行');};
   pin.addEventListener('pointermove',move);pin.addEventListener('pointerup',up);
 });
 
 // ============================================================
 buildTrack();
 order=rotation(0);render();
-log('起動。コネクト → P1 に従属。右端ドラッグでループ数、📍でホールド/移動。');
+log('起動。コネクト → P1 に従属。右端ドラッグでループ数、▼でホールド/移動。');
 </script>
 </body>
 </html>
