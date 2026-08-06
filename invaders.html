@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>STEP INVADERS</title>
-<meta name="theme-color" content="#E2E3DC">
+<meta name="theme-color" content="#07080a">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -14,67 +14,81 @@
 <script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
-  /* ライトテーマ (LOOPS/SYNC/TRANCE と同系の紙色)。横画面前提。 */
+  /* ===== 8bit アーケード (ダーク)。ライトな他アプリとは意図的に別世界。 ===== */
   :root{
-    --bg:#E2E3DC; --panel:#E9EAE3; --panel2:#D9DAD3; --line:#BFC0B9; --txt:#1A1A1A; --dim:#6E6F68;
-    --teal:#3E7B83; --red:#B0533F; --orange:#E8862E;
+    --bg:#07080a; --panel:#0e1014; --cell:#12151a; --line:#242a33; --txt:#d8dde3; --dim:#5d6570;
+    --teal:#5ad6c8; --green:#7fd15a; --orange:#f0912e; --red:#e8503f; --yellow:#f2d43c;
   }
-  *{box-sizing:border-box}
-  body{font-family:'Inter',-apple-system,sans-serif;margin:0 auto;color:var(--txt);background:var(--bg);
-    max-width:980px;padding:12px 18px 24px;font-weight:300;letter-spacing:.01em;
-    -webkit-font-smoothing:antialiased;overscroll-behavior:none}
-  h1{font-size:20px;font-weight:400;letter-spacing:.28em;margin:0;color:var(--txt);text-transform:uppercase}
-  h2{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
-  header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
-  header .back{font-size:12px;letter-spacing:.14em;color:var(--dim);text-decoration:none}
-  .card{background:var(--panel);border:1px solid var(--line);padding:14px 16px;margin:8px 0}
-  button{font-family:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:9px 14px;
-    border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
-  button:hover{background:var(--panel2);border-color:#9a9b94}
+  *{box-sizing:border-box;border-radius:0}
+  body{font-family:'Press Start 2P',ui-monospace,monospace;margin:0 auto;color:var(--txt);background:var(--bg);
+    max-width:1000px;padding:14px 16px 24px;overscroll-behavior:none;
+    image-rendering:pixelated;-webkit-font-smoothing:none}
+  /* CRT スキャンライン */
+  body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.26) 0 1px,transparent 1px 3px)}
+  h1{font-size:15px;font-weight:400;letter-spacing:.06em;margin:0;color:var(--teal);
+     text-shadow:0 0 8px rgba(90,214,200,.45)}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  header .back{font-size:12px;color:var(--dim);text-decoration:none}
+  header .back:hover{color:var(--teal)}
+  button{font-family:inherit;font-size:9px;letter-spacing:.04em;padding:9px 12px;line-height:1.4;
+    border:2px solid var(--line);background:transparent;color:var(--txt);cursor:pointer}
+  button:hover{border-color:var(--teal);color:var(--teal)}
   button.primary{border-color:var(--teal);color:var(--teal)}
-  button.primary:hover{background:rgba(62,123,131,.1);border-color:var(--teal)}
-  button.red{border-color:var(--red);color:var(--red)}
-  .pbadge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--teal);color:var(--teal);
-    font-size:12px;font-weight:500;letter-spacing:.08em;padding:6px 10px;user-select:none;background:rgba(62,123,131,.06)}
-  .pbadge .x{cursor:pointer;color:var(--dim);font-size:13px}
+  button.primary:hover{background:var(--teal);color:var(--bg)}
+  button.on{background:var(--teal);border-color:var(--teal);color:var(--bg)}
+  .pbadge{display:inline-block;border:2px solid var(--green);color:var(--green);
+    font-size:9px;padding:6px 8px;user-select:none;margin-right:5px}
+  .pbadge .x{cursor:pointer;color:var(--dim);margin-left:6px}
   .pbadge .x:hover{color:var(--red)}
-  .noplayers{font-size:12px;color:var(--dim);letter-spacing:.06em}
-  /* ===== ゲーム面: 左=4x4ボード / 右=スコアと操作 ===== */
-  .game{display:flex;gap:18px;align-items:stretch}
-  #board{position:relative;aspect-ratio:1;height:min(62vh,340px);flex:none;
-    display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:5px;touch-action:manipulation}
-  .cell{position:relative;border:1px solid var(--line);background:var(--panel2);cursor:pointer;
+  .noplayers{font-size:8.5px;color:var(--dim);line-height:1.6}
+  /* ===== 筐体レイアウト: 左=4x4スクリーン / 右=HUD ===== */
+  .cab{display:flex;gap:20px;align-items:flex-start}
+  .screen{border:3px solid var(--line);background:#04050700;padding:7px;box-shadow:0 0 0 1px #000, inset 0 0 40px rgba(90,214,200,.05)}
+  #board{position:relative;aspect-ratio:1;height:min(60vh,330px);flex:none;
+    display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:4px;
+    background:#000;touch-action:manipulation}
+  .cell{position:relative;border:1px solid #1b2027;background:var(--cell);cursor:pointer;
     display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none}
-  .cell .kn{position:absolute;bottom:2px;right:5px;font-size:9px;color:var(--dim)}
-  .cell svg{width:62%;height:62%;display:block}
-  .cell.flash{background:rgba(62,123,131,.28)}
-  .cell.bad{background:rgba(176,83,63,.3)}
-  /* ビートパルス: ボード枠が拍で脈打つ */
-  #board.pulse{outline:2px solid var(--teal);outline-offset:2px}
-  .side{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
-  .scorerow{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
-  .scorerow .big{font-size:38px;font-weight:300;color:var(--teal);line-height:1}
-  .scorerow .lab{font-size:10px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
-  .meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--dim);letter-spacing:.06em}
-  .meta b{color:var(--txt);font-weight:500}
-  .meta .combo{color:var(--orange);font-weight:500}
-  #lives{letter-spacing:.2em;color:var(--red);font-size:14px}
-  .ctrl{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
-  #btnMetro.on{background:var(--teal);border-color:var(--teal);color:var(--panel)}
-  #msg{font-size:12px;color:var(--dim);letter-spacing:.04em;min-height:18px}
-  .groove{color:var(--teal);font-weight:500}
-  /* ゲームオーバー オーバーレイ */
-  #over{position:absolute;inset:0;background:rgba(226,227,220,.92);display:none;
-    flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:5;text-align:center}
+  .cell .kn{position:absolute;bottom:3px;right:4px;font-size:6px;color:#333a44}
+  .cell svg{width:66%;height:66%;display:block;shape-rendering:crispEdges}
+  .cell.flash{background:var(--teal);box-shadow:0 0 12px var(--teal)}
+  .cell.bad{background:#3a1512}
+  #board.pulse{box-shadow:0 0 0 2px var(--teal)}
+  /* HUD (アーケードのスコアパネル) */
+  .hud{flex:1;display:flex;flex-direction:column;gap:14px;min-width:0;padding-top:2px}
+  .hrow{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+  .stat .k{font-size:8px;color:var(--dim);letter-spacing:.1em;display:block;margin-bottom:6px}
+  .stat .v{font-size:17px;color:var(--teal);line-height:1}
+  .stat .v.sm{font-size:11px;color:var(--txt)}
+  #lives svg{width:17px;height:12px;margin-right:4px;vertical-align:middle}
+  #combo{font-size:11px;color:var(--orange);min-height:12px;letter-spacing:.06em}
+  #msg{font-size:9px;color:var(--dim);line-height:1.9;min-height:32px}
+  #msg .groove{color:var(--yellow)}
+  #msg .miss{color:var(--red)}
+  .ctrl{display:flex;gap:8px;flex-wrap:wrap}
+  .blink{animation:bl 1s steps(2) infinite}
+  @keyframes bl{50%{opacity:.25}}
+  /* GAME OVER オーバーレイ */
+  #over{position:absolute;inset:0;background:rgba(0,0,0,.9);display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:5;text-align:center;padding:12px}
   #over.show{display:flex}
-  #over .t{font-size:15px;letter-spacing:.3em;color:var(--txt)}
-  #over .s{font-size:34px;font-weight:300;color:var(--teal)}
-  #rotate{display:none;font-size:11.5px;color:var(--dim);letter-spacing:.06em;margin:2px 0 6px}
-  @media (orientation:portrait){ #rotate{display:block} }
-  .console{height:70px;overflow:auto;background:#1A1A1A;border:1px solid var(--line);padding:8px 10px;
-    font-size:12px;line-height:1.6;color:#B8C2A4;font-weight:300}
+  #over .t{font-size:13px;color:var(--red);letter-spacing:.1em}
+  #over .s{font-size:26px;color:var(--yellow)}
+  #over .b{font-size:8px;color:var(--dim);line-height:1.8}
+  #rotate{display:none;font-size:8px;color:var(--orange);margin:0 0 10px;line-height:1.8}
+  /* 縦持ち: 横スクロールを出さないよう筐体を縦積みにする (推奨は横持ち) */
+  @media (orientation:portrait){
+    #rotate{display:block}
+    .cab{flex-direction:column;align-items:center}
+    #board{height:min(46vh,320px)}
+    .hud{width:100%}
+  }
+  .console{height:66px;overflow:auto;background:#000;border:2px solid var(--line);padding:8px;
+    font-size:8px;line-height:2;color:var(--green)}
+  h2{font-size:8px;color:var(--dim);letter-spacing:.14em;margin:0 0 8px}
 </style>
 </head>
 <body>
@@ -83,39 +97,41 @@
     <h1>STEP INVADERS</h1>
     <span style="flex:1"></span>
     <span id="players" class="noplayers">未接続</span>
-    <button class="primary" id="btnConnect">＋ コネクト</button>
+    <button class="primary" id="btnConnect">＋ CONNECT</button>
   </header>
-  <div id="rotate">↻ 横向きでの使用がおすすめです</div>
+  <div id="rotate">▶ 横向きでプレイしてください</div>
 
-  <main class="card">
-    <div class="game">
+  <div class="cab">
+    <div class="screen">
       <div id="board"><div id="over">
-        <span class="t">GAME OVER</span><span class="s" id="finalScore">0</span>
-        <span style="font-size:11px;color:var(--dim)" id="finalBest"></span>
-        <button class="primary" id="btnRetry">もう一回</button>
+        <span class="t blink">GAME OVER</span>
+        <span class="s" id="finalScore">0</span>
+        <span class="b" id="finalBest"></span>
+        <button class="primary" id="btnRetry">RETRY</button>
       </div></div>
-      <div class="side">
-        <div class="scorerow">
-          <span><span class="big" id="score">0</span> <span class="lab">Score</span></span>
-          <span id="lives">◆◆◆</span>
-        </div>
-        <div class="meta">
-          <span>LV <b id="level">1</b></span>
-          <span class="combo" id="combo"></span>
-          <span>BPM <b id="bpmv">–</b></span>
-          <span>BEST <b id="best">0</b></span>
-        </div>
-        <div id="msg">グリッドに現れるインベーダーを、同じ位置の鍵で撃つ。拍ピッタリなら GROOVE ×2。</div>
-        <div class="ctrl">
-          <button class="primary" id="btnStart">▶ スタート</button>
-          <button id="btnMetro" title="拍に合わせてクリック音">♩ クリック</button>
-        </div>
+    </div>
+
+    <div class="hud">
+      <div class="hrow">
+        <span class="stat"><span class="k">SCORE</span><span class="v" id="score">000000</span></span>
+        <span class="stat"><span class="k">HI</span><span class="v sm" id="best">000000</span></span>
+      </div>
+      <div class="hrow">
+        <span class="stat"><span class="k">LEVEL</span><span class="v sm" id="level">1</span></span>
+        <span class="stat"><span class="k">BPM</span><span class="v sm" id="bpmv">---</span></span>
+        <span class="stat"><span class="k">SHIPS</span><span class="v sm" id="lives"></span></span>
+      </div>
+      <div id="combo"></div>
+      <div id="msg">グリッドに出るインベーダーを、同じ位置の鍵で撃つ。<br>拍ピッタリで撃つと GROOVE ×2。</div>
+      <div class="ctrl">
+        <button class="primary" id="btnStart">▶ START</button>
+        <button id="btnMetro">♩ CLICK</button>
       </div>
     </div>
-  </main>
+  </div>
 
-  <div class="card" style="padding:10px 16px;margin-top:40vh">
-    <h2 style="margin-bottom:6px">Console</h2>
+  <div style="margin-top:40vh">
+    <h2>CONSOLE</h2>
     <div class="console" id="log"></div>
   </div>
 
@@ -139,30 +155,31 @@ let devices=[];                    // {device,midiCh,name} devices[0]=P1
 let bpm=120, ccBpm=null, stepMs=null, lastStepAt=0, prevStep=null;
 let playing=false, score=0, lives=3, kills=0, combo=0, level=1;
 let cells=[], invaders=new Array(16).fill(null);   // invaders[k]={age}
-let beatCount=0, lastBeatAt=0, nextBeat=0;
+let beatCount=0, lastBeatAt=0, nextBeat=0, frame=0;
 let best=0; try{best=+localStorage.getItem('ponkey_inv_best')||0;}catch(e){}
-function log(m){const e=document.getElementById('log');e.innerHTML+=`> ${m}<br>`;e.scrollTop=e.scrollHeight;}
+function log(m){const e=document.getElementById('log');e.innerHTML+=`&gt; ${m}<br>`;e.scrollTop=e.scrollHeight;}
+function pad6(n){return String(n).padStart(6,'0');}
 
 // ============================================================ BLE (入力: NoteOn / クロック: CC_BAR_SYNC / BPM: CC_BPM)
 function writeMIDI(e,s,d1,d2){const b=Uint8Array.from([0x80,0x80,s,d1,d2]);
   return (e.midiCh.writeValueWithoutResponse?e.midiCh.writeValueWithoutResponse(b):e.midiCh.writeValue(b)).catch(()=>{});}
 document.getElementById('btnConnect').onclick=async()=>{ try{
-  log('スキャン…');
+  log('SCANNING...');
   const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
   const gatt=await dev.gatt.connect();
   const midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
   const entry={device:dev,midiCh,name:dev.name||'PONKEY'};
-  dev.addEventListener('gattserverdisconnected',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();log(entry.name+' 切断');});
+  dev.addEventListener('gattserverdisconnected',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();log(entry.name+' DISCONNECTED');});
   await midiCh.startNotifications();
   midiCh.addEventListener('characteristicvaluechanged',ev=>onMidi(entry,ev));
   devices.push(entry); renderPlayers();
-  log('P'+devices.length+' 接続: '+entry.name+' — シンセパート (P5〜P7) で遊んでね');
-}catch(e){log('接続エラー: '+e);} };
+  log('P'+devices.length+' READY - '+entry.name);
+}catch(e){log('ERROR: '+e);} };
 function renderPlayers(){
   const el=document.getElementById('players');
-  if(!devices.length){el.className='noplayers';el.textContent='未接続 (画面タップでも遊べる)';return;}
+  if(!devices.length){el.className='noplayers';el.innerHTML='NO DEVICE<br>(画面タップでもプレイ可)';return;}
   el.className='';el.innerHTML='';
-  devices.forEach((e,i)=>{const b=document.createElement('span');b.className='pbadge';b.style.marginRight='6px';
+  devices.forEach((e,i)=>{const b=document.createElement('span');b.className='pbadge';
     b.innerHTML=`P${i+1}<span class="x">✕</span>`;
     b.querySelector('.x').onclick=()=>{try{e.device.gatt.disconnect();}catch(_){}devices=devices.filter(x=>x!==e);renderPlayers();};
     el.appendChild(b);});
@@ -185,7 +202,7 @@ function onStep(s){
   const now=performance.now();
   if(prevStep!=null&&s<prevStep)onBar();
   prevStep=s;
-  if(s%4===0)onBeat(now,true);
+  if(s%4===0)onBeat(now);
   if(lastStepAt){const dt=now-lastStepAt;
     if(dt>40&&dt<2000){stepMs=stepMs==null?dt:stepMs*.8+dt*.2;
       if(ccBpm==null){bpm=60000/(stepMs*4);setBpmView();}}}
@@ -198,12 +215,14 @@ const deviceClockActive=()=>performance.now()-lastStepAt<600;
 setInterval(()=>{
   if(!playing||deviceClockActive())return;
   const now=performance.now();
-  if(now>=nextBeat){onBeat(now,false);nextBeat=now+60000/bpm;
+  if(now>=nextBeat){onBeat(now);nextBeat=now+60000/bpm;
     if(beatCount%4===0)onBar();}
 },25);
 function onBeat(now){
   lastBeatAt=now;beatCount++;
   if(metroOn)click(beatCount%4===1);
+  frame^=1;                                    // 本家インベーダー同様、拍ごとに2コマで歩く
+  for(let k=0;k<16;k++)if(invaders[k])drawCell(k);
   const bd=document.getElementById('board');
   bd.classList.add('pulse');setTimeout(()=>bd.classList.remove('pulse'),90);
   if(playing)spawnTick();
@@ -238,67 +257,77 @@ function hit(k){
     const pts=100*mult*(groove?2:1);
     score+=pts;
     invaders[k]=null;drawCell(k);
-    c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),120);
+    c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),110);
     zap(groove);
-    msg(groove?`<span class="groove">GROOVE! +${pts}</span>`:`+${pts}`);
+    msg(groove?`<span class="groove">GROOVE!! +${pts}</span>`:`+${pts}`);
     if(kills%10===0){level++;log('LEVEL '+level);}
     updateHud();
   }else{
     combo=0;updateHud();
-    c.classList.add('bad');setTimeout(()=>c.classList.remove('bad'),120);
+    c.classList.add('bad');setTimeout(()=>c.classList.remove('bad'),110);
   }
 }
 function escape(k){
   invaders[k]=null;drawCell(k);
   lives--;combo=0;buzz();updateHud();
-  msg('<span style="color:var(--red)">逃げられた…</span>');
+  msg('<span class="miss">MISSED!</span>');
   if(lives<=0)gameOver();
 }
 function start(){
   score=0;lives=3;kills=0;combo=0;level=1;beatCount=0;
   invaders.fill(null);cells.forEach((c,k)=>drawCell(k));
   document.getElementById('over').classList.remove('show');
+  document.getElementById('btnStart').classList.remove('blink');
   playing=true;nextBeat=performance.now();
   ensureAudio();updateHud();msg('');
   if(devices[0])writeMIDI(devices[0],0xB0,CC_PLAY_STOP,1);   // 本体のクロックを回す (P1)
-  log('スタート');
+  log('GAME START');
 }
 function gameOver(){
   playing=false;
   if(score>best){best=score;try{localStorage.setItem('ponkey_inv_best',best);}catch(e){}}
-  document.getElementById('finalScore').textContent=score;
-  document.getElementById('finalBest').textContent='BEST '+best;
+  document.getElementById('finalScore').textContent=pad6(score);
+  document.getElementById('finalBest').textContent='HI '+pad6(best)+'  /  LEVEL '+level;
   document.getElementById('over').classList.add('show');
-  updateHud();log('ゲームオーバー: '+score);
+  document.getElementById('btnStart').classList.add('blink');
+  updateHud();log('GAME OVER - '+pad6(score));
 }
+const SHIP='<svg viewBox="0 0 11 8" shape-rendering="crispEdges"><g fill="#5ad6c8">'+
+  '<rect x="5" y="1" width="1" height="2"/><rect x="4" y="3" width="3" height="1"/>'+
+  '<rect x="1" y="4" width="9" height="2"/><rect x="0" y="5" width="11" height="2"/></g></svg>';
 function updateHud(){
-  document.getElementById('score').textContent=score;
+  document.getElementById('score').textContent=pad6(score);
+  document.getElementById('best').textContent=pad6(best);
   document.getElementById('level').textContent=level;
-  document.getElementById('best').textContent=best;
   document.getElementById('combo').textContent=combo>1?combo+' COMBO':'';
-  document.getElementById('lives').textContent='◆'.repeat(lives)+'◇'.repeat(3-lives);
+  document.getElementById('lives').innerHTML=SHIP.repeat(Math.max(0,lives))||'<span style="color:#5d6570">-</span>';
 }
 let msgTimer=null;
 function msg(h){const e=document.getElementById('msg');e.innerHTML=h;
   clearTimeout(msgTimer);msgTimer=setTimeout(()=>{if(playing)e.innerHTML='';},900);}
 
 // ============================================================ ボード描画
-// インベーダーは古典型のドット絵 SVG。残り時間 (age) が進むほどオレンジ → レッドに。
-const AGE_COLORS=['#3E7B83','#8a7a45','#E8862E','#B0533F'];
-function invaderSVG(color){return `<svg viewBox="0 0 11 8" shape-rendering="crispEdges">
-  <g fill="${color}">
-  <rect x="2" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/>
-  <rect x="3" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/>
-  <rect x="2" y="2" width="7" height="1"/>
-  <rect x="1" y="3" width="2" height="1"/><rect x="4" y="3" width="3" height="1"/><rect x="8" y="3" width="2" height="1"/>
-  <rect x="0" y="4" width="11" height="1"/>
-  <rect x="0" y="5" width="1" height="1"/><rect x="2" y="5" width="7" height="1"/><rect x="10" y="5" width="1" height="1"/>
-  <rect x="0" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/>
-  <rect x="3" y="7" width="2" height="1"/><rect x="6" y="7" width="2" height="1"/>
-  </g></svg>`;}
+// 本家インベーダーの2コマ・スプライト。残り時間 (age) が進むほど 緑 → 黄 → 橙 → 赤。
+const AGE_COLORS=['#7fd15a','#f2d43c','#f0912e','#e8503f'];
+const SPR=[
+  // frame 0 (腕おろし)
+  [[2,0,1,1],[8,0,1,1],[3,1,1,1],[7,1,1,1],[2,2,7,1],
+   [1,3,2,1],[4,3,3,1],[8,3,2,1],[0,4,11,1],
+   [0,5,1,1],[2,5,7,1],[10,5,1,1],
+   [0,6,1,1],[2,6,1,1],[8,6,1,1],[10,6,1,1],[3,7,2,1],[6,7,2,1]],
+  // frame 1 (腕あげ)
+  [[2,0,1,1],[8,0,1,1],[0,1,1,1],[3,1,1,1],[7,1,1,1],[10,1,1,1],
+   [0,2,1,1],[2,2,7,1],[10,2,1,1],
+   [0,3,3,1],[4,3,3,1],[8,3,3,1],[0,4,11,1],
+   [1,5,9,1],[2,6,1,1],[8,6,1,1],[1,7,1,1],[9,7,1,1]],
+];
+function invaderSVG(color,f){
+  const r=SPR[f].map(([x,y,w,h])=>`<rect x="${x}" y="${y}" width="${w}" height="${h}"/>`).join('');
+  return `<svg viewBox="0 0 11 8" shape-rendering="crispEdges"><g fill="${color}">${r}</g></svg>`;
+}
 function drawCell(k){
   const v=invaders[k];
-  cells[k].innerHTML=(v?invaderSVG(AGE_COLORS[Math.min(v.age,3)]):'')+`<span class="kn">${k+1}</span>`;
+  cells[k].innerHTML=(v?invaderSVG(AGE_COLORS[Math.min(v.age,3)],frame):'')+`<span class="kn">${k+1}</span>`;
 }
 const board=document.getElementById('board');
 for(let k=0;k<16;k++){
@@ -326,7 +355,8 @@ document.getElementById('btnRetry').onclick=start;
 
 // ============================================================
 setBpmView();updateHud();renderPlayers();
-log('起動。コネクトして本体のシンセパート (P5〜P7) の鍵で撃つ。未接続なら画面タップで。');
+document.getElementById('btnStart').classList.add('blink');
+log('READY. CONNECT して P5-P7 の鍵で撃つ');
 </script>
 </body>
 </html>
