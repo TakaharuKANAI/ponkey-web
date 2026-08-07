@@ -55,7 +55,7 @@
   .noplayers{font-size:8.5px;color:var(--dim);line-height:1.6}
 
   /* ── 筐体レイアウト ── */
-  .cab{display:flex;gap:20px;align-items:flex-start}
+  .cab{display:flex;gap:36px;align-items:flex-start;justify-content:center}
   .screen{position:relative;border:3px solid #2b333e;border-radius:14px;padding:9px;background:#000;
     box-shadow:0 0 0 2px #000, 0 0 26px rgba(90,214,200,.10), inset 0 0 44px rgba(90,214,200,.06)}
   .screen.shake{animation:shake .22s steps(4)}
@@ -69,7 +69,7 @@
   .cell{position:relative;border:1px solid #1a1f27;background:var(--cell);cursor:pointer;
     display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none}
   .cell .kn{position:absolute;bottom:3px;right:4px;font-size:6px;color:#2f3843}
-  .cell svg{width:78%;height:78%;display:block;shape-rendering:crispEdges}
+  .cell svg{width:58%;height:58%;display:block;shape-rendering:crispEdges}
   .cell svg.urgent{animation:bl .44s steps(2) infinite}          /* 逃げる直前は点滅 */
   .cell svg.bonus{filter:drop-shadow(0 0 5px #00cc44)}           /* AI モンキーは光る */
   .cell.flash{background:var(--teal);box-shadow:0 0 16px var(--teal)}
@@ -96,7 +96,7 @@
   #strip i.on.beat{background:var(--yellow);box-shadow:0 0 10px var(--yellow);border-color:var(--yellow)}
 
   /* ── HUD (アーケードのスコアパネル) ── */
-  .hud{flex:1;display:flex;flex-direction:column;gap:13px;min-width:0;padding-top:2px}
+  .hud{flex:0 1 300px;display:flex;flex-direction:column;gap:13px;min-width:0;padding-top:2px}
   .hrow{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
   .stat .k{font-size:8px;color:var(--dim);letter-spacing:.1em;display:block;margin-bottom:6px}
   .stat .v{font-size:17px;color:var(--teal);line-height:1;text-shadow:0 0 12px rgba(90,214,200,.4)}
