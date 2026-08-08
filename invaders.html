@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>STEP INVADERS</title>
+<meta name="theme-color" content="#07080a">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="STEP INVADERS">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  /* ═══════════ 8bit アーケード筐体 (ダーク)。ライトな他アプリとは別世界。 ═══════════ */
+  :root{
+    --bg:#07080a; --cell:#0f1217; --line:#232a34; --txt:#d8dde3; --dim:#5d6570;
+    --teal:#5ad6c8; --green:#7fd15a; --orange:#f0912e; --red:#e8503f; --yellow:#f2d43c;
+  }
+  *{box-sizing:border-box;border-radius:0}
+  html{background:var(--bg)}
+  body{font-family:'Press Start 2P',ui-monospace,monospace;margin:0 auto;color:var(--txt);background:transparent;
+    max-width:1000px;padding:14px 16px 24px;overscroll-behavior:none;
+    image-rendering:pixelated;-webkit-font-smoothing:none}
+  /* 走査線 + わずかなフリッカー (CRT) */
+  body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.28) 0 1px,transparent 1px 3px);
+    animation:flicker 5s steps(30) infinite}
+  @keyframes flicker{0%,97%{opacity:1}98%{opacity:.86}99%{opacity:1}}
+  #stars{position:fixed;inset:0;z-index:-1;pointer-events:none}
+
+  /* ── マーキー (筐体の看板) ── */
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+  header .back{font-size:12px;color:var(--dim);text-decoration:none}
+  header .back:hover{color:var(--teal)}
+  h1{font-size:15px;font-weight:400;letter-spacing:.06em;margin:0;color:var(--teal);
+     text-shadow:2px 0 var(--red),-2px 0 #3a6fd8,0 0 16px rgba(90,214,200,.55)}
+
+  button{font-family:inherit;font-size:9px;letter-spacing:.04em;padding:9px 12px;line-height:1.4;
+    border:2px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;
+    box-shadow:3px 3px 0 #000}
+  button:hover{border-color:var(--teal);color:var(--teal)}
+  button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #000}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:var(--teal);color:var(--bg)}
+  button.on{background:var(--teal);border-color:var(--teal);color:var(--bg)}
+  .pbadge{display:inline-block;border:2px solid var(--green);color:var(--green);
+    font-size:9px;padding:6px 8px;user-select:none;margin-right:5px;box-shadow:0 0 10px rgba(127,209,90,.28)}
+  .pbadge .x{cursor:pointer;color:var(--dim);margin-left:6px}
+  .pbadge .x:hover{color:var(--red)}
+  .noplayers{font-size:8.5px;color:var(--dim);line-height:1.6}
+
+  /* ── 筐体レイアウト ── */
+  .cab{display:flex;gap:36px;align-items:flex-start;justify-content:center}
+  .screen{position:relative;border:3px solid #2b333e;border-radius:14px;padding:9px;background:#000;
+    box-shadow:0 0 0 2px #000, 0 0 26px rgba(90,214,200,.10), inset 0 0 44px rgba(90,214,200,.06)}
+  .screen.shake{animation:shake .22s steps(4)}
+  @keyframes shake{25%{transform:translate(-3px,2px)}50%{transform:translate(3px,-2px)}75%{transform:translate(-2px,-2px)}}
+  #board{position:relative;aspect-ratio:1;height:min(58vh,320px);flex:none;
+    display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:4px;
+    background:#000;touch-action:manipulation;overflow:hidden}
+  /* 画面の丸み・光量ムラを演出するビネット */
+  #board::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:4;
+    background:radial-gradient(ellipse at 50% 45%,transparent 52%,rgba(0,0,0,.55) 100%)}
+  .cell{position:relative;border:1px solid #1a1f27;background:var(--cell);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none}
+  .cell .kn{position:absolute;bottom:3px;right:4px;font-size:6px;color:#2f3843}
+  .cell svg{width:58%;height:58%;display:block;shape-rendering:crispEdges}
+  .cell svg.urgent{animation:bl .44s steps(2) infinite}          /* 逃げる直前は点滅 */
+  .cell svg.bonus{filter:drop-shadow(0 0 5px #00cc44)}           /* AI モンキーは光る */
+  .cell.flash{background:var(--teal);box-shadow:0 0 16px var(--teal)}
+  .cell.bad{background:#3a1512;box-shadow:inset 0 0 12px var(--red)}
+  #board.pulse{box-shadow:inset 0 0 0 2px rgba(90,214,200,.55)}
+  /* 得点ポップ */
+  .pop{position:absolute;left:50%;top:34%;transform:translateX(-50%);font-size:8px;color:var(--yellow);
+    pointer-events:none;z-index:6;white-space:nowrap;animation:pop .75s steps(12) forwards;text-shadow:1px 1px 0 #000}
+  @keyframes pop{to{transform:translate(-50%,-26px);opacity:0}}
+  /* レベルアップ バナー */
+  #banner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:7;
+    font-size:16px;color:var(--yellow);text-shadow:3px 3px 0 #000,0 0 18px rgba(242,212,60,.6);pointer-events:none}
+  #banner.show{display:flex;animation:bpop .8s steps(8) forwards}
+  @keyframes bpop{0%{transform:scale(.6);opacity:0}30%{transform:scale(1);opacity:1}80%{opacity:1}100%{opacity:0}}
+  /* アトラクトモードの案内 */
+  #attractMsg{position:absolute;left:0;right:0;bottom:9%;text-align:center;z-index:6;
+    font-size:9px;color:var(--teal);pointer-events:none;text-shadow:2px 2px 0 #000}
+
+  /* ── 16 ステップ LED ストリップ (拍を先読みできる) ── */
+  #strip{display:grid;grid-template-columns:repeat(16,1fr);gap:2px;margin-top:9px}
+  #strip i{height:7px;background:#161b22;border:1px solid #232a34;display:block}
+  #strip i.beat{background:#1d2630;border-color:#2f3a46}
+  #strip i.on{background:var(--teal);box-shadow:0 0 8px var(--teal);border-color:var(--teal)}
+  #strip i.on.beat{background:var(--yellow);box-shadow:0 0 10px var(--yellow);border-color:var(--yellow)}
+
+  /* ── HUD (アーケードのスコアパネル) ── */
+  .hud{flex:0 1 300px;display:flex;flex-direction:column;gap:13px;min-width:0;padding-top:2px}
+  .hrow{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+  .stat .k{font-size:8px;color:var(--dim);letter-spacing:.1em;display:block;margin-bottom:6px}
+  .stat .v{font-size:17px;color:var(--teal);line-height:1;text-shadow:0 0 12px rgba(90,214,200,.4)}
+  .stat .v.sm{font-size:11px;color:var(--txt);text-shadow:none}
+  .stat .v.hi{color:var(--yellow);text-shadow:0 0 12px rgba(242,212,60,.35)}
+  #lives svg{width:18px;height:11px;margin-right:5px;vertical-align:middle}
+  /* コンボ メーター (次の倍率までの進捗) */
+  .cwrap{display:flex;align-items:center;gap:8px;min-height:13px}
+  #combo{font-size:10px;color:var(--orange);letter-spacing:.06em;white-space:nowrap}
+  #cmeter{flex:1;max-width:150px;height:8px;background:#161b22;border:1px solid #232a34;position:relative}
+  #cmeter i{display:block;height:100%;width:0;background:var(--orange);box-shadow:0 0 8px var(--orange);transition:width .12s}
+  #msg{font-size:9px;color:var(--dim);line-height:1.9;min-height:32px}
+  #msg .groove{color:var(--yellow)}
+  #msg .miss{color:var(--red)}
+  #msg .bonus{color:var(--green)}
+  .ctrl{display:flex;gap:8px;flex-wrap:wrap}
+  .blink{animation:bl 1s steps(2) infinite}
+  @keyframes bl{50%{opacity:.2}}
+
+  /* ── GAME OVER ── */
+  #over{position:absolute;inset:0;background:rgba(0,0,0,.88);display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:13px;z-index:8;text-align:center;padding:12px}
+  #over.show{display:flex}
+  #over .t{font-size:13px;color:var(--red);letter-spacing:.1em;text-shadow:2px 2px 0 #000}
+  #over .s{font-size:26px;color:var(--yellow);text-shadow:0 0 18px rgba(242,212,60,.5)}
+  #over .b{font-size:8px;color:var(--dim);line-height:1.8}
+
+  #rotate{display:none;font-size:8px;color:var(--orange);margin:0 0 10px;line-height:1.8}
+  @media (orientation:portrait){
+    #rotate{display:block}
+    .cab{flex-direction:column;align-items:center}
+    #board{height:min(44vh,300px)}
+    .hud{width:100%}
+  }
+  .console{height:66px;overflow:auto;background:#000;border:2px solid var(--line);padding:8px;
+    font-size:8px;line-height:2;color:var(--green)}
+  h2{font-size:8px;color:var(--dim);letter-spacing:.14em;margin:0 0 8px}
+</style>
+</head>
+<body>
+  <canvas id="stars"></canvas>
+
+  <header>
+    <a class="back" href="index.html">‹</a>
+    <h1>STEP INVADERS</h1>
+    <span style="flex:1"></span>
+    <span id="players" class="noplayers">未接続</span>
+    <button class="primary" id="btnConnect">＋ CONNECT</button>
+  </header>
+  <div id="rotate">▶ 横向きでプレイしてください</div>
+
+  <div class="cab">
+    <div class="screen" id="screen">
+      <div id="board">
+        <div id="banner"></div>
+        <div id="attractMsg" class="blink">▶ PRESS START</div>
+        <div id="over">
+          <span class="t blink">GAME OVER</span>
+          <span class="s" id="finalScore">0</span>
+          <span class="b" id="finalBest"></span>
+          <button class="primary" id="btnRetry">RETRY</button>
+        </div>
+      </div>
+      <div id="strip"></div>
+    </div>
+
+    <div class="hud">
+      <div class="hrow">
+        <span class="stat"><span class="k">1UP</span><span class="v" id="score">000000</span></span>
+        <span class="stat"><span class="k">HI-SCORE</span><span class="v sm hi" id="best">000000</span></span>
+      </div>
+      <div class="hrow">
+        <span class="stat"><span class="k">LEVEL</span><span class="v sm" id="level">1</span></span>
+        <span class="stat"><span class="k">BPM</span><span class="v sm" id="bpmv">---</span></span>
+        <span class="stat"><span class="k">MONKEYS</span><span class="v sm" id="lives"></span></span>
+      </div>
+      <div class="cwrap"><span id="combo"></span><span id="cmeter"><i></i></span></div>
+      <div id="msg">逃げ出した PONKEY MONKEY を、同じ位置の鍵で捕まえる。<br>拍ピッタリなら GROOVE ×2。まれに緑の AI モンキーがボーナス。</div>
+      <div class="ctrl">
+        <button class="primary" id="btnStart">▶ START</button>
+        <button id="btnMetro">♩ CLICK</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:40vh">
+    <h2>CONSOLE</h2>
+    <div class="console" id="log"></div>
+  </div>
+
+<script>
+// ============================================================ 定数 (ファーム PT2 v4.5.x 一致 — FW変更なしで動く)
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54;
+// シンセパートの音階テーブル (グリッド左下=低音)。音高 → 鍵番号 (0-15) の逆引きに使う
+const NOTE_TABLE_BASS  =[45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
+const NOTE_TABLE_NORMAL=[69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];
+function buildReverse(t){const m=new Map();t.forEach((n,i)=>{if(!m.has(n))m.set(n,i)});return m;}
+const PART_BY_CHANNEL={0:buildReverse(NOTE_TABLE_BASS),3:buildReverse(NOTE_TABLE_NORMAL),4:buildReverse(NOTE_TABLE_NORMAL)};
+// オクターブシフト中でも当てられるよう ±12 半音まで探す (TRANCE と同じ方式)
+function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
+  if(rev.has(note))return rev.get(note);
+  for(let d=1;d<=12;d++){if(rev.has(note-d))return rev.get(note-d);if(rev.has(note+d))return rev.get(note+d);}
+  return null;}
+
+// ============================================================ 状態
+let devices=[];                    // {device,midiCh,name} devices[0]=P1
+let bpm=120, ccBpm=null, stepMs=null, lastStepAt=0, prevStep=null;
+let playing=false, attract=true, score=0, lives=3, kills=0, combo=0, level=1;
+let cells=[], invaders=new Array(16).fill(null);   // invaders[k]={age}
+let beatCount=0, lastBeatAt=0, nextBeat=0, frame=0;
+let bonus=null;                    // {k} 最上段を1拍ずつ横断する AI モンキー (ボーナス)
+let attractCol=0, attractRow=0;
+let best=0; try{best=+localStorage.getItem('ponkey_inv_best')||0;}catch(e){}
+function log(m){const e=document.getElementById('log');e.innerHTML+=`&gt; ${m}<br>`;e.scrollTop=e.scrollHeight;}
+function pad6(n){return String(n).padStart(6,'0');}
+
+// ============================================================ BLE (入力: NoteOn / クロック: CC_BAR_SYNC / BPM: CC_BPM)
+function writeMIDI(e,s,d1,d2){const b=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  return (e.midiCh.writeValueWithoutResponse?e.midiCh.writeValueWithoutResponse(b):e.midiCh.writeValue(b)).catch(()=>{});}
+document.getElementById('btnConnect').onclick=async()=>{ try{
+  log('SCANNING...');
+  const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
+  const gatt=await dev.gatt.connect();
+  const midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  const entry={device:dev,midiCh,name:dev.name||'PONKEY'};
+  dev.addEventListener('gattserverdisconnected',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();log(entry.name+' DISCONNECTED');});
+  await midiCh.startNotifications();
+  midiCh.addEventListener('characteristicvaluechanged',ev=>onMidi(entry,ev));
+  devices.push(entry); renderPlayers();
+  log('P'+devices.length+' READY - '+entry.name);
+}catch(e){log('ERROR: '+e);} };
+function renderPlayers(){
+  const el=document.getElementById('players');
+  if(!devices.length){el.className='noplayers';el.innerHTML='NO DEVICE<br>(画面タップでもプレイ可)';return;}
+  el.className='';el.innerHTML='';
+  devices.forEach((e,i)=>{const b=document.createElement('span');b.className='pbadge';
+    b.innerHTML=`P${i+1}<span class="x">✕</span>`;
+    b.querySelector('.x').onclick=()=>{try{e.device.gatt.disconnect();}catch(_){}devices=devices.filter(x=>x!==e);renderPlayers();};
+    el.appendChild(b);});
+}
+function onMidi(entry,ev){
+  const b=new Uint8Array(ev.target.value.buffer);
+  for(let i=0;i+2<b.length;i++){
+    const st=b[i];
+    if((st&0xF0)===0x90&&b[i+1]<0x80&&b[i+2]>0){          // NoteOn (vel>0) → 鍵番号へ逆引き
+      const k=lookupKey(st&0x0F,b[i+1]); if(k!=null)hit(k); i+=2; continue;
+    }
+    if(entry===devices[0]&&st===0xB0&&b[i+2]<0x80){        // クロック/BPM は P1 に従属
+      if(b[i+1]===CC_BAR_SYNC){onStep(b[i+2]);i+=2;}
+      else if(b[i+1]===CC_BPM){ccBpm=b[i+2]+60;bpm=ccBpm;setBpmView();i+=2;}
+    }
+  }
+}
+function setBpmView(){document.getElementById('bpmv').textContent=Math.round(bpm);}
+function onStep(s){
+  const now=performance.now();
+  if(prevStep!=null&&s<prevStep)onBar();
+  prevStep=s;
+  setStrip(s);
+  if(s%4===0)onBeat(now);
+  if(lastStepAt){const dt=now-lastStepAt;
+    if(dt>40&&dt<2000){stepMs=stepMs==null?dt:stepMs*.8+dt*.2;
+      if(ccBpm==null){bpm=60000/(stepMs*4);setBpmView();}}}
+  lastStepAt=now;
+}
+
+// ============================================================ ゲームクロック
+// P1 が再生中なら本体のステップに同期。そうでなければ内蔵クロック (BPM) で駆動。
+const deviceClockActive=()=>performance.now()-lastStepAt<600;
+setInterval(()=>{
+  if(deviceClockActive())return;
+  const now=performance.now();
+  if(now>=nextBeat){
+    onBeat(now);nextBeat=now+60000/bpm;
+    setStrip(((beatCount-1)%4)*4);
+    if(beatCount%4===0)onBar();
+  }
+},25);
+function onBeat(now){
+  lastBeatAt=now;beatCount++;
+  if(metroOn)click(beatCount%4===1);
+  frame^=1;                                    // 本家インベーダー同様、拍ごとに2コマで歩く
+  for(let k=0;k<16;k++)if(invaders[k])drawCell(k);
+  starBurst();
+  const bd=document.getElementById('board');
+  bd.classList.add('pulse');setTimeout(()=>bd.classList.remove('pulse'),90);
+  if(playing){spawnTick();bonusTick();}
+  else if(attract)attractStep();
+}
+function onBar(){ if(!playing)return;
+  for(let k=0;k<16;k++){const v=invaders[k];if(!v)continue;
+    v.age++;
+    if(v.age>=4)escape(k);else drawCell(k);}
+}
+
+// ============================================================ ゲーム本体
+function spawnTick(){
+  const alive=invaders.filter(Boolean).length;
+  const cap=Math.min(2+level,8);
+  if(alive>=cap)return;
+  const p=Math.min(.22+level*.08,.8);
+  if(Math.random()>p)return;
+  const empty=[];for(let k=0;k<16;k++)if(!invaders[k]&&!(bonus&&bonus.k===k))empty.push(k);
+  if(!empty.length)return;
+  const k=empty[Math.floor(Math.random()*empty.length)];
+  invaders[k]={age:0};drawCell(k);
+}
+// AI モンキー (緑): 最上段 (鍵1〜4) を1拍ずつ右へ横断。撃つと大量ボーナス。
+function bonusTick(){
+  if(bonus){
+    const prev=bonus.k; bonus.k++;
+    drawCell(prev);
+    if(bonus.k>3){bonus=null;return;}
+    drawCell(bonus.k);bonusSound();return;
+  }
+  if(level>=2&&Math.random()<.035){bonus={k:0};drawCell(0);bonusSound();log('AI MONKEY!');}
+}
+function hit(k){
+  if(!playing)return;
+  const c=cells[k];
+  if(bonus&&bonus.k===k){                               // AI モンキー撃破 (ボーナス)
+    const pts=500+250*level;score+=pts;combo++;
+    bonus=null;explode(k);
+    c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),110);
+    boom();popup(k,'AI +'+pts,'var(--green)');
+    msg('<span class="bonus">AI MONKEY BONUS +'+pts+'</span>');updateHud();return;
+  }
+  if(invaders[k]){
+    const now=performance.now(), beatMs=60000/bpm;
+    const off=Math.min(now-lastBeatAt,Math.max(0,lastBeatAt+beatMs-now));
+    const groove=off<90;
+    combo++;kills++;
+    const mult=1+Math.floor(combo/8);
+    const pts=100*mult*(groove?2:1);
+    score+=pts;
+    invaders[k]=null;explode(k);
+    c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),110);
+    zap(groove);
+    popup(k,(groove?'GROOVE +':'+')+pts,groove?'var(--yellow)':'var(--teal)');
+    msg(groove?`<span class="groove">GROOVE!! +${pts}</span>`:`+${pts}`);
+    if(kills%10===0){level++;banner('LEVEL '+level);log('LEVEL '+level);}
+    updateHud();
+  }else{
+    combo=0;updateHud();
+    c.classList.add('bad');setTimeout(()=>c.classList.remove('bad'),110);
+  }
+}
+function escape(k){
+  invaders[k]=null;drawCell(k);
+  lives--;combo=0;buzz();updateHud();shake();
+  msg('<span class="miss">MISSED!</span>');
+  if(lives<=0)gameOver();
+}
+function start(){
+  score=0;lives=3;kills=0;combo=0;level=1;beatCount=0;bonus=null;
+  invaders.fill(null);cells.forEach((c,k)=>drawCell(k));
+  document.getElementById('over').classList.remove('show');
+  document.getElementById('attractMsg').style.display='none';
+  document.getElementById('btnStart').classList.remove('blink');
+  playing=true;attract=false;nextBeat=performance.now();
+  ensureAudio();updateHud();msg('');banner('START!');
+  if(devices[0])writeMIDI(devices[0],0xB0,CC_PLAY_STOP,1);   // 本体のクロックを回す (P1)
+  log('GAME START');
+}
+function gameOver(){
+  playing=false;
+  if(score>best){best=score;try{localStorage.setItem('ponkey_inv_best',best);}catch(e){}}
+  document.getElementById('finalScore').textContent=pad6(score);
+  document.getElementById('finalBest').textContent='HI '+pad6(best)+'  /  LEVEL '+level;
+  document.getElementById('over').classList.add('show');
+  document.getElementById('btnStart').classList.add('blink');
+  invaders.fill(null);bonus=null;attract=true;               // 背後でアトラクト再開
+  updateHud();log('GAME OVER - '+pad6(score));
+}
+// アトラクト: 誰も遊んでいない間、隊列が行進する
+function attractStep(){
+  invaders.fill(null);
+  attractCol=(attractCol+1)%4;
+  if(attractCol===0)attractRow=(attractRow+1)%4;
+  for(let r=0;r<2;r++)for(let c=0;c<3;c++)
+    invaders[((r+attractRow)%4)*4+((c+attractCol)%4)]={age:r};
+  for(let k=0;k<16;k++)drawCell(k);
+}
+
+function updateHud(){
+  document.getElementById('score').textContent=pad6(score);
+  document.getElementById('best').textContent=pad6(best);
+  document.getElementById('level').textContent=level;
+  document.getElementById('combo').textContent=combo>1?combo+' COMBO ×'+(1+Math.floor(combo/8)):'';
+  document.getElementById('cmeter').firstElementChild.style.width=(combo%8)/8*100+'%';
+  document.getElementById('lives').innerHTML=LIFE.repeat(Math.max(0,lives))||'<span style="color:#5d6570">-</span>';
+}
+let msgTimer=null;
+function msg(h){const e=document.getElementById('msg');e.innerHTML=h;
+  clearTimeout(msgTimer);msgTimer=setTimeout(()=>{if(playing)e.innerHTML='';},900);}
+function popup(k,text,color){const d=document.createElement('div');d.className='pop';d.textContent=text;
+  d.style.color=color;cells[k].appendChild(d);setTimeout(()=>d.remove(),760);}
+let bannerTimer=null;
+function banner(text){const b=document.getElementById('banner');b.textContent=text;
+  b.classList.remove('show');void b.offsetWidth;b.classList.add('show');
+  clearTimeout(bannerTimer);bannerTimer=setTimeout(()=>b.classList.remove('show'),800);}
+function shake(){const s=document.getElementById('screen');s.classList.add('shake');
+  setTimeout(()=>s.classList.remove('shake'),230);}
+
+// ============================================================ ドット絵: PONKEY MONKEY (DUET / DIALOGUE と同じキャラ)
+// '.'=透明 / K=輪郭 / O=体 / E=目 の行文字列で持ち、横方向にランレングスして SVG 化する。
+function sprite(rows,pal,cls){
+  const w=rows[0].length,h=rows.length;let out='';
+  for(let y=0;y<h;y++){const r=rows[y];let x=0;
+    while(x<w){const c=pal[r[x]];
+      if(!c){x++;continue;}
+      let n=1;while(x+n<w&&r[x+n]===r[x])n++;
+      out+=`<rect x="${x}" y="${y}" width="${n}" height="1" fill="${c}"/>`;x+=n;}}
+  return `<svg viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges"${cls?` class="${cls}"`:''}>${out}</svg>`;
+}
+// 体はオレンジ、目は3つ、脚は4本 (DUET の makeNormal と同じ形)
+const EYE_CALM =['KOKEEKEEKEEKOOK','KOKEEKEEKEEKOOK'];  // ふつう
+const EYE_PANIC=['KOEEEKEEKEEEEOK','KOEEKKEEKKEEEOK'];  // 見開き (逃げる直前)
+const LEG_STAND=['KOK.KOK.KOK.KOK','KOK.KOK.KOK.KOK','KK..KK..KK..KK.'];
+const LEG_WIDE =['KOKOK.KOK.KOKOK','OK.KOK.KOK.KOKO','K...KK..K...K.K'];
+function monkeyRows(eye,leg){return[
+  '...KKKKKKKKK...','..KOOOOOOOOOK..','.KOOOOOOOOOOOK.','KOOOOOOOOOOOOOK',
+  eye[0],eye[1],
+  'KOOOOOOOOOOOOOK','KOOOOOOOOOOOOOK','.KOOOOOOOOOOOK.',
+  leg[0],leg[1],leg[2]];}
+// 残り時間は「目の色」で伝える (体の色はキャラの identity なので変えない)
+const EYE_COLORS=['#2266ff','#ffdd00','#ffffff','#e8503f'];   // 落ち着き → 警戒 → 警報 → 逃走寸前
+const palOrange=age=>({O:'#ff8800',E:EYE_COLORS[age]});
+// ボーナスは AI 側の緑モンキー (アンテナ付き・白フチ・黄色い目)
+const BONUS_ROWS=[
+  '......OO.......','.......K.......','.......K.......',
+  '...KKKKKKKKK...','..KOOOOOOOOOK..','.KOOOOOOOOOOOK.','KOOOOOOOOOOOOOK',
+  'KOKEEKEEKEEKOOK','KOKEEKEEKEEKOOK',
+  'KOOOOOOOOOOOOOK','KOOOOOOOOOOOOOK','.KOOOOOOOOOOOK.',
+  'KOK.KOK.KOK.KOK','KOK.KOK.KOK.KOK','KK..KK..KK..KK.'];
+const PAL_GREEN={K:'#eeeeee',O:'#00cc44',E:'#ffdd00'};
+const BOOM_ROWS=['....O.O....','.O..O.O..O.','..O.OOO.O..','O..O.O.O..O',
+                 '..OO...OO..','O..O.O.O..O','..O..O..O..','....O.O....'];
+function drawCell(k){
+  let svg='';
+  if(bonus&&bonus.k===k)svg=sprite(BONUS_ROWS,PAL_GREEN,'bonus');
+  else if(invaders[k]){const a=Math.min(invaders[k].age,3);
+    svg=sprite(monkeyRows(a>=2?EYE_PANIC:EYE_CALM,frame?LEG_WIDE:LEG_STAND),palOrange(a),a>=3?'urgent':'');}
+  cells[k].innerHTML=svg+`<span class="kn">${k+1}</span>`;
+}
+function explode(k){                                    // 撃破: 破裂スプライトを一瞬出す
+  cells[k].innerHTML=sprite(BOOM_ROWS,{O:'#f2d43c'})+`<span class="kn">${k+1}</span>`;
+  setTimeout(()=>drawCell(k),150);
+}
+// 残機アイコン: モンキーの頭だけ (脚なし)
+const LIFE=sprite(monkeyRows(EYE_CALM,LEG_STAND).slice(0,9),palOrange(0));
+const board=document.getElementById('board');
+for(let k=0;k<16;k++){
+  const c=document.createElement('div');c.className='cell';
+  c.addEventListener('pointerdown',()=>hit(k));      // 画面タップでも遊べる (本体なしのフォールバック)
+  board.appendChild(c);cells.push(c);drawCell(k);
+}
+// 16 ステップ LED
+const strip=document.getElementById('strip'), leds=[];
+for(let i=0;i<16;i++){const e=document.createElement('i');if(i%4===0)e.className='beat';strip.appendChild(e);leds.push(e);}
+function setStrip(s){leds.forEach((e,i)=>e.classList.toggle('on',i===s));}
+
+// ============================================================ 星空 (背景)
+const cv=document.getElementById('stars'), cx=cv.getContext('2d');
+let stars=[], boost=0;
+function resize(){cv.width=innerWidth;cv.height=innerHeight;
+  stars=Array.from({length:70},()=>({x:Math.random()*cv.width,y:Math.random()*cv.height,
+    s:Math.random()*1.6+.4,c:Math.random()<.18?'#5ad6c8':'#39414c'}));}
+addEventListener('resize',resize);resize();
+function starBurst(){boost=2.4;}
+(function loop(){
+  cx.clearRect(0,0,cv.width,cv.height);
+  for(const st of stars){
+    st.y+=st.s*(1+boost);
+    if(st.y>cv.height){st.y=-2;st.x=Math.random()*cv.width;}
+    cx.fillStyle=st.c;cx.fillRect(st.x|0,st.y|0,st.s<1?1:2,st.s<1?1:2);
+  }
+  if(boost>0)boost=Math.max(0,boost-.12);
+  requestAnimationFrame(loop);
+})();
+
+// ============================================================ サウンド (WebAudio)
+let audioCtx=null, metroOn=false;
+function ensureAudio(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();}
+function tone(f0,f1,dur,vol,type){if(!audioCtx)return;const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+dur+.02);}
+function zap(groove){tone(groove?1600:1100,180,.12,.4,'square');}
+function boom(){tone(900,120,.28,.45,'square');}
+function buzz(){tone(140,60,.3,.4,'sawtooth');}
+function bonusSound(){tone(700,900,.07,.22,'square');}
+function click(accent){tone(accent?1760:1320,accent?1760:1320,.05,accent?.4:.28,'square');}
+document.getElementById('btnMetro').onclick=function(){
+  metroOn=!metroOn;ensureAudio();this.classList.toggle('on',metroOn);};
+document.getElementById('btnStart').onclick=start;
+document.getElementById('btnRetry').onclick=start;
+
+// ============================================================
+setBpmView();updateHud();renderPlayers();
+document.getElementById('btnStart').classList.add('blink');
+log('READY. CONNECT して P5-P7 の鍵で撃つ');
+</script>
+</body>
+</html>

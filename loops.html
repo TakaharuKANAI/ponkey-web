@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>LOOPS</title>
+<meta name="theme-color" content="#E2E3DC">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY LOOPS">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ライトテーマ (TRANCE と同系の紙色) + 横画面 (ランドスケープ) 前提のレイアウト */
+  :root{
+    --bg:#E2E3DC; --panel:#E9EAE3; --panel2:#D9DAD3; --line:#BFC0B9; --txt:#1A1A1A; --dim:#6E6F68;
+    --teal:#3E7B83; --red:#B0533F; --orange:#E8862E;
+  }
+  *{box-sizing:border-box}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0 auto;color:var(--txt);background:var(--bg);
+    max-width:980px;padding:12px 18px 24px;font-weight:300;letter-spacing:.01em;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  h1{font-size:20px;font-weight:400;letter-spacing:.28em;margin:0;color:var(--txt);text-transform:uppercase}
+  h2{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
+  header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  header .back{font-size:12px;letter-spacing:.14em;color:var(--dim);text-decoration:none}
+  .card{background:var(--panel);border:1px solid var(--line);padding:14px 16px;margin:8px 0}
+  button{font-family:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:9px 14px;
+    border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:var(--panel2);border-color:#9a9b94}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:rgba(62,123,131,.1);border-color:var(--teal)}
+  button.red{border-color:var(--red);color:var(--red)}
+  button.red:hover{background:rgba(176,83,63,.1);border-color:var(--red)}
+  .hint{font-size:11.5px;color:var(--dim);line-height:1.6;margin-top:10px}
+  /* プレイヤーバッジ (P1 P2 …) */
+  .pbadge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--teal);color:var(--teal);
+    font-size:12px;font-weight:500;letter-spacing:.08em;padding:6px 10px;user-select:none;background:rgba(62,123,131,.06)}
+  .pbadge .x{cursor:pointer;color:var(--dim);font-size:13px}
+  .pbadge .x:hover{color:var(--red)}
+  .noplayers{font-size:12px;color:var(--dim);letter-spacing:.06em}
+  /* メイン: 横画面でトラックが大きく座る (コンソールはスクロール下) */
+  main.card{padding:16px 18px}
+  .status{display:flex;align-items:baseline;gap:14px;margin-bottom:10px}
+  .status .big{font-size:36px;font-weight:300;color:var(--teal);line-height:1}
+  .status .big b{font-weight:400}
+  .status .sub{font-size:12px;color:var(--dim);letter-spacing:.08em}
+  .status .hold{font-size:12px;color:var(--orange);letter-spacing:.08em;display:none;font-weight:500}
+  .status.holding .hold{display:inline}
+  /* 再生/停止の下にメトロノームトグル */
+  .transport{display:flex;flex-direction:column;gap:6px}
+  #btnMetro{font-size:12px;padding:7px 10px}
+  #btnMetro.on{background:var(--teal);border-color:var(--teal);color:var(--panel)}
+  /* ピンレイヤー */
+  #pinlayer{position:relative;height:44px;flex:none;touch-action:none}
+  #pin{position:absolute;top:6px;left:0;font-size:26px;line-height:1;color:var(--orange);transform:translateX(-50%);
+    transition:left .1s linear;cursor:grab;user-select:none;-webkit-user-select:none;z-index:3;
+    padding:0 14px}  /* padding でタッチ範囲を拡大 */
+  #pin.held{transform:translateX(-50%) scale(1.22);transition:none;cursor:grabbing}
+  /* トラック (16コマのレール、先頭N個が有効)。横画面で高さを稼ぐ */
+  #track{position:relative;display:flex;height:clamp(72px,26vh,130px);flex:none;touch-action:none}
+  .slot{flex:1;border:1px solid var(--line);border-left-width:0;background:var(--panel2);position:relative;
+    display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;font-size:10px;color:var(--dim)}
+  .slot:first-child{border-left-width:1px}
+  .slot.off{background:transparent;border-style:dashed;opacity:.35}
+  .slot.cur{border-color:var(--teal);border-left-width:1px;color:var(--teal);z-index:1;background:#E0E4DC}
+  .slot.cur.hold{border-color:var(--orange);color:var(--orange)}
+  .slot .fill{position:absolute;left:0;top:0;bottom:0;background:rgba(62,123,131,.16);width:0;pointer-events:none}
+  .slot.hold .fill{background:rgba(232,134,46,.18)}
+  .slot .num{position:relative;pointer-events:none}
+  /* ループ数ハンドル (有効域の右端): つまみ型グリップ */
+  #handle{position:absolute;top:-8px;bottom:-8px;width:44px;transform:translateX(-50%);
+    cursor:ew-resize;touch-action:none;display:flex;align-items:center;justify-content:center;z-index:2}
+  #handle::before{content:'';position:absolute;width:16px;height:62%;background:var(--panel);
+    border:1.5px solid var(--teal);border-radius:9px;box-shadow:0 1px 3px rgba(26,26,26,.18)}
+  #handle::after{content:'';position:absolute;width:6px;height:24px;
+    background:repeating-linear-gradient(to bottom,var(--teal) 0 2px,transparent 2px 6px)}
+  /* コンソール (TRANCE のログと同じダーク地) */
+  .console{height:76px;overflow:auto;background:#1A1A1A;border:1px solid var(--line);padding:8px 10px;
+    font-size:12px;line-height:1.6;color:#B8C2A4;font-weight:300}
+  /* 縦持ちの時だけ: 横向きをすすめる一行 */
+  #rotate{display:none;font-size:11.5px;color:var(--dim);letter-spacing:.06em;margin:2px 0 6px}
+  @media (orientation:portrait){ #rotate{display:block} }
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="index.html">‹</a>
+    <h1>LOOPS</h1>
+    <span style="flex:1"></span>
+    <span id="players" class="noplayers">未接続</span>
+    <button class="primary" id="btnConnect">＋ コネクト</button>
+  </header>
+  <div id="rotate">↻ 横向きでの使用がおすすめです</div>
+
+  <!-- ===== ループトラック ===== -->
+  <main class="card">
+    <div class="status" id="status">
+      <span class="big"><b id="curv">–</b><span style="color:var(--dim);font-size:20px"> / </span><b id="nv">4</b></span>
+      <span class="sub">LOOPS</span>
+      <span class="hold">▼ ホールド中</span>
+      <span style="flex:1"></span>
+      <span class="sub">BPM <b id="bpmv" style="font-size:22px;color:var(--teal);font-weight:400">–</b></span>
+      <div class="transport" style="align-self:center">
+        <div style="display:flex;gap:6px">
+          <button id="btnPlay">▶</button>
+          <button class="red" id="btnStop">■</button>
+        </div>
+        <button id="btnMetro" title="BPMに合わせてクリック音を鳴らす">♩ クリック</button>
+      </div>
+    </div>
+    <div id="pinlayer"><span id="pin">▼</span></div>
+    <div id="track"></div>
+  </main>
+
+  <!-- デバッグコンソール: 大きく余白を空けて、スクロールすると見えてくる位置に -->
+  <div class="card" style="padding:10px 16px;margin-top:60vh">
+    <h2 style="margin-bottom:6px">Console</h2>
+    <div class="console" id="log"></div>
+  </div>
+
+<script>
+// ============================================================ 定数 (ファーム PT2 v4.5.34 一致)
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001", DBG_CMD="504f4e4b-4559-4442-5047-445443000003";
+const SONG_MAGIC=0x5A, S_ENTER=0x01, S_SET_SEQ=0x05;
+const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54;
+const RAIL=16;                       // レールのコマ数 = 本体スロット数
+
+// ============================================================ 状態
+let devices=[];                      // {device,midiCh,cmdCh,name}  devices[0]=P1
+let N=4;                             // ループ数 (1〜16)
+let cur=0;                           // 現在ループ (0-based)
+let order=[0,1,2,3], pos=0;          // 本体へ送った再生順 (回転順) と、その中の現在位置
+let held=false;                      // 📍を掴んでいる間 true
+let prevStep=null;                   // CC_BAR_SYNC の前回ステップ (折り返し=小節送り検出)
+const LS='ponkey_loops_v01';
+try{const o=JSON.parse(localStorage.getItem(LS));if(o&&o.n)N=Math.max(1,Math.min(RAIL,o.n));}catch(e){}
+function save(){try{localStorage.setItem(LS,JSON.stringify({n:N}));}catch(e){}}
+function log(m){const e=document.getElementById('log');e.innerHTML+=`> ${m}<br>`;e.scrollTop=e.scrollHeight;}
+
+// ============================================================ BLE
+function midiBytes(s,d1,d2){return Uint8Array.from([0x80,0x80,s,d1,d2]);}
+function writeMIDI(e,s,d1,d2){const b=midiBytes(s,d1,d2);
+  return (e.midiCh.writeValueWithoutResponse?e.midiCh.writeValueWithoutResponse(b):e.midiCh.writeValue(b)).catch(()=>{});}
+function writeCmd(e,bytes){if(!e.cmdCh)return Promise.resolve();const b=Uint8Array.from(bytes);
+  return (e.cmdCh.writeValueWithoutResponse?e.cmdCh.writeValueWithoutResponse(b):e.cmdCh.writeValue(b)).catch(()=>{});}
+function midiAll(s,d1,d2){return Promise.all(devices.map(e=>writeMIDI(e,s,d1,d2)));}
+function cmdAll(bytes){return Promise.all(devices.map(e=>writeCmd(e,bytes)));}
+
+document.getElementById('btnConnect').onclick=async()=>{ try{
+  log('スキャン…');
+  const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
+  const gatt=await dev.gatt.connect();
+  const midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  let cmdCh=null;
+  try{cmdCh=await(await gatt.getPrimaryService(DBG_SERVICE)).getCharacteristic(DBG_CMD);}
+  catch(e){log('⚠ ソングモード非対応ファーム: ループ数変更は効きません ('+(dev.name||'')+')');}
+  const entry={device:dev,midiCh,cmdCh,name:dev.name||'PONKEY'};
+  dev.addEventListener('gattserverdisconnected',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();
+    log(entry.name+' 切断'+(devices.length?' (P1='+devices[0].name+')':''));});
+  await midiCh.startNotifications();
+  midiCh.addEventListener('characteristicvaluechanged',ev=>onMidi(entry,ev));
+  devices.push(entry); renderPlayers();
+  log('P'+devices.length+' 接続: '+entry.name);
+  if(entry.cmdCh){
+    await writeCmd(entry,[SONG_MAGIC,S_ENTER,0x00]);            // 入場 (本体はいったん停止する)
+    await writeCmd(entry,[SONG_MAGIC,S_SET_SEQ,0x00,order.length,...order]);
+    await writeMIDI(entry,0xB0,CC_PLAY_STOP,1);                 // すぐ再生再開
+    log('入場 → シーケンス'+order.length+'ループ → 再生');
+  }
+}catch(e){log('接続エラー: '+e);} };
+
+function renderPlayers(){
+  const el=document.getElementById('players');
+  if(!devices.length){el.className='noplayers';el.textContent='未接続';prevStep=null;return;}
+  el.className='';el.innerHTML='';
+  devices.forEach((e,i)=>{
+    const b=document.createElement('span');b.className='pbadge';b.style.marginRight='6px';
+    b.innerHTML=`P${i+1}<span class="x" title="切断">✕</span>`;
+    b.querySelector('.x').onclick=()=>{try{e.device.gatt.disconnect();}catch(_){}
+      devices=devices.filter(x=>x!==e);renderPlayers();};
+    el.appendChild(b);
+  });
+}
+
+// ============================================================ シーケンス送信
+// SET_SEQ は受信した瞬間に先頭スロットへ切り替わるため、演奏を途切れさせないよう
+// 「今いるループを先頭にした回転順 (head, head+1, …, N-1, 0, …)」で送る。
+// 進行順はスロット番号の巡回なので、回転しても曲の順番は変わらない。
+function rotation(head){const a=[];for(let i=0;i<N;i++)a.push((head+i)%N);return a;}
+function sendSeq(head){
+  cur=head; order=rotation(head); pos=0; render();
+  return cmdAll([SONG_MAGIC,S_SET_SEQ,0x00,order.length,...order]);
+}
+// 📍ホールド: そのループ1つだけのシーケンスに差し替え → 本体はそこを繰り返す
+function sendHold(k){
+  cur=k; order=[k]; pos=0; render();
+  return cmdAll([SONG_MAGIC,S_SET_SEQ,0x00,1,k]);
+}
+
+document.getElementById('btnPlay').onclick=()=>{midiAll(0xB0,CC_PLAY_STOP,1);log('play all');};
+document.getElementById('btnStop').onclick=()=>{midiAll(0xB0,CC_PLAY_STOP,0);prevStep=null;log('stop all');};
+
+// ============================================================ 受信: P1 の再生位置と BPM
+// CC_BAR_SYNC: 毎ステップ通知。値が小さい方へ折り返したら小節 (=1ループ) の頭 → 次のループへ。
+// CC_BPM: 本体の接続時ステートシンクと Fn×P2 での変更時に届く (val+60=BPM)。
+function onMidi(entry,ev){
+  if(entry!==devices[0])return;                       // P1 のみに従属
+  const b=new Uint8Array(ev.target.value.buffer);
+  for(let i=0;i+2<b.length;i++){
+    if(b[i]!==0xB0||b[i+2]>=0x80)continue;
+    if(b[i+1]===CC_BAR_SYNC){onStep(b[i+2]);i+=2;}
+    else if(b[i+1]===CC_BPM){ccBpm=b[i+2]+60;setBpm(ccBpm);i+=2;}
+  }
+}
+let ccBpm=null, stepMs=null, lastStepAt=null;
+function setBpm(v){document.getElementById('bpmv').textContent=v==null?'–':v;}
+function onStep(s){
+  if(prevStep!=null&&s<prevStep&&!held){pos=(pos+1)%order.length;cur=order[pos];render();}
+  prevStep=s;
+  stepFill(s);
+  // メトロノーム: 拍頭 (4ステップごと) でクリック、小節頭はアクセント
+  if(metroOn&&s%4===0)click(s===0);
+  // BPM 推定 (CC_BPM 未受信時のフォールバック): ステップ間隔の移動平均から算出
+  const now=performance.now();
+  if(lastStepAt!=null){const dt=now-lastStepAt;
+    if(dt>40&&dt<2000){stepMs=stepMs==null?dt:stepMs*.8+dt*.2;
+      if(ccBpm==null)setBpm(Math.round(60000/(stepMs*4)));}}
+  lastStepAt=now;
+}
+
+// ============================================================ メトロノーム (WebAudio クリック)
+let metroOn=false, audioCtx=null;
+function ensureAudio(){
+  if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();
+}
+function click(accent){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime, o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type='square'; o.frequency.value=accent?1760:1320;
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(accent?.5:.35,t+.002);
+  g.gain.exponentialRampToValueAtTime(.001,t+.05);
+  o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+.06);
+}
+document.getElementById('btnMetro').onclick=()=>{
+  metroOn=!metroOn; ensureAudio();
+  document.getElementById('btnMetro').classList.toggle('on',metroOn);
+  if(metroOn)click(true);                              // 動作確認を兼ねて1発鳴らす
+  log('メトロノーム '+(metroOn?'ON':'OFF'));
+};
+
+// ============================================================ UI: トラック / ピン / ハンドル
+const track=document.getElementById('track'), pin=document.getElementById('pin'),
+      pinlayer=document.getElementById('pinlayer');
+let handle=null, slots=[];
+function buildTrack(){
+  track.innerHTML=''; slots=[];
+  for(let i=0;i<RAIL;i++){const d=document.createElement('div');d.className='slot';
+    d.innerHTML=`<div class="fill"></div><span class="num">${i+1}</span>`;slots.push(d);track.appendChild(d);}
+  handle=document.createElement('div');handle.id='handle';track.appendChild(handle);
+  handle.addEventListener('pointerdown',onHandleDown);
+}
+function render(){
+  for(let i=0;i<RAIL;i++){
+    slots[i].className='slot'+(i<N?'':' off')+(i===cur?' cur':'')+(i===cur&&held?' hold':'');
+    if(i!==cur)slots[i].querySelector('.fill').style.width='0';
+  }
+  handle.style.left=(N/RAIL*100)+'%';
+  pin.style.left=((cur+.5)/RAIL*100)+'%';
+  pin.className=held?'held':'';
+  document.getElementById('nv').textContent=N;
+  document.getElementById('curv').textContent=cur+1;
+  document.getElementById('status').className='status'+(held?' holding':'');
+}
+function stepFill(s){const f=slots[cur].querySelector('.fill');f.style.width=Math.min(100,(s+1)/16*100)+'%';}
+function xToIndex(clientX){const r=track.getBoundingClientRect();
+  return Math.floor((clientX-r.left)/r.width*RAIL);}
+
+// --- ハンドル: ドラッグでループ数 1〜16。確定 (pointerup) 時に本体へ送信 ---
+function onHandleDown(ev){
+  ev.preventDefault();handle.setPointerCapture(ev.pointerId);
+  const move=e=>{const n=Math.max(1,Math.min(RAIL,xToIndex(e.clientX)+1));
+    if(n!==N){N=n;if(cur>=N)cur=0;render();}};
+  const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);
+    save();sendSeq(Math.min(cur,N-1));log('ループ数 '+N);};
+  handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);
+}
+
+// --- 📍ピン: 掴む=そのループをホールド / ドラッグで移動 / 離す=シーケンス再開 ---
+pin.addEventListener('pointerdown',ev=>{
+  ev.preventDefault();pin.setPointerCapture(ev.pointerId);
+  held=true;sendHold(cur);log('▼ ホールド: ループ'+(cur+1));
+  const move=e=>{const k=Math.max(0,Math.min(N-1,xToIndex(e.clientX)));
+    if(k!==cur){sendHold(k);log('▼ 移動 → ループ'+(k+1));}};
+  const up=()=>{pin.removeEventListener('pointermove',move);pin.removeEventListener('pointerup',up);
+    held=false;sendSeq(cur);log('▼ 解放: ループ'+(cur+1)+'から続行');};
+  pin.addEventListener('pointermove',move);pin.addEventListener('pointerup',up);
+});
+
+// ============================================================
+buildTrack();
+order=rotation(0);render();
+log('起動。コネクト → P1 に従属。右端ドラッグでループ数、▼でホールド/移動。');
+</script>
+</body>
+</html>
