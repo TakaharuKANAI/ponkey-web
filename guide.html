@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PONKEY GUIDE — パートとサブモードの解説</title>
+<meta name="theme-color" content="#0e0f12">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e0f12;--panel:#15171b;--panel2:#1a1d23;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;
+    --teal:#6fb0b8;--red:#c96a5e;
+    /* 本体LEDの MODE_COLORS に合わせたパート色 */
+    --kick:#e05252;--snare:#52c06a;--hat:#5a8de0;--tom:#c65ac6;
+    --bass:#54c2c9;--lead:#e0c94f;--pad:#ff7a30;--fn:#e8e8e8;
+  }
+  *{box-sizing:border-box}
+  body{font-family:'Inter','Hiragino Sans','Noto Sans JP',-apple-system,sans-serif;margin:0 auto;max-width:760px;
+    background:var(--bg);color:var(--txt);font-weight:300;letter-spacing:.01em;padding:26px 18px 70px;min-height:100vh}
+  h1{font-size:20px;font-weight:400;letter-spacing:.14em;margin:0;text-transform:uppercase}
+  a{color:var(--teal)}
+  .topbar{display:flex;align-items:center;gap:14px;margin-bottom:6px;flex-wrap:wrap}
+  .topbar .back{color:var(--dim);text-decoration:none;font-size:12px}
+  .topbar .spacer{flex:1}
+  .tagline{color:var(--dim);font-size:12px;margin:0 0 18px;line-height:1.6}
+
+  button{font-family:inherit;cursor:pointer}
+  #connectBtn{background:var(--panel);color:var(--teal);border:1px solid var(--teal);padding:9px 20px;
+    font-size:13px;letter-spacing:.08em;transition:background .12s}
+  #connectBtn:hover{background:var(--panel2)}
+  #connectBtn.connected{color:var(--red);border-color:var(--red)}
+  .statusdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3a3e45;margin-right:7px;vertical-align:1px}
+  .statusdot.ok{background:#52c06a;box-shadow:0 0 6px #52c06a80}
+  .statusdot.warn{background:#e0c94f}
+  #connState{font-size:12px;color:var(--dim)}
+
+  .card{background:var(--panel);border:1px solid var(--line);padding:18px;margin-top:14px}
+  .card h2{font-size:11px;font-weight:500;letter-spacing:.18em;color:var(--dim);margin:0 0 12px;text-transform:uppercase}
+
+  /* ── 現在パート ── */
+  .partrow{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .partchip{width:86px;height:86px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:#0a0b0e;border:2px solid var(--line);transition:border-color .15s,box-shadow .15s}
+  .partchip .pn{font-size:12px;color:var(--dim);letter-spacing:.1em}
+  .partchip .nm{font-size:19px;font-weight:500;letter-spacing:.06em;margin-top:2px}
+  .partinfo{flex:1;min-width:230px}
+  .partinfo .kind{display:inline-block;font-size:10.5px;letter-spacing:.12em;border:1px solid var(--line);
+    color:var(--dim);padding:2px 9px;margin-bottom:8px}
+  .partinfo .explain{font-size:13.5px;line-height:1.8;margin:0}
+  .partinfo .hint{font-size:11.5px;color:var(--dim);line-height:1.7;margin:8px 0 0}
+  .partbtns{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+  .pbtn{width:34px;height:34px;border:1px solid var(--line);background:#0a0b0e;color:var(--dim);font-size:10.5px;
+    display:flex;align-items:center;justify-content:center;letter-spacing:.02em}
+  .pbtn.cur{color:#0a0b0e;font-weight:600}
+
+  /* ── トランスポート ── */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+  .stat{background:#0a0b0e;border:1px solid var(--line);padding:10px 12px}
+  .stat .lb{font-size:10px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
+  .stat .vl{font-size:20px;margin-top:4px;font-weight:400}
+  .stat .vl.small{font-size:14px}
+  .stat .sub{font-size:10.5px;color:var(--dim);margin-top:2px}
+  .playing .vl{color:#52c06a}
+  .stopped .vl{color:var(--dim)}
+
+  /* ── ステップグリッド ── */
+  .stepwrap{margin-top:14px}
+  .steps{display:grid;grid-template-columns:repeat(16,1fr);gap:4px}
+  .step{aspect-ratio:1;background:#0a0b0e;border:1px solid var(--line);position:relative}
+  .step.on{background:var(--teal);border-color:var(--teal)}
+  .step.head{box-shadow:inset 0 0 0 2px #fff}
+  .stepnote{font-size:10.5px;color:var(--dim);margin-top:7px;line-height:1.6}
+
+  /* ── サブモード ── */
+  #submodeCard .bignow{display:flex;gap:14px;align-items:center;background:#0a0b0e;border:1px solid var(--line);
+    padding:14px 16px;margin-bottom:12px}
+  #submodeCard .combo{font-size:15px;color:var(--teal);letter-spacing:.05em;white-space:nowrap}
+  #submodeCard .what{font-size:13px;line-height:1.7}
+  #submodeCard .what .val{color:#fff;font-weight:500}
+  #submodeCard.flash .bignow{border-color:var(--teal);box-shadow:0 0 12px #6fb0b830}
+  table.fnmap{width:100%;border-collapse:collapse;font-size:12px}
+  table.fnmap td,table.fnmap th{border-top:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top;line-height:1.6}
+  table.fnmap th{color:var(--dim);font-weight:400;border-top:none;font-size:10.5px;letter-spacing:.1em}
+  table.fnmap td.c{color:var(--teal);white-space:nowrap}
+  table.fnmap tr.hl td{background:#1c2a2c}
+  .note{font-size:11px;color:var(--dim);line-height:1.7;margin:10px 0 0}
+
+  /* ── ログ ── */
+  #log{background:#0a0b0e;border:1px solid var(--line);padding:10px 12px;max-height:230px;overflow-y:auto;
+    font-size:12px;line-height:1.9}
+  #log .t{color:#3f434a;margin-right:8px;font-size:10.5px}
+  #log .sys{color:var(--dim)}
+  #log .ev{color:var(--txt)}
+  #log .part{color:var(--teal)}
+  #log .fn{color:var(--lead)}
+  #log .warn{color:var(--red)}
+
+  /* ── リファレンス ── */
+  details{border:1px solid var(--line);background:var(--panel);margin-top:10px}
+  details summary{cursor:pointer;padding:12px 16px;font-size:12.5px;letter-spacing:.08em;color:var(--teal);
+    list-style:none;user-select:none}
+  details summary::before{content:"▸ ";color:var(--dim)}
+  details[open] summary::before{content:"▾ "}
+  details .body{padding:2px 16px 16px;font-size:12.5px;line-height:1.9;color:var(--txt)}
+  details .body p{margin:6px 0}
+  details .body .dim{color:var(--dim);font-size:11px}
+  .swatch{display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:-1px}
+
+  footer{color:var(--dim);font-size:11px;margin-top:26px;border-top:1px solid var(--line);padding-top:12px;line-height:1.7}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back" href="index.html">← Apps</a>
+  <h1>Guide</h1>
+  <div class="spacer"></div>
+  <span><span class="statusdot" id="dot"></span><span id="connState">未接続</span></span>
+  <button id="connectBtn">CONNECT</button>
+</div>
+<p class="tagline">PONKEY と BLE でつながり、いま選ばれている<b>パート</b>や、使われた <b>Fn サブモード</b>をリアルタイムに解説するインストラクションアプリ。本体のスピーカーはそのまま鳴り続けます。</p>
+
+<!-- 現在パート -->
+<div class="card" id="partCard">
+  <h2>いまのパート</h2>
+  <div class="partrow">
+    <div class="partchip" id="partChip">
+      <div class="pn" id="partNo">—</div>
+      <div class="nm" id="partName">未接続</div>
+    </div>
+    <div class="partinfo">
+      <span class="kind" id="partKind">CONNECT を押して PONKEY を選択</span>
+      <p class="explain" id="partExplain">接続すると、本体のパートキー(P1〜P7)で選んだパートをここで解説します。接続直後に PONKEY から状態が自動で送られてくるので、何も操作しなくても現在の状態が表示されます。</p>
+      <p class="hint" id="partHint"></p>
+    </div>
+  </div>
+  <div class="partbtns" id="partBtns"></div>
+</div>
+
+<!-- トランスポート -->
+<div class="card">
+  <h2>シーケンサーの状態</h2>
+  <div class="stats">
+    <div class="stat stopped" id="statPlay"><div class="lb">再生</div><div class="vl" id="playVal">—</div><div class="sub" id="playSub"></div></div>
+    <div class="stat"><div class="lb">BPM</div><div class="vl" id="bpmVal">—</div><div class="sub">Fn×P2 で変更</div></div>
+    <div class="stat"><div class="lb">ループ長</div><div class="vl" id="loopVal">—</div><div class="sub">Fn×P3 で変更</div></div>
+    <div class="stat"><div class="lb">録音</div><div class="vl small" id="recVal">—</div><div class="sub">パートキー長押しで録音</div></div>
+  </div>
+  <div class="stepwrap">
+    <div class="steps" id="stepGrid"></div>
+    <div class="stepnote" id="stepNote">16ステップ。白枠が再生位置(再生中に本体から届きます)。ドラムパート選択中は打ち込みパターンも表示されます。</div>
+  </div>
+</div>
+
+<!-- サブモード -->
+<div class="card" id="submodeCard">
+  <h2>Fn サブモード</h2>
+  <div class="bignow">
+    <div class="combo" id="fnCombo">待機中</div>
+    <div class="what" id="fnWhat">Fn(P8)を押しながら P1〜P7 を押すと機能を呼び出せます。機能を使うとここに解説が出ます。</div>
+  </div>
+  <table class="fnmap" id="fnTable">
+    <tr><th>操作</th><th>機能</th><th>グリッドの意味</th></tr>
+    <tr data-fn="play"><td class="c">Fn × P1</td><td>PLAY / STOP</td><td>再生・停止のトグル(頭出しなし、いまの位置で止まり・再開)</td></tr>
+    <tr data-fn="bpm"><td class="c">Fn × P2</td><td>BPM 選択</td><td>グリッド 1-16 = 60〜210 BPM(10刻み)。左上が遅く、右下が速い</td></tr>
+    <tr data-fn="loop"><td class="c">Fn × P3</td><td>ループ長</td><td>押したキーを角にした矩形の範囲だけを繰り返し再生</td></tr>
+    <tr data-fn="oct"><td class="c">Fn × P4</td><td>オクターブ</td><td>グリッドで直接選択。上が高音・下が低音、G9 が中央(±0)</td></tr>
+    <tr data-fn="mvol"><td class="c">Fn × P5</td><td>マスター音量</td><td>グリッドの階段で全体音量を 8 段階</td></tr>
+    <tr data-fn="pvol"><td class="c">Fn × P6</td><td>パート音量</td><td>グリッドの階段で、いまのパートの音量を段階選択</td></tr>
+    <tr data-fn="voice"><td class="c">Fn × P7</td><td>音色えらび</td><td>グリッド 1-16 = いまのパートの音色。押すと試し聴きできる</td></tr>
+  </table>
+  <p class="note">※ サブモードに「入った」瞬間は本体の中だけの出来事なので、グリッドで値を変えたタイミングでこのアプリが検知して解説します(マスター音量のみ本体内で完結するため検知できません)。</p>
+</div>
+
+<!-- ログ -->
+<div class="card">
+  <h2>アクティビティ</h2>
+  <div id="log"><div class="sys">接続するとここに操作の解説が流れます。</div></div>
+</div>
+
+<!-- リファレンス -->
+<details>
+  <summary>パート早見表(P1〜P8)</summary>
+  <div class="body">
+    <p><span class="swatch" style="background:var(--kick)"></span><b>P1 KICK</b> / <span class="swatch" style="background:var(--snare)"></span><b>P2 SNARE</b> / <span class="swatch" style="background:var(--hat)"></span><b>P3 HAT</b> / <span class="swatch" style="background:var(--tom)"></span><b>P4 TOM</b> — ドラム。グリッドは 16 ステップの打ち込み(押すと ON/OFF)。</p>
+    <p><span class="swatch" style="background:var(--bass)"></span><b>P5 BASS</b> / <span class="swatch" style="background:var(--lead)"></span><b>P6 LEAD</b> / <span class="swatch" style="background:var(--pad)"></span><b>P7 PAD</b> — シンセ。グリッドは鍵盤のようにリアルタイム演奏。パートキー長押しで演奏を録音(重ね録り)、ダブルタップでそのパートを消去。</p>
+    <p><span class="swatch" style="background:var(--fn)"></span><b>P8 Fn</b> — 機能キー。押しながら他のキーで機能を呼び出す(上の Fn サブモード表)。</p>
+    <p class="dim">色は本体 LED の色と同じです。</p>
+  </div>
+</details>
+<details>
+  <summary>おぼえておくと便利な操作</summary>
+  <div class="body">
+    <p><b>パートのステップを消す</b> — グリッド中段 8 キー(G5〜G12)を同時押し → いま選択中のパートをクリア。</p>
+    <p><b>ぜんぶ消す</b> — グリッドの上段 4 キー+下段 4 キー(G1-G4 と G13-G16)を同時押し → 全パートをクリア。</p>
+    <p><b>インテリア(自動演奏)モード</b> — Fn を押しながら中央 4 キー(G6+G7+G10+G11)同時押しでON/OFF。Fn+グリッドで選曲、Fn×P1 で再生/停止。</p>
+    <p><b>アトラクト</b> — 電源を入れて 3 分なにも触らないと、デモ演奏がはじまります(一度でも触ると次の電源投入まで出ません)。</p>
+  </div>
+</details>
+<details>
+  <summary>接続すると何が変わる?</summary>
+  <div class="body">
+    <p>接続すると PONKEY はアプリ連携モードに切り替わり、シンセのオクターブが基準(±0)にリセットされます。音は引き続き本体のスピーカーから鳴ります(このアプリはミュートを送りません)。</p>
+    <p>切断すると自動でスタンドアロンに戻ります。</p>
+    <p class="dim">対応ブラウザ: Chrome / Edge(Web Bluetooth)。iOS の Safari では使えません。</p>
+  </div>
+</details>
+
+<footer>PONKEY GUIDE — 本体を操作すると、その意味をこのページが解説します。<br>Edge / Chrome で開いてください(Safari・Firefox 非対応)</footer>
+
+<script>
+"use strict";
+// ─────────────────────────────────────────────────────────────
+// PONKEY GUIDE — インストラクションアプリ
+// ファーム PONKEY_PT2 v4.5.x の BLE 通知仕様に基づく:
+//   ・CC 0-6 (val=127)      … パート選択(接続時の自動同期でも届く)
+//   ・CC 16-31              … ドラムのステップ ON/OFF (cc-16 = キー番号)
+//   ・CC 0x40 PLAY_STOP     … 127=再生 / 0=停止
+//   ・CC 0x41 BPM           … BPM = val + 60
+//   ・CC 0x42 RESET         … 全パターンクリア
+//   ・CC 0x30 VOICE_SELECT  … (part<<4)|voice  → Fn×P7
+//   ・CC 0x31 LOOP_LENGTH   … val = ステップ数-1 → Fn×P3
+//   ・CC 0x32 OCTAVE        … (part<<4)|(oct+4) → Fn×P4
+//   ・CC 0x33 PART_VOLUME   … (part<<4)|(vol>>3) → Fn×P6
+//   ・CC 0x51 STATE_SYNC_START / 0x52 HEARTBEAT / 0x53 RECORDING_MODE / 0x54 BAR_SYNC
+// Fnサブモードの「進入」自体は通知されないため、上記の結果CCで検知して解説する。
+// ─────────────────────────────────────────────────────────────
+
+const SERVICE_UUID = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
+const CHAR_UUID    = "7772e5db-3868-4112-a1a9-f2669d106bf3";
+
+const CC = {
+  VOICE:0x30, LOOP:0x31, OCTAVE:0x32, PVOL:0x33, MVOL:0x34,
+  PLAY:0x40, BPM:0x41, RESET:0x42,
+  SYNC_START:0x51, HEARTBEAT:0x52, REC:0x53, BAR:0x54, SAM_MUTE:0x55, NUDGE:0x56
+};
+
+const PARTS = [
+  {no:"P1", name:"KICK",  kind:"ドラム", color:"var(--kick)",
+   explain:"バスドラム(キック)のパート。グリッドの16キーが16ステップになっていて、押すたびにその拍のON/OFFが切り替わります。低音のドン、で曲の土台をつくります。",
+   hint:"まず4つ打ち(G1・G5・G9・G13)から試すとリズムの骨格ができます。"},
+  {no:"P2", name:"SNARE", kind:"ドラム", color:"var(--snare)",
+   explain:"スネアドラムのパート。グリッドはステップ打ち込みです。「タンッ」というアクセントで、キックの合間に置くとビートが立ち上がります。",
+   hint:"2拍目・4拍目(G5とG13のあたり)に置くのが定番です。"},
+  {no:"P3", name:"HAT",   kind:"ドラム", color:"var(--hat)",
+   explain:"ハイハットのパート。グリッドはステップ打ち込みです。「チッチッ」という細かい刻みで、リズムのスピード感をつくります。",
+   hint:"多めに置いても大丈夫。1つおきに置くと軽快な8ビートに。"},
+  {no:"P4", name:"TOM",   kind:"ドラム", color:"var(--tom)",
+   explain:"タムのパート。グリッドはステップ打ち込みです。「ポコポコ」という音程感のある打楽器で、フィルインや飾りに使います。",
+   hint:"ループの終わり(G13〜G16)に置くと展開のつなぎ役になります。"},
+  {no:"P5", name:"BASS",  kind:"シンセ", color:"var(--bass)",
+   explain:"ベースのパート。グリッドが鍵盤になり、押すとその場で音が鳴ります(リアルタイム演奏)。パートキーを長押しすると演奏を録音でき、もう一度の演奏で重ね録りされます。",
+   hint:"ダブルタップ(パートキー2回)でこのパートの録音を消せます。Fn×P4 でオクターブ変更。"},
+  {no:"P6", name:"LEAD",  kind:"シンセ", color:"var(--lead)",
+   explain:"リード(メロディ)のパート。グリッドが鍵盤になり、リアルタイムで演奏できます。いちばん目立つ音なので、メロディやフレーズをここで弾きます。",
+   hint:"Fn×P7 で音色を変えると雰囲気が大きく変わります。"},
+  {no:"P7", name:"PAD",   kind:"シンセ", color:"var(--pad)",
+   explain:"パッド(和音・持続音)のパート。グリッドが鍵盤になり、押している間ずっと鳴る長い音で、曲に広がりを足します。",
+   hint:"2〜3鍵を同時に押さえて和音にすると、ぐっと曲らしくなります。"},
+];
+
+// Fn×P7 音色テーブル (ファーム SYNTH_PROGRAMS_* と同じ並び)
+const GM = {4:"エレピ",8:"チェレスタ",9:"グロッケン",10:"オルゴール",11:"ビブラフォン",12:"マリンバ",16:"オルガン",
+  32:"アコースティックベース",33:"フィンガーベース",34:"ピックベース",35:"フレットレス",36:"スラップベース",38:"シンセベース1",39:"シンセベース2",
+  42:"チェロ",43:"コントラバス",46:"ハープ",48:"ストリングス",52:"クワイア",58:"チューバ",70:"ファゴット",73:"フルート",74:"リコーダー",75:"パンフルート",79:"オカリナ",
+  80:"スクエアリード",81:"ソウリード",82:"カリオペ",84:"チャラン",87:"ベース+リード",88:"ニューエイジ",89:"ウォームパッド",90:"ポリシンセ",91:"クワイアパッド",92:"ボウドパッド",94:"ハローパッド",95:"スイープパッド",
+  98:"クリスタル",99:"アトモスフィア",100:"ブライトネス",101:"ゴブリン",102:"エコー",107:"琴",108:"カリンバ",122:"波の音",123:"鳥のさえずり"};
+const VOICE_TABLES = {
+  4:[32,33,35,42,43,70,58,16,38,39,34,36,80,87,84,81],
+  5:[10,8,9,108,12,11,73,79,75,74,4,107,80,82,87,98],
+  6:[88,89,92,94,46,52,48,91,99,102,122,123,90,95,100,101]
+};
+
+const $ = id => document.getElementById(id);
+const state = {
+  device:null, server:null, char:null, connected:false,
+  part:-1, playing:null, bpm:null, loopSteps:null, recPart:-1,
+  pattern:new Array(16).fill(false), playhead:-1,
+  lastHeartbeat:0, syncing:false, syncTimer:null
+};
+
+// ── UI 構築 ──────────────────────────────────────────
+const partBtnsEl = $("partBtns");
+for (let i=0;i<8;i++){
+  const b=document.createElement("div"); b.className="pbtn";
+  b.textContent = i<7 ? PARTS[i].name : "Fn";
+  b.id = "pbtn"+i; partBtnsEl.appendChild(b);
+}
+const stepGrid = $("stepGrid");
+for (let i=0;i<16;i++){
+  const s=document.createElement("div"); s.className="step"; s.id="st"+i; stepGrid.appendChild(s);
+}
+
+function log(cls,msg){
+  const el=$("log");
+  const first = el.querySelector(".sys");
+  if (first && first.textContent.startsWith("接続すると")) first.remove();
+  const d=document.createElement("div"); d.className=cls;
+  const t=new Date();
+  d.innerHTML=`<span class="t">${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}:${String(t.getSeconds()).padStart(2,"0")}</span>`;
+  d.appendChild(document.createTextNode(msg));
+  el.prepend(d);
+  while (el.children.length>120) el.lastChild.remove();
+}
+
+function setPart(idx){
+  const changed = idx !== state.part;
+  state.part = idx;
+  const p = PARTS[idx];
+  $("partNo").textContent = p.no;
+  $("partName").textContent = p.name;
+  $("partKind").textContent = p.kind + (p.kind==="ドラム" ? " — グリッドで打ち込み" : " — グリッドで演奏");
+  $("partExplain").textContent = p.explain;
+  $("partHint").textContent = "ヒント: " + p.hint;
+  const chip=$("partChip");
+  chip.style.borderColor = p.color;
+  chip.style.boxShadow = `0 0 14px ${cssColor(p.color)}40`;
+  $("partName").style.color = p.color;
+  for (let i=0;i<8;i++){
+    const b=$("pbtn"+i);
+    b.classList.toggle("cur", i===idx);
+    b.style.background = i===idx ? PARTS[i].color : "#0a0b0e";
+    b.style.borderColor = i===idx ? PARTS[i].color : "var(--line)";
+  }
+  if (idx<4){ /* ドラム: パターン表示をリセットし、以後の CC16-31 を反映 */
+    if (changed){ state.pattern.fill(false); renderSteps(); }
+    $("stepNote").textContent = `${p.name} の打ち込みパターン。本体のグリッドを押すとここにも反映されます(白枠=再生位置)。`;
+  } else {
+    if (changed){ state.pattern.fill(false); renderSteps(); }
+    $("stepNote").textContent = "シンセパート選択中。グリッドは鍵盤として機能します(白枠=再生位置)。";
+  }
+  if (changed) log("part", `パート切替 → ${p.no} ${p.name}(${p.kind})。${p.kind==="ドラム"?"グリッドはステップ打ち込みです。":"グリッドはそのまま演奏できます。"}`);
+}
+function cssColor(v){ // "var(--kick)" → 実色
+  const m=v.match(/--[a-z]+/); if(!m) return "#6fb0b8";
+  return getComputedStyle(document.documentElement).getPropertyValue(m[0]).trim();
+}
+
+function renderSteps(){
+  for (let i=0;i<16;i++){
+    const el=$("st"+i);
+    el.classList.toggle("on", state.pattern[i]);
+    el.classList.toggle("head", state.playhead===i);
+    if (state.part>=0 && state.pattern[i]) {
+      el.style.background = PARTS[state.part].color;
+      el.style.borderColor = PARTS[state.part].color;
+    } else if (!state.pattern[i]) {
+      el.style.background=""; el.style.borderColor="";
+    }
+  }
+}
+
+function setPlaying(on){
+  if (state.playing===on) return;
+  state.playing = on;
+  $("playVal").textContent = on ? "PLAY" : "STOP";
+  $("playSub").textContent = on ? "再生中" : "停止中(Fn×P1 で再開)";
+  $("statPlay").className = "stat " + (on?"playing":"stopped");
+  if (!on){ state.playhead=-1; renderSteps(); }
+  log("ev", on ? "再生スタート ▶ シーケンサーが回りはじめました。" : "停止 ■ いまの位置で止まりました(Fn×P1 でそこから再開)。");
+}
+
+let fnFlashTimer=null;
+function showFn(key, combo, what){
+  $("fnCombo").textContent = combo;
+  $("fnWhat").innerHTML = what;
+  document.querySelectorAll("#fnTable tr[data-fn]").forEach(tr=>tr.classList.toggle("hl", tr.dataset.fn===key));
+  const card=$("submodeCard");
+  card.classList.add("flash");
+  clearTimeout(fnFlashTimer);
+  fnFlashTimer=setTimeout(()=>card.classList.remove("flash"), 1800);
+}
+
+// ── ノート発音のまとめ表示 (ログが溢れないように1秒間隔で集計) ──
+const noteAgg = {};
+let noteAggTimer = null;
+function chName(ch){
+  if (ch===9) return "ドラム";
+  if (ch===0) return "BASS";
+  if (ch===3) return "LEAD";
+  if (ch===4) return "PAD";
+  return "ch"+(ch+1);
+}
+function noteActivity(ch){
+  const k=chName(ch);
+  noteAgg[k]=(noteAgg[k]||0)+1;
+  if (!noteAggTimer){
+    noteAggTimer=setTimeout(()=>{
+      const parts=Object.entries(noteAgg).map(([k,n])=>`${k}×${n}`).join(" / ");
+      log("sys", `♪ 発音: ${parts}`);
+      for (const k in noteAgg) delete noteAgg[k];
+      noteAggTimer=null;
+    }, 1000);
+  }
+}
+
+// ── CC ハンドラ ──────────────────────────────────────
+function handleCC(cc, val){
+  if (cc<=6){ setPart(cc); return; }
+  if (cc>=16 && cc<32){
+    const k=cc-16;
+    state.pattern[k] = val>0;
+    renderSteps();
+    if (!state.syncing && state.part>=0 && state.part<4)
+      log("ev", `${PARTS[state.part].name}: ステップ${k+1} を${val>0?"ON":"OFF"}にしました。`);
+    return;
+  }
+  switch(cc){
+    case CC.PLAY: setPlaying(val>0); break;
+    case CC.BPM: {
+      const bpm = 60+val;
+      const changed = state.bpm!==null && state.bpm!==bpm;
+      state.bpm = bpm;
+      $("bpmVal").textContent = bpm;
+      if (!state.syncing){
+        showFn("bpm","Fn × P2",`BPM を <span class="val">${bpm}</span> に変更しました。数字が大きいほど速くなります(グリッド左上=60、右下=210)。`);
+        log("fn", `Fn×P2 BPM選択: テンポを ${bpm} BPM に${changed?"変更":"設定"}しました。`);
+      }
+      break;
+    }
+    case CC.LOOP: {
+      const steps = (val&0x0F)+1;
+      state.loopSteps = steps;
+      $("loopVal").textContent = steps;
+      if (!state.syncing){
+        showFn("loop","Fn × P3",`ループ範囲を <span class="val">${steps} ステップ</span>にしました。押したキーを角にした四角い範囲だけが繰り返されます。`);
+        log("fn", `Fn×P3 ループ長: ${steps} ステップの矩形範囲でループするようになりました。`);
+      }
+      break;
+    }
+    case CC.OCTAVE: {
+      const part=(val>>4)&0x07, oct=(val&0x0F)-4;
+      const nm = PARTS[part] ? PARTS[part].name : "?";
+      showFn("oct","Fn × P4",`${nm} のオクターブを <span class="val">${oct>0?"+":""}${oct}</span> にしました。上のキーほど高く、G9 が中央(±0)です。`);
+      log("fn", `Fn×P4 オクターブ: ${nm} を ${oct>0?"+":""}${oct} オクターブに変更しました。`);
+      break;
+    }
+    case CC.PVOL: {
+      const part=(val>>4)&0x07, vol=(val&0x0F)*8;
+      const nm = PARTS[part] ? PARTS[part].name : "?";
+      const pct = Math.round(vol/120*100);
+      showFn("pvol","Fn × P6",`${nm} の音量を <span class="val">約${pct}%</span> にしました。グリッドの階段で段階を選べます(最下段=ミュート)。`);
+      log("fn", `Fn×P6 パート音量: ${nm} の音量を約${pct}%にしました。`);
+      break;
+    }
+    case CC.VOICE: {
+      const part=(val>>4)&0x07, voice=val&0x0F;
+      const nm = PARTS[part] ? PARTS[part].name : "?";
+      let vname = `ボイス${voice+1}`;
+      const tbl = VOICE_TABLES[part];
+      if (tbl && GM[tbl[voice]]) vname = `${GM[tbl[voice]]}(${voice+1}番)`;
+      showFn("voice","Fn × P7",`${nm} の音色を <span class="val">${vname}</span> にしました。グリッドを押すと試し聴きできます。`);
+      log("fn", `Fn×P7 音色えらび: ${nm} の音を「${vname}」にしました。`);
+      break;
+    }
+    case CC.RESET:
+      state.pattern.fill(false); renderSteps();
+      log("warn","全パターンをクリアしました(まっさらな状態です)。");
+      break;
+    case CC.REC:
+      if (val===0){
+        if (state.recPart>=0) log("ev","録音を終了しました。録った演奏はループ再生されます。");
+        state.recPart=-1; $("recVal").textContent="—";
+      } else {
+        state.recPart=val;
+        const nm = PARTS[val] ? PARTS[val].name : "?";
+        $("recVal").textContent="● "+nm;
+        log("ev",`録音スタート: ${nm} の演奏を記録中です(すでに録音があれば重ね録り)。パートキーをもう一度長押し、または再生/停止で終了。`);
+      }
+      break;
+    case CC.BAR:
+      state.playhead = val & 0x0F;
+      if (state.playing===null) setPlaying(true); // BAR_SYNC が来ている=再生中
+      renderSteps();
+      break;
+    case CC.HEARTBEAT:
+      state.lastHeartbeat = Date.now();
+      break;
+    case CC.SYNC_START:
+      state.syncing = true;
+      clearTimeout(state.syncTimer);
+      state.syncTimer=setTimeout(()=>{ state.syncing=false; }, 1200);
+      log("sys","PONKEY から現在の状態を受信しています…(パート・BPM・パターン)");
+      break;
+  }
+}
+
+function handleMidi(status, d1, d2){
+  const type = status & 0xF0, ch = status & 0x0F;
+  if (type===0xB0) handleCC(d1,d2);
+  else if (type===0x90 && d2>0) noteActivity(ch);
+}
+
+// ── BLE MIDI パケットのパース ──
+// 形式: [header(0x80|tsHi)] { [ts(0x80|tsLo)] status data... }*  (running status 対応)
+function onPacket(dv){
+  const len=dv.byteLength;
+  if (len<3) return;
+  let i=1, runningStatus=0;
+  while (i<len){
+    const b=dv.getUint8(i);
+    if (b & 0x80){
+      // 高ビット=タイムスタンプ。直後が status(0x80以上) なら ts+status、
+      // データ(<0x80) なら running status 継続のタイムスタンプのみ。
+      const nxt = i+1<len ? dv.getUint8(i+1) : -1;
+      if (nxt>=0x80){ runningStatus=nxt; i+=2; }
+      else i++;
+      continue;
+    }
+    if (!runningStatus){ i++; continue; }
+    const t=runningStatus & 0xF0;
+    const need = (t===0xC0||t===0xD0) ? 1 : 2;
+    if (i+need>len) break;
+    const d1=b, d2=need===2?dv.getUint8(i+1):0;
+    if (need===1||d2<0x80) handleMidi(runningStatus,d1,d2);
+    i+=need;
+  }
+}
+
+// ── 接続 ──────────────────────────────────────────
+async function connect(){
+  if (state.connected){ try{state.server?.disconnect();}catch(e){} return; }
+  if (!navigator.bluetooth){ log("warn","このブラウザは Web Bluetooth 非対応です。Chrome / Edge で開いてください。"); return; }
+  try{
+    $("connState").textContent="探索中…";
+    const device = await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE_UUID]}]});
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    const char = await service.getCharacteristic(CHAR_UUID);
+    await char.startNotifications();
+    char.addEventListener("characteristicvaluechanged", e=>onPacket(e.target.value));
+    state.device=device; state.server=server; state.char=char; state.connected=true;
+    state.lastHeartbeat=Date.now();
+    $("connectBtn").textContent="DISCONNECT";
+    $("connectBtn").classList.add("connected");
+    $("connState").textContent=device.name||"PONKEY";
+    $("dot").className="statusdot ok";
+    log("sys",`接続しました: ${device.name||"PONKEY"}。まもなく本体から現在の状態が届きます。`);
+    $("partKind").textContent="状態を受信中…";
+  }catch(err){
+    $("connState").textContent="未接続";
+    if (err.name!=="NotFoundError") log("warn","接続失敗: "+err.message);
+  }
+}
+function onDisconnected(){
+  state.connected=false; state.device=null; state.server=null; state.char=null;
+  state.playing=null; state.playhead=-1;
+  $("connectBtn").textContent="CONNECT";
+  $("connectBtn").classList.remove("connected");
+  $("connState").textContent="未接続";
+  $("dot").className="statusdot";
+  log("sys","切断しました。PONKEY はスタンドアロンに戻ります。");
+}
+$("connectBtn").addEventListener("click", connect);
+
+// ハートビート監視 (1秒間隔で届く。3秒途切れたら注意表示)
+setInterval(()=>{
+  if (!state.connected) return;
+  const ok = Date.now()-state.lastHeartbeat < 3000;
+  $("dot").className = "statusdot " + (ok?"ok":"warn");
+}, 1000);
+</script>
+</body>
+</html>
