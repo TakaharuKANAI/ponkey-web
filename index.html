@@ -87,14 +87,16 @@
   .en{font-size:11px;color:var(--dim);opacity:.75;margin-top:2px;line-height:1.4}
   footer{color:var(--dim);font-size:11px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
 
-  /* ===== アイコンのコマ送り: .n2/.n3/.n4 = コマ数。中の .k1〜.k4 を順に1コマずつ見せる ===== */
+  /* ===== アイコンのコマ送り: .n2/.n3/.n4 = コマ数。中の .k1〜.k4 を順に1コマずつ見せる =====
+     負の delay は「その分だけ先に進んだ状態で始まる」なので、後のコマほど delay を
+     小さく(0に近く)する。逆にすると k1→k4→k3→k2 の逆再生になる */
   .k1,.k2,.k3,.k4{opacity:0}
   .n2 .k1,.n2 .k2{animation:fr2 1.12s step-end infinite}
   .n2 .k2{animation-delay:-.56s}
   .n3 .k1,.n3 .k2,.n3 .k3{animation:fr3 1.12s step-end infinite}
-  .n3 .k2{animation-delay:-.3733s} .n3 .k3{animation-delay:-.7467s}
+  .n3 .k2{animation-delay:-.7467s} .n3 .k3{animation-delay:-.3733s}
   .n4 .k1,.n4 .k2,.n4 .k3,.n4 .k4{animation:fr4 1.12s step-end infinite}
-  .n4 .k2{animation-delay:-.28s} .n4 .k3{animation-delay:-.56s} .n4 .k4{animation-delay:-.84s}
+  .n4 .k2{animation-delay:-.84s} .n4 .k3{animation-delay:-.56s} .n4 .k4{animation-delay:-.28s}
   @keyframes fr2{0%,49.99%{opacity:1}50%,100%{opacity:0}}
   @keyframes fr3{0%,33.32%{opacity:1}33.33%,100%{opacity:0}}
   @keyframes fr4{0%,24.99%{opacity:1}25%,100%{opacity:0}}
