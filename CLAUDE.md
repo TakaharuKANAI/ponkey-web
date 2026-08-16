@@ -5,8 +5,8 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 ## 構成
 
 - `index.html` — アプリハブ（PONKEY Web Apps）。各アプリへの入口
-- `lesson.html` — LESSON（使い方・作り方のレッスン。ライトテーマ）。
-  開発元は `../ponkey-midi/web/apps/ponkey-lesson.html`。**課題は `../ponkey-midi/web/apps/PONKEY_lesson_課題_*.md`**
+- `lesson.html` — LESSON（使い方・作り方のレッスン。ライトテーマ）。**このファイルが唯一の正**。
+  残課題・設計メモは `PONKEY_LESSON_課題.md`
 - `duet.html` — PONKEY AI Duet
 - `dialogue.html` — DIALOGUE
 - `sequence.html` — SEQUENCE（＋グルーブパネル）
@@ -23,7 +23,11 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 ## 作業ルール
 
 - アプリを追加したら **`index.html` のハブに導線を追加**し、`sw.js` のキャッシュ対象も更新する。
+  そのとき **`sw.js` の `CACHE` バージョンも上げる**（上げないと利用者に古い版が残る）。
   全アプリにホーム導線がある設計なので、新規ページも同じ導線を持たせる。
+- **エンドユーザーが触るページはここが正。** `../ponkey-midi/web/apps/` は開発・デバッグ専用。
+  向こうで作ったものを公開するときは「移す」（コピーを残さない）。二重管理になると、
+  こちらにしかない PWA ヘッダとホーム導線が上書きで消える。
 - 挙動の「なぜ」を変える変更をする前に `PONKEY_SESSION_CONCEPT.md` を読む。
   ドキュメントと実装が食い違ったら、勝手にどちらかへ寄せずユーザーに確認する。
 - **push すると即公開される。** コミット・push はユーザーの指示があるときだけ。
