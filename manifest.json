@@ -1,7 +1,7 @@
 {
   "name": "PONKEY",
   "short_name": "PONKEY",
-  "description": "PONKEY web apps — SYNC / SEQUENCE / TRANCE / DIALOGUE / DUET",
+  "description": "PONKEY web apps — SYNC / SEQUENCE / LOOPS / GROOVE / TRANCE / INVADERS / DIALOGUE / DUET",
   "lang": "ja",
   "start_url": "./index.html",
   "scope": "./",

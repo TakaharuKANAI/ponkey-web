@@ -110,6 +110,19 @@
        font:12px/1.6 ui-monospace,monospace;color:var(--dim);font-weight:300}
   .hint{font-size:12px;color:var(--dim)}
   .sync{font-size:12px}
+  /* groove panel */
+  .gv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}
+  @media(max-width:700px){.gv{grid-template-columns:1fr}}
+  .gcard{border:1px solid var(--line);background:var(--panel2);padding:10px;cursor:pointer;position:relative}
+  .gcard:hover{border-color:#3a3f47}
+  .gcard.act{border-color:var(--teal)}
+  .gcard .gl{font-size:11px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
+  .gcard .gv1{font-size:15px;font-weight:400;margin:4px 0 2px}
+  .gcard .gw{font-size:11.5px;color:var(--dim);line-height:1.5}
+  .gcard.act .gl{color:var(--teal)}
+  .gsum{font-size:12px;color:var(--dim);line-height:1.7}
+  .gsum b{color:var(--txt)}
+  .gnow{font-size:11px;color:var(--dim)}
   #btnNewLoop{border-color:var(--teal);color:var(--teal)}
   #btnNewLoop:hover{background:rgba(111,176,184,.12);border-color:var(--teal);color:var(--teal)}
 </style>
@@ -178,18 +191,32 @@
     </div>
     <div id="pianoRoll"></div>
 
+    <h2 style="margin-top:16px">グルーブ <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(このスロットを解析 → 本体の再生にスイング/アクセントをかける。パターンは変えない)</span></h2>
+    <div class="row">
+      <button id="btnGrooveAnalyze">解析</button>
+      <button id="btnGrooveOff" class="ghost">OFF (元に戻す)</button>
+      <span class="gnow" id="grooveNow">本体: —</span>
+      <span style="flex:1"></span>
+      <label class="hint">スイング <select id="gSwing"></select></label>
+      <label class="hint">アクセント <select id="gAccent"></select></label>
+      <button id="btnGrooveSend" class="primary">送信</button>
+    </div>
+    <div class="gsum" id="gSummary">「解析」を押すと、このスロットの特徴と提案 3 案が出ます。提案カードをクリックで本体へ即反映(再生中なら聴き比べ可)。</div>
+    <div class="gv" id="gCards"></div>
+
     <h2 style="margin-top:14px">ログ</h2>
     <div class="log" id="log"></div>
   </div>
 </div>
 
+<script src="groove-engine.js"></script>
 <script>
 // ============================================================ 定数 (ファーム一致)
 const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
 const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
 const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
 const SONG_MAGIC=0x5A, S_ENTER=0x01, S_EXIT=0x02, S_LOAD_SLOT=0x04, S_SET_SEQ=0x05, S_SET_MUTE=0x06;
-const CC_PLAY_STOP=0x40, CC_BPM=0x41;
+const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;  // v4.5.63 グルーブ
 const DBG_CMD_MAGIC=0xA6, DBG_LOG_ENABLE_ALL=0x01, DBG_PKT_MAGIC=0xA5, CAT_SONG=0x09, EV_SLOT_EDIT=0x08;
 const DEVICE_SLOTS=16, LIB_MAX=160, PAGE_SIZE=16;
 const PARTS=['KICK','SNARE','HAT','TOM','BASS','LEAD','PAD'], SYNTH=['BASS','LEAD','PAD'];
@@ -299,7 +326,7 @@ function onLog(e){const b=new Uint8Array(e.target.value.buffer);
 function applyDeviceEdit(d){let i=0;const slotIdx=d[i++],loopLen=d[i++];
   const oct=[d[i++],d[i++],d[i++]].map(v=>(v<<24)>>24);
   const dc=d[i++],drums=[];for(let n=0;n<dc;n++){const x=d[i++];drums.push([(x>>4)&0xf,x&0xf]);}
-  const sc=d[i++],synth=[];for(let n=0;n<sc;n++){const x=d[i++],s=d[i++],du=d[i++];synth.push([(x>>4)&0xf,x&0xf,s,du]);}
+  const sc=d[i++],synth=[];for(let n=0;n<sc;n++){const x=d[i++],s=d[i++],du=d[i++];synth.push([(x>>4)&0xf,x&0xf,s,du]);}  // du: bit7=レイヤー, bit0-6=長さ (v4.5.49〜)。表示側で &0x7f する
   const li=slotMap[slotIdx]; if(li==null){log(`本体編集 slot${slotIdx}(対応ループ不明・無視)`);return;}
   const L=store.loops[li]; L.loopLen=loopLen;L.oct=oct;L.drums=drums;L.synth=synth; save(); // 後勝ち
   log(`◀ 本体編集を反映: slot${slotIdx}→#${li} (drum${dc}/syn${sc})`);
@@ -401,7 +428,7 @@ function renderPianoRoll(L,st){
     for(let s=4;s<st;s+=4){const bl=document.createElement('div');bl.className='beat';bl.style.left=(s/st*100)+'%';lane.appendChild(bl);}
     // 音バー
     L.synth.filter(n=>n[0]===synthTab&&n[1]===k).forEach(n=>{
-      const [,, sub, du]=n; const bar=document.createElement('div');bar.className='pr-note';
+      const [,, sub, duRaw]=n; const du=(duRaw&0x7f)||1; const bar=document.createElement('div');bar.className='pr-note';
       bar.style.left=(sub/totalSub*100)+'%'; bar.style.width=Math.max(2,du/totalSub*100)+'%';
       bar.style.background=PART_COLORS[4+synthTab];
       bar.title=`sub${sub} 長さ${du}`;
@@ -422,6 +449,37 @@ document.getElementById('loopName').oninput=e=>{curLoop().name=e.target.value;re
 document.getElementById('loopLen').onchange=e=>{curLoop().loopLen=+e.target.value;renderEditor();renderSeq();save();pushLoop(sel);};
 document.getElementById('oct').oninput=e=>{curLoop().oct[synthTab]=+e.target.value;document.getElementById('octv').textContent=e.target.value;save();pushLoop(sel);};
 document.getElementById('dur').onchange=()=>renderEditor();
+
+// ============================================================ グルーブ (v4.5.63 ファーム: CC 0x35/0x36 = 再生時パラメータ)
+// 解析は groove-engine.js (純粋関数)。パターンは一切書き換えず、本体の再生に「かける」だけ。OFF で元通り。
+const groove={swing:0,accent:0,props:null};
+(function(){const sw=document.getElementById('gSwing'),ac=document.getElementById('gAccent');
+  GrooveEngine.SWING_NAMES.forEach((n,i)=>sw.add(new Option(n,i)));
+  GrooveEngine.ACCENT_NAMES.forEach((n,i)=>ac.add(new Option(n,i)));})();
+async function grooveSend(swing,accent,label){
+  groove.swing=swing; groove.accent=accent;
+  document.getElementById('gSwing').value=swing; document.getElementById('gAccent').value=accent;
+  document.getElementById('grooveNow').textContent=`本体: スイング ${GrooveEngine.SWING_NAMES[swing]} / アクセント ${GrooveEngine.ACCENT_NAMES[accent]}`;
+  document.querySelectorAll('.gcard').forEach(c=>c.classList.toggle('act',+c.dataset.sw===swing&&+c.dataset.ac===accent));
+  if(!connected){log('(未接続) グルーブ設定はローカルのみ: '+(label||''));return;}
+  await writeMIDI(0xB0,CC_GROOVE_SWING,swing); await writeMIDI(0xB0,CC_GROOVE_ACCENT,accent);
+  log(`グルーブ送信: ${label||''} スイング=${GrooveEngine.SWING_NAMES[swing]} アクセント=${GrooveEngine.ACCENT_NAMES[accent]}`);
+}
+document.getElementById('btnGrooveSend').onclick=()=>grooveSend(+document.getElementById('gSwing').value,+document.getElementById('gAccent').value,'手動');
+document.getElementById('btnGrooveOff').onclick=()=>grooveSend(0,0,'OFF');
+document.getElementById('btnGrooveAnalyze').onclick=()=>{
+  const L=curLoop(); if(!loopHasData(L)){document.getElementById('gSummary').textContent='このスロットは空です。';return;}
+  const f=GrooveEngine.analyze(GrooveEngine.scoreFromLoop(L),{bpm:store.bpm,swing:groove.swing,accent:groove.accent});
+  const P=GrooveEngine.propose(f); groove.props=P;
+  document.getElementById('gSummary').innerHTML=
+    `<b>${GrooveEngine.describe(f).join(' / ')}</b><br>スタイル: ${P.style.label} — ${P.style.why}`+(P.notes.length?'<br>'+P.notes.join(' '):'');
+  const w=document.getElementById('gCards'); w.innerHTML='';
+  P.proposals.forEach(pr=>{const c=document.createElement('div');c.className='gcard'+((pr.swing===groove.swing&&pr.accent===groove.accent)?' act':'');
+    c.dataset.sw=pr.swing;c.dataset.ac=pr.accent;
+    c.innerHTML=`<div class="gl">${pr.label}</div><div class="gv1">スイング ${pr.swingName} / ${pr.accentName}</div><div class="gw">${pr.why.join(' ')}</div>`;
+    c.onclick=()=>grooveSend(pr.swing,pr.accent,pr.label); w.appendChild(c);});
+  log(`グルーブ解析: ${P.style.label} (シンコペ指数 ${f.syncTotal})`);
+};
 
 // ============================================================ Export/Import
 document.getElementById('btnExport').onclick=()=>{const b=new Blob([JSON.stringify(store,null,2)],{type:'application/json'});

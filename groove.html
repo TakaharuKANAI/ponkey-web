@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GROOVE</title>
+<meta name="theme-color" content="#f4f1ea">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY GROOVE">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ===== ライト版 (SEQUENCE のニュートラル・ダークと同じ骨格: Inter / ティール+レッド / 1px細線 / 角なし) =====
+     こちらは「ワンボタンで曲にノリを足す」だけの軽いアプリなので、紙のような明るい地にする */
+  :root{
+    --bg:#f4f1ea; --panel:#fbfaf6; --panel2:#efece4; --line:#d9d4c8; --txt:#2a2c30; --dim:#8a8d93;
+    --teal:#3f8f98; --red:#b8574b; --amber:#c98a2e;
+  }
+  *{box-sizing:border-box;border-radius:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:15px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+  header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:12px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  h1{font-size:19px;margin:0 8px 0 0;font-weight:400;letter-spacing:.1em;white-space:nowrap}
+  header>*{flex:none}
+  header .sp{flex:1 1 0}
+  a.home{font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em;white-space:nowrap;flex:none}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  button{font:inherit;font-weight:400;font-size:14px;letter-spacing:.04em;padding:9px 14px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s;white-space:nowrap}
+  button:hover{background:#ebe7dd;border-color:#bfb9ab}
+  button:disabled{opacity:.4;cursor:default;background:transparent}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:rgba(63,143,152,.1)}
+  button.danger{border-color:var(--red);color:var(--red)}
+  main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 18px;gap:22px;max-width:640px;margin:0 auto;width:100%}
+  /* ワンボタン */
+  .big{width:min(72vw,300px);aspect-ratio:1;border:1px solid var(--teal);color:var(--teal);background:var(--panel);
+       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:22px;letter-spacing:.2em;font-weight:400;
+       cursor:pointer;transition:background .15s,transform .1s;user-select:none;position:relative}
+  .big:hover{background:rgba(63,143,152,.08)}
+  .big:active{transform:scale(.985)}
+  .big.busy{color:var(--dim);border-color:var(--line);pointer-events:none}
+  .big.on{background:var(--teal);color:#fff}
+  .big small{font-size:11px;letter-spacing:.14em;font-weight:400;opacity:.8}
+  .big .ring{position:absolute;inset:8px;border:1px dashed var(--line);pointer-events:none}
+  .big.on .ring{border-color:rgba(255,255,255,.5)}
+  /* 状態 */
+  .status{font-size:13px;color:var(--dim);text-align:center;line-height:1.7;min-height:1.7em}
+  .now{font-size:16px;text-align:center;letter-spacing:.02em}
+  .now b{font-weight:500}
+  .sub{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  /* 解析カード */
+  .card{width:100%;background:var(--panel);border:1px solid var(--line);padding:14px 16px}
+  .card h2{font-size:11px;color:var(--dim);margin:0 0 8px;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
+  .card p{margin:0;font-size:13px;line-height:1.75;color:var(--txt)}
+  .card p.dim{color:var(--dim)}
+  .opts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;width:100%}
+  @media(max-width:520px){.opts{grid-template-columns:1fr}}
+  .opt{border:1px solid var(--line);background:var(--panel);padding:10px 12px;cursor:pointer}
+  .opt:hover{border-color:#bfb9ab}
+  .opt.act{border-color:var(--teal)}
+  .opt .l{font-size:11px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
+  .opt.act .l{color:var(--teal)}
+  .opt .v{font-size:14px;margin:3px 0 2px}
+  .opt .w{font-size:11.5px;color:var(--dim);line-height:1.5}
+  /* パターンのミニ表示 (7パート×16) */
+  .mini{display:grid;grid-template-columns:repeat(16,1fr);grid-template-rows:repeat(7,1fr);gap:2px;width:100%;height:56px;margin-top:8px}
+  .mini i{background:var(--panel2)}
+  .mini i.b{background:#e5e1d6}
+  .mini i.on{background:var(--dim)}
+  .mini i.on.acc{background:var(--teal)}
+  .mini i.on.gh{background:#bcc9cb}
+  footer{font-size:11px;color:var(--dim);text-align:center;padding:12px;line-height:1.7;border-top:1px solid var(--line)}
+  details{width:100%}
+  summary{font-size:12px;color:var(--dim);cursor:pointer;letter-spacing:.06em}
+  .log{height:110px;overflow:auto;background:var(--panel);border:1px solid var(--line);padding:8px;font:11.5px/1.6 ui-monospace,monospace;color:var(--dim);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <a class="home" href="index.html" title="アプリ一覧へ">‹</a>
+  <h1>GROOVE</h1>
+  <span id="conn" class="pill ng">未接続</span>
+  <span class="sp"></span>
+  <button id="btnConnect" class="primary">接続</button>
+</header>
+
+<main>
+  <div class="big" id="big"><span class="ring"></span><span id="bigLabel">アレンジ</span><small id="bigSub">PONKEY の曲にノリを足す</small></div>
+  <div class="now" id="now">&nbsp;</div>
+  <div class="status" id="status">接続して「アレンジ」を押すと、いま鳴っているスロットを読み取って解析し、いちばん合いそうなノリをその場でかけます。パターン自体は変えません。</div>
+  <div class="sub" id="subBtns" style="display:none">
+    <button id="btnSoft">もっと控えめ</button>
+    <button id="btnStd">標準</button>
+    <button id="btnBold">もっと大胆</button>
+    <button id="btnOff" class="danger">元に戻す</button>
+    <button id="btnReload">曲を読み直す</button>
+  </div>
+  <div class="opts" id="opts" style="display:none"></div>
+  <div class="card" id="card" style="display:none">
+    <h2>この曲の特徴</h2>
+    <p id="feat"></p>
+    <p class="dim" id="notes"></p>
+    <div class="mini" id="mini"></div>
+  </div>
+  <details><summary>ログ</summary><div class="log" id="log"></div></details>
+</main>
+<footer>Edge / Chrome で開いてください(Safari・Firefox 非対応)<br>ファーム v4.5.63 以降 (Fn×P4 を4回押すと本体でも同じ設定が見えます)</footer>
+
+<script src="groove-engine.js"></script>
+<script>
+// ============================================================ 定数 (ファーム一致: ../ponkey-midi/ponkey-firmware が正)
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
+const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
+const DBG_CMD_MAGIC=0xA6, DBG_LOG_ENABLE_ALL=0x01, DBG_PKT_MAGIC=0xA5, CAT_SONG=0x09;
+const EV_SLOT_DUMP=0x09, EV_META=0x0A;
+const SONG_MAGIC=0x5A, S_DUMP_SLOT=0x07;
+const CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;
+const LS='ponkey_groove_v01';
+
+// ============================================================ 状態
+let dev,gatt,midiCh,cmdCh,logCh, connected=false;
+let meta=null, score=null, feat=null, props=null, applied=null;   // applied = 現在かけている提案 or {swing,accent}
+const chunkAsm={};
+let dumpWaiter=null;
+const pref=(()=>{try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return {}}})();
+function savePref(){try{localStorage.setItem(LS,JSON.stringify(pref));}catch(e){}}
+function log(m){const e=document.getElementById('log');e.innerHTML+=`[${new Date().toLocaleTimeString()}] ${m}<br>`;e.scrollTop=e.scrollHeight;}
+const $=id=>document.getElementById(id);
+
+// ============================================================ BLE
+async function connect(){
+  log('デバイス選択…');
+  dev=await navigator.bluetooth.requestDevice({filters:[{name:'PONKEY_PT2'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
+  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断');});
+  gatt=await dev.gatt.connect();
+  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  const ds=await gatt.getPrimaryService(DBG_SERVICE);
+  cmdCh=await ds.getCharacteristic(DBG_CMD); logCh=await ds.getCharacteristic(DBG_LOG);
+  await logCh.startNotifications(); logCh.addEventListener('characteristicvaluechanged',onLog);
+  await writeCmd([DBG_CMD_MAGIC,DBG_LOG_ENABLE_ALL,0x00]);
+  setConn(true); log('接続完了');
+}
+function setConn(c){connected=c;$('conn').textContent=c?'接続済み':'未接続';$('conn').className='pill '+(c?'ok':'ng');$('btnConnect').textContent=c?'切断':'接続';}
+async function writeCmd(b){if(!cmdCh)return;const u=Uint8Array.from(b);
+  try{cmdCh.writeValueWithoutResponse?await cmdCh.writeValueWithoutResponse(u):await cmdCh.writeValue(u);}
+  catch(e){try{await cmdCh.writeValue(u);}catch(_){}}}
+async function writeMIDI(s,d1,d2){if(!midiCh)return;const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  try{await midiCh.writeValueWithoutResponse(u);}catch(e){try{await midiCh.writeValue(u);}catch(_){}}}
+$('btnConnect').onclick=async()=>{ if(connected){try{gatt.disconnect();}catch(e){} return;}
+  try{await connect();}catch(e){log('接続エラー: '+e);} };
+
+// 受信: META と SLOT_DUMP (分割再構成)
+function onLog(e){const b=new Uint8Array(e.target.value.buffer);
+  if(b.length<11||b[0]!==DBG_PKT_MAGIC||b[8]!==CAT_SONG)return;
+  const ev=b[9],dl=b[10],data=b.slice(11,11+dl);
+  if(ev===EV_META){ meta=GrooveEngine.decodeMeta(data); log(`META: ${meta.bpm}BPM slot${meta.currentSlot+1} ${meta.playing?'再生中':'停止'} swing=${meta.swing} accent=${meta.accent}`); return; }
+  if(ev!==EV_SLOT_DUMP)return;
+  if(dl<3){log('⚠ スロットが大きすぎて読めませんでした');if(dumpWaiter)dumpWaiter.reject(new Error('too big'));return;}
+  const gen=data[0],idx=data[1],cnt=data[2],part=data.slice(3);
+  let a=chunkAsm[gen]; if(!a||a.cnt!==cnt){a={cnt,parts:{}};chunkAsm[gen]=a;} a.parts[idx]=part;
+  if(Object.keys(a.parts).length<cnt)return;
+  let tot=0;for(let c=0;c<cnt;c++)tot+=a.parts[c].length; const full=new Uint8Array(tot);
+  let off=0;for(let c=0;c<cnt;c++){full.set(a.parts[c],off);off+=a.parts[c].length;} delete chunkAsm[gen];
+  const sc=GrooveEngine.decodeSlotV2(full);
+  if(!sc){log('⚠ 未知の形式');return;}
+  log(`スロット${sc.slot+1} 読み取り: ドラム${sc.drums.length} / シンセ${sc.synth.length}`);
+  if(dumpWaiter){dumpWaiter.resolve(sc);dumpWaiter=null;}
+}
+// 現在スロットを読む (META → SLOT_DUMP)。5秒でタイムアウト
+function readCurrentSlot(){return new Promise(async(resolve,reject)=>{
+  const to=setTimeout(()=>{if(dumpWaiter){dumpWaiter=null;reject(new Error('タイムアウト (本体のファームが v4.5.63 以降か確認してください)'));}},5000);
+  dumpWaiter={resolve:v=>{clearTimeout(to);dumpWaiter=null;resolve(v);},reject:e=>{clearTimeout(to);dumpWaiter=null;reject(e);}};
+  await writeCmd([SONG_MAGIC,S_DUMP_SLOT,0x00,0xFF]);
+});}
+
+// ============================================================ 本体へ「かける」
+async function apply(swing,accent,label){
+  applied={swing,accent,label};
+  if(connected){await writeMIDI(0xB0,CC_GROOVE_SWING,swing);await writeMIDI(0xB0,CC_GROOVE_ACCENT,accent);}
+  const on=(swing||accent);
+  $('big').classList.toggle('on',!!on);
+  $('bigLabel').textContent=on?'ノリ ON':'アレンジ';
+  $('bigSub').textContent=on?'もう一度押すと元に戻す':'PONKEY の曲にノリを足す';
+  $('now').innerHTML=on?`<b>${label||''}</b> — スイング ${GrooveEngine.SWING_NAMES[swing]} / ${GrooveEngine.ACCENT_NAMES[accent]}`:'元のまま(ジャスト・一定)';
+  document.querySelectorAll('.opt').forEach(o=>o.classList.toggle('act',+o.dataset.sw===swing&&+o.dataset.ac===accent));
+  renderMini();
+  log(`かける: ${label||''} swing=${swing} accent=${accent}${connected?'':' (未接続・ローカルのみ)'}`);
+  if(props){pref.last={style:props.style.key,label,swing,accent};savePref();}
+}
+
+// ============================================================ ワンボタン
+let busy=false;
+async function arrange(){
+  if(busy)return;
+  if(applied&&(applied.swing||applied.accent)){ await apply(0,0,'OFF'); return; }   // ON 中は押すと戻す
+  busy=true;$('big').classList.add('busy');
+  try{
+    if(!connected){$('status').textContent='PONKEY を選んでください…';await connect();}
+    $('status').textContent='いま鳴っているスロットを読み取り中…';
+    score=await readCurrentSlot();
+    if(!score.drums.length&&!score.synth.length){$('status').textContent='このスロットは空でした。本体で何か打ち込んでからもう一度押してください。';return;}
+    feat=GrooveEngine.analyze(score,meta||{});
+    props=GrooveEngine.propose(feat);
+    // 前回同じスタイルで選んだ強さがあればそれを、なければ標準
+    let pick=props.proposals[1];
+    if(pref.last&&pref.last.style===props.style.key){const f=props.proposals.find(p=>p.label===pref.last.label);if(f)pick=f;}
+    renderAnalysis();
+    await apply(pick.swing,pick.accent,pick.label);
+    $('status').textContent=`${props.style.label} と読みました。${pick.label}をかけています。下で強さを変えたり、元に戻したりできます。`;
+  }catch(e){log('エラー: '+e.message);$('status').textContent='読み取れませんでした: '+e.message;}
+  finally{busy=false;$('big').classList.remove('busy');}
+}
+$('big').onclick=arrange;
+$('btnSoft').onclick=()=>{if(props){const p=props.proposals[0];apply(p.swing,p.accent,p.label);}};
+$('btnStd').onclick =()=>{if(props){const p=props.proposals[1];apply(p.swing,p.accent,p.label);}};
+$('btnBold').onclick=()=>{if(props){const p=props.proposals[2];apply(p.swing,p.accent,p.label);}};
+$('btnOff').onclick=()=>apply(0,0,'OFF');
+$('btnReload').onclick=async()=>{ if(!connected){await connect();} busy=true; try{ $('status').textContent='読み直し中…'; score=await readCurrentSlot();
+  feat=GrooveEngine.analyze(score,meta||{}); props=GrooveEngine.propose(feat); renderAnalysis(); $('status').textContent='読み直しました。';
+  if(applied)renderMini(); }catch(e){$('status').textContent='読み取れませんでした: '+e.message;} finally{busy=false;} };
+
+// ============================================================ 表示
+function renderAnalysis(){
+  $('subBtns').style.display='flex'; $('opts').style.display='grid'; $('card').style.display='block';
+  $('feat').textContent=GrooveEngine.describe(feat).join(' / ');
+  $('notes').textContent=`スタイル: ${props.style.label} — ${props.style.why} ${props.notes.join(' ')}`;
+  const w=$('opts'); w.innerHTML='';
+  props.proposals.forEach(pr=>{const o=document.createElement('div');o.className='opt';o.dataset.sw=pr.swing;o.dataset.ac=pr.accent;
+    o.innerHTML=`<div class="l">${pr.label}</div><div class="v">スイング ${pr.swingName} / ${pr.accentName}</div><div class="w">${pr.why.slice(1).join(' ')}</div>`;
+    o.onclick=()=>apply(pr.swing,pr.accent,pr.label); w.appendChild(o);});
+  renderMini();
+}
+// 7パート×16: 音がある所を点で。かかっているアクセント型で 強=ティール / 弱=薄い に色分け(何が変わるかが見える)
+function renderMini(){
+  if(!score)return; const m=$('mini'); m.innerHTML='';
+  const tpl=GrooveEngine.ACCENT_TPL[(applied&&applied.accent)||0];
+  const on=[[],[],[],[],[],[],[]];
+  for(const h of score.drums) on[h.part][h.step]=1;
+  for(const n of score.synth) on[4+n.part][Math.floor(n.sub/4)]=1;
+  for(let p=0;p<7;p++)for(let s=0;s<16;s++){const i=document.createElement('i');
+    if(s%4===0)i.classList.add('b');
+    if(on[p][s]){i.classList.add('on'); if(tpl[s]>=110)i.classList.add('acc'); else if(tpl[s]<=70)i.classList.add('gh');}
+    m.appendChild(i);}
+}
+log('起動。「アレンジ」を押す → 接続 → 読み取り → 解析 → 反映。');
+</script>
+</body>
+</html>
