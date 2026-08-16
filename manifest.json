@@ -1,7 +1,7 @@
 {
-  "name": "PONKEY",
-  "short_name": "PONKEY",
-  "description": "PONKEY web apps — SYNC / SEQUENCE / LOOPS / GROOVE / TRANCE / INVADERS / DIALOGUE / DUET",
+  "name": "SUPER PONKEY PARK",
+  "short_name": "PONKEY PARK",
+  "description": "PONKEY web apps — LESSON / SYNC / SEQUENCE / LOOPS / GROOVE / TRANCE / INVADERS / DIALOGUE / DUET",
   "lang": "ja",
   "start_url": "./index.html",
   "scope": "./",

@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PONKEY PARK</title>
+<title>SUPER PONKEY PARK</title>
 <meta name="theme-color" content="#06070a">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="PONKEY">
+<meta name="apple-mobile-web-app-title" content="PONKEY PARK">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
@@ -20,7 +20,9 @@
   *{box-sizing:border-box}
   body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
     font-weight:300;letter-spacing:.01em;max-width:720px;margin:0 auto;padding:34px 20px 60px;min-height:100vh}
-  h1{font-size:22px;font-weight:400;letter-spacing:.14em;margin:0 0 22px;text-transform:uppercase}
+  /* 狭い画面でも1行に収める(折り返すとモンキーがタイトルから離れてしまう) */
+  h1{font-size:clamp(16px,4.9vw,22px);font-weight:400;letter-spacing:.14em;margin:0 0 22px;
+    text-transform:uppercase;white-space:nowrap}
 
   /* ===== 宇宙: 星を敷き詰めた2層をゆっくり流す + 上方向のかすかな星雲 ===== */
   .sky,.sky::before,.sky::after{position:fixed;inset:0;pointer-events:none}
@@ -56,16 +58,15 @@
   @keyframes march{to{transform:translateX(84px)}}
 
   /* ブランド行: タイトルの下端(ベースライン)とモンキーの足元を揃える */
-  .brandrow{display:flex;align-items:flex-end;gap:16px;margin:0 0 22px}
+  /* flex-end だと文字の下の余白(ディセンダ分)だけ足元がずれるので baseline で揃える */
+  .brandrow{display:flex;align-items:baseline;gap:16px;margin:0 0 22px}
   .brandrow h1{margin:0;line-height:1}
-  .mascots{display:flex;align-items:flex-end;gap:10px}
-  /* オレンジは最下行が輪郭(背景抜き)で描画されないぶん、2px 下げて足元を緑と揃える */
-  .mo{margin-bottom:-2px}
+  .mascots{display:inline-flex;align-items:flex-end;gap:10px}
   /* INVADERS と同じ PONKEY MONKEY。1ドット=2px、拍で足を開く2コマ歩き */
   .m{position:relative;display:block}
   .m svg{display:block;width:auto;image-rendering:pixelated}
   .m .f2{position:absolute;left:0;bottom:0}
-  .mo svg{height:24px}   /* 12ドット */
+  .mo svg{height:22px}   /* 11ドット(オレンジは最下行が描画されないので落としてある) */
   .mg svg{height:30px}   /* 15ドット(アンテナ付き)。ドットサイズは同じ */
   .f1{animation:mkA .88s step-end infinite}
   .f2{animation:mkB .88s step-end infinite}
@@ -113,7 +114,7 @@
   <div class="sky" aria-hidden="true"><div class="fleet" id="fleet"></div></div>
 
   <div class="brandrow">
-    <h1>PONKEY PARK</h1>
+    <h1>SUPER PONKEY PARK</h1>
     <div class="mascots" id="mascots" role="img" aria-label="PONKEY MONKEY"></div>
   </div>
   <script>
@@ -137,8 +138,16 @@
           out+='<rect x="'+x+'" y="'+y+'" width="'+n+'" height="1" fill="'+c+'"/>'; x+=n; } }
       return '<svg class="'+cls+'" viewBox="0 0 '+w+' '+h+'" shape-rendering="crispEdges">'+out+'</svg>';
     }
+    // 何も描かれない最終行(オレンジは輪郭が背景抜きなので脚の最下段が消える)は落とす。
+    // 残しておくと svg の下端と見た目の足元がずれて、ベースライン合わせが狂う
+    function trim(rows,pal){
+      var r=rows.slice();
+      while(r.length&&r[r.length-1].split('').every(function(c){return !pal[c];})) r.pop();
+      return r;
+    }
     function walker(head,pal,cls){
-      return '<span class="m '+cls+'">'+svg(head.concat(STAND),pal,'f1')+svg(head.concat(WIDE),pal,'f2')+'</span>';
+      return '<span class="m '+cls+'">'+svg(trim(head.concat(STAND),pal),pal,'f1')
+           + svg(trim(head.concat(WIDE),pal),pal,'f2')+'</span>';
     }
     document.getElementById('mascots').innerHTML =
       walker(BODY,PAL_O,'mo') + walker(ANT.concat(BODY),PAL_G,'mg');
