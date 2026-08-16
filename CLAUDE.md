@@ -5,6 +5,8 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 ## 構成
 
 - `index.html` — アプリハブ（PONKEY Web Apps）。各アプリへの入口
+- `lesson.html` — LESSON（使い方・作り方のレッスン。ライトテーマ）。
+  開発元は `../ponkey-midi/web/apps/ponkey-lesson.html`。**課題は `../ponkey-midi/web/apps/PONKEY_lesson_課題_*.md`**
 - `duet.html` — PONKEY AI Duet
 - `dialogue.html` — DIALOGUE
 - `sequence.html` — SEQUENCE（＋グルーブパネル）

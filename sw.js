@@ -7,9 +7,10 @@
    ・フォント等の静的リソースは cache-first(変わらないので)
    ・DUET の Magenta/TensorFlow CDN は大きいのでキャッシュしない(要ネットのまま)
 */
-const CACHE = 'ponkey-v5';
+const CACHE = 'ponkey-v6';
 const CORE = [
   './', './index.html',
+  './lesson.html',
   './sync.html', './sequence.html', './loops.html', './groove.html', './groove-engine.js',
   './invaders.html', './trance.html', './dialogue.html', './duet.html',
   './ponkey-sound-guide.html',

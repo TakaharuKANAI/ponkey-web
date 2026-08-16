@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light">
+<title>LESSON — PONKEY</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY LESSON">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#FFFFFF; --block:#F5F5F7;
+  --fill:rgba(0,0,0,.05); --fill-2:rgba(0,0,0,.09);
+  --ink:#1D1D1F; --ink-2:#6E6E73; --ink-3:#B0B0B5;
+  --b70:#4D4D4D; --b70-line:rgba(77,77,77,.34); --b70-hair:rgba(77,77,77,.20);
+  --accent:#FF7A00; --accent-ink:#C85A00;
+  --ease:cubic-bezier(.28,.72,.05,1); --r:18px;
+  --led:#BA523B; --led-tint:#F3E4DF; --led-line:#7E3524; --led-ink:#FFFFFF;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",
+    system-ui,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+  font-size:16px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  font-feature-settings:"palt" 0;
+  max-width:460px;margin:0 auto;
+  padding-bottom:calc(76px + env(safe-area-inset-bottom));
+  overscroll-behavior-y:none;
+}
+h1,h2,p{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;
+  -webkit-user-select:none;user-select:none}
+svg{display:block}
+.jp{line-break:strict;word-break:normal;overflow-wrap:normal;
+  text-wrap:pretty;hanging-punctuation:allow-end}
+body.home .prog,body.home .head,body.home .stage,body.home .status,
+body.home .more,body.home .nav,body.home #btnDemo{display:none}
+body:not(.home) .home{display:none}
+
+.navbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;
+  height:calc(42px + env(safe-area-inset-top));
+  padding:0 18px;padding-top:env(safe-area-inset-top);
+  background:rgba(255,255,255,.8);
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px)}
+.navbar::after{content:"";position:absolute;left:0;right:0;bottom:0;height:.5px;
+  background:var(--b70-hair);opacity:0;transition:opacity .3s var(--ease)}
+.navbar.scrolled::after{opacity:1}
+.back{font-size:19px;line-height:1;color:var(--ink-3);text-decoration:none;margin:-2px 10px 0 -4px;
+  padding:2px 6px;transition:color .2s var(--ease)}
+.back:active{color:var(--ink)}
+.wordmark{font-size:12px;font-weight:600;letter-spacing:.06em}
+.wordmark span{color:var(--ink-2);font-weight:400;margin-left:6px}
+.nav-sp{flex:1}
+.nav-actions{display:flex;align-items:center;gap:14px}
+.plain{font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px;
+  transition:opacity .2s var(--ease)}
+.plain:active{opacity:.45}
+.plain:disabled{opacity:.4;cursor:default}
+.plain svg{width:11px;height:11px}
+#btnConn{color:var(--accent-ink)} #btnConn.on{color:var(--ink-2)}
+
+.home{padding:44px 22px 0;text-align:center}
+.home h1{font-size:32px;font-weight:700;letter-spacing:-.02em;font-feature-settings:"palt" 1}
+.home>p{margin-top:8px;font-size:15px;color:var(--ink-2);letter-spacing:.02em}
+.lcard{display:block;width:100%;margin-top:16px;padding:20px;text-align:left;
+  background:var(--block);border-radius:var(--r);
+  transition:transform .2s var(--ease),background .2s var(--ease)}
+.lcard:active{transform:scale(.98);background:var(--fill-2)}
+.lcard b{display:block;font-size:19px;font-weight:700;letter-spacing:-.01em}
+.lcard b i{font-style:normal;color:var(--accent-ink);margin-right:9px}
+.lcard s{display:block;text-decoration:none;margin-top:5px;font-size:13.5px;
+  line-height:1.65;color:var(--ink-2);letter-spacing:.018em}
+.lcard u{display:block;text-decoration:none;margin-top:9px;font-size:11.5px;
+  color:var(--ink-3);letter-spacing:.04em}
+
+.prog{display:flex;gap:3px;padding:12px 22px 0;max-width:400px;margin:0 auto}
+.prog i{flex:1;height:2px;background:var(--fill-2);transition:background .5s var(--ease)}
+.prog i.done{background:var(--ink-3)} .prog i.now{background:var(--accent)}
+
+.head{padding:16px 22px 0;text-align:center}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--accent-ink)}
+.head h1{margin-top:4px;font-size:clamp(23px,6.4vw,29px);line-height:1.3;
+  font-weight:700;letter-spacing:-.02em;font-feature-settings:"palt" 1;text-wrap:balance}
+.one{margin:8px auto 0;max-width:22em;font-size:15px;line-height:1.6;
+  letter-spacing:.02em;color:var(--ink);font-weight:500}
+
+.stage{position:relative;margin:10px 10px 0;padding:6px 12px 2px;
+  background:var(--block);border-radius:var(--r)}
+#panel{width:100%;height:auto;touch-action:manipulation}
+.socket{fill:#fff;stroke:var(--b70-hair);stroke-width:1;
+  transition:stroke .22s var(--ease),stroke-width .22s var(--ease)}
+.socket.want{stroke:var(--accent);stroke-width:2}
+.socket.now{stroke:var(--b70);stroke-width:2}
+.socket.outside{stroke:rgba(77,77,77,.08)}
+.cyl{transition:transform .075s cubic-bezier(.15,.9,.3,1),opacity .3s var(--ease)}
+.cyl.up{transform:translateY(-22px)}
+.cyl.outside{opacity:.28}
+.cyl-side,.cyl-cap,.cyl-base{fill:#fff;transition:fill .18s var(--ease),stroke .18s var(--ease)}
+.cyl-cap{stroke:var(--b70-line);stroke-width:1;vector-effect:non-scaling-stroke}
+.cyl-edge{stroke:var(--b70-line);stroke-width:1;transition:stroke .18s var(--ease)}
+.cyl.on .cyl-side,.cyl.on .cyl-cap,.cyl.on .cyl-base{fill:var(--led-tint)}
+.cyl.on .cyl-cap,.cyl.on .cyl-edge{stroke:var(--led-line)}
+.cyl.want .cyl-cap{stroke:var(--accent);stroke-width:2}
+.cyl.want .tnum{fill:var(--accent-ink)}
+.cyl.up .cyl-side,.cyl.up .cyl-cap,.cyl.up .cyl-base{fill:var(--led)}
+.cyl.up .cyl-cap,.cyl.up .cyl-edge{stroke:var(--led-line)}
+.cyl.up .tnum,.cyl.up .tsub{fill:var(--led-ink)}
+.tnum{font-size:11px;font-weight:500;fill:var(--b70);text-anchor:middle;
+  dominant-baseline:central;pointer-events:none;transition:fill .18s var(--ease)}
+.tsub{font-size:8px;font-weight:400;fill:var(--ink-3);text-anchor:middle;
+  dominant-baseline:central;pointer-events:none;transition:fill .18s var(--ease)}
+
+.pkey{fill:#fff;stroke:var(--b70-hair);stroke-width:1;
+  transition:fill .2s var(--ease),stroke .2s var(--ease),stroke-width .2s var(--ease)}
+.pkey.sel{fill:var(--pled);stroke:var(--pled-line)}
+.pkey.hold{fill:var(--pled);stroke:var(--accent);stroke-width:2.5}
+.pkey.push{stroke:var(--accent);stroke-width:2.5}
+.plabel{font-size:11px;font-weight:600;fill:var(--b70);text-anchor:middle;
+  dominant-baseline:central;pointer-events:none;transition:fill .2s var(--ease)}
+.plabel.sel{fill:var(--pled-ink)} .plabel.push{fill:var(--accent-ink)}
+.pnote{font-size:10px;font-weight:500;fill:var(--ink-3);text-anchor:middle;
+  dominant-baseline:central;pointer-events:none}
+.pnote.push{font-size:11px;font-weight:700;fill:var(--accent-ink)}
+.plead{stroke:var(--ink-3);stroke-width:.8;stroke-dasharray:1.6 2.2;fill:none;pointer-events:none}
+.plead.push{stroke:var(--accent)}
+.parrow{fill:var(--accent);pointer-events:none}
+.pushgrp{animation:pp 1.15s var(--ease) infinite}
+@keyframes pp{0%,100%{opacity:1}50%{opacity:.32}}
+.hitarea{fill:transparent;cursor:pointer}
+.lockveil{fill:rgba(245,245,247,.86);pointer-events:none}
+.locktext{font-size:14px;font-weight:700;fill:var(--accent-ink);
+  text-anchor:middle;dominant-baseline:central;pointer-events:none}
+
+.selname{margin-top:2px;text-align:center;font-size:12px;color:var(--ink-2)}
+.selname b{color:var(--ink);font-weight:600}
+.selname i{display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--led);border:1px solid var(--led-line);margin-right:6px;vertical-align:1px}
+.selname em{font-style:normal;color:var(--accent-ink);font-weight:600;margin-left:8px}
+
+/* CLEAR 表示 */
+.clear{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  background:rgba(245,245,247,.9);border-radius:var(--r);z-index:5}
+.clear.on{display:flex}
+.clear span{font-size:44px;font-weight:800;letter-spacing:.1em;color:var(--accent);
+  animation:cin .45s var(--ease)}
+@keyframes cin{from{transform:scale(.82);opacity:0}to{transform:scale(1);opacity:1}}
+
+.status{display:flex;align-items:center;justify-content:center;gap:8px;
+  margin:9px 22px 0;font-size:14px;letter-spacing:.018em;color:var(--ink-2)}
+.status svg{width:12px;height:12px;color:var(--ink-3);flex:0 0 auto}
+.status.done{color:var(--ink)} .status.done svg{color:var(--accent)}
+.status.push{color:var(--accent-ink);font-weight:600} .status.push svg{color:var(--accent)}
+
+.more{margin:9px 22px 0;padding:0 0 0 13px;border-left:1px solid var(--b70-hair);
+  font-size:12.5px;line-height:1.76;letter-spacing:.016em;color:var(--ink-2)}
+.more b{color:var(--ink);font-weight:600}
+
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:60;max-width:460px;margin:0 auto;
+  display:flex;gap:10px;align-items:center;padding:10px 14px;
+  padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.86);
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px)}
+.nav::before{content:"";position:absolute;left:0;right:0;top:0;height:.5px;background:var(--b70-hair)}
+.nav button{height:44px;border-radius:22px;font-size:15.5px;font-weight:500;
+  transition:transform .2s var(--ease),opacity .2s var(--ease)}
+.nav button:active{transform:scale(.97);opacity:.85}
+.nav button:disabled{opacity:.26;transform:none}
+#btnPrev{flex:0 0 84px;background:var(--fill);color:var(--ink)}
+#btnNext{flex:1;background:var(--accent);color:#fff;font-weight:600}
+#btnDemo{position:fixed;right:16px;z-index:61;
+  bottom:calc(72px + env(safe-area-inset-bottom));
+  width:44px;height:44px;border-radius:50%;background:var(--fill-2);color:var(--b70);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .2s var(--ease),background .2s var(--ease)}
+#btnDemo:active{transform:scale(.9);background:var(--ink-3)}
+#btnDemo svg{width:18px;height:18px}
+#btnDemo span{position:absolute;bottom:-13px;font-size:9px;font-weight:600;
+  color:var(--ink-3);letter-spacing:.05em;white-space:nowrap}
+.err{margin:10px 14px 0;padding:0 0 0 13px;border-left:2px solid var(--accent);
+  color:var(--accent-ink);font-size:13px;line-height:1.7;display:none}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  .cyl{transition:none}.pushgrp{animation:none}
+}
+</style>
+</head>
+<body class="home">
+
+<nav class="navbar" id="navbar">
+  <a class="back" id="btnBack" href="index.html" aria-label="アプリ一覧へ">‹</a>
+  <div class="wordmark">PONKEY<span id="wmSub">レッスン</span></div>
+  <div class="nav-sp"></div>
+  <div class="nav-actions">
+    <button class="plain" id="btnPlay"><span id="playIcon"></span><span id="playLabel">再生</span></button>
+    <button class="plain" id="btnConn"><span id="connLabel">接続</span></button>
+  </div>
+</nav>
+
+<div class="err jp" id="err"></div>
+
+<div class="home jp" id="home">
+  <h1>レッスン</h1>
+  <p>ふたつあります。上から順番に。</p>
+  <button class="lcard" id="l0">
+    <b><i>1</i>つかいかた</b>
+    <s>P1 から順に音を重ねて、PONKEY をひととおり動かせるようになります。</s>
+    <u>11ステップ · 約10分</u>
+  </button>
+  <button class="lcard" id="l1">
+    <b><i>2</i>つくりかた</b>
+    <s>置き方・抜き方・音階の選び方。同じ機械で「自分の曲」にしていきます。</s>
+    <u>6ステップ · 約10分 · レッスン1のあとで</u>
+  </button>
+</div>
+
+<div class="prog" id="prog"></div>
+
+<div class="head">
+  <div class="eyebrow" id="stepNo"></div>
+  <h1 class="jp" id="stepTitle"></h1>
+  <p class="one jp" id="stepOne"></p>
+</div>
+
+<div class="stage">
+  <svg id="panel" viewBox="0 0 400 326" aria-label="PONKEY の盤面"></svg>
+  <div class="selname jp" id="selName"></div>
+  <div class="clear" id="clearBox"><span>CLEAR</span></div>
+</div>
+
+<div class="status jp" id="status"></div>
+<div class="more jp" id="stepMore"></div>
+
+<div class="nav">
+  <button id="btnPrev">戻る</button>
+  <button id="btnNext">次へ</button>
+</div>
+<button id="btnDemo" aria-label="デモ">
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+       stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7.4 3.6v9.2M7.4 3.6l7.2-1.3v9.2"/>
+    <ellipse cx="5.4" cy="13.4" rx="2" ry="1.7"/>
+    <ellipse cx="12.6" cy="11.9" rx="2" ry="1.7"/>
+  </svg>
+  <span id="demoLabel">DEMO</span>
+</button>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   1. レッスン
+   ===================================================================== */
+const L1=[
+  { no:'はじめに', title:'PONKEY を起動する',
+    one:'どれかのキーを押すと、演奏モードがスタートします。',
+    more:'電源を入れると、PONKEY はまず<b>アドバタイズモード</b>に入ります。アプリと接続できるのはこのあいだだけです。どれかキーを押すとアドバタイズモードを抜けて、単体での演奏モードに入ります。PONKEY が手元になくても、画面のキーをタップすれば同じように進められます。',
+    free:0 },
+  { no:'ステップ 1', part:0, title:'キックを置く',
+    one:'P1 を押してから、印のついた 4か所を押しましょう。',
+    more:'ドラムはシーケンサ専用です。キーを押した瞬間ではなく、<b>再生がその位置に来たときに鳴ります。</b>音が出るのも、円柱が飛び出すのもそのタイミングです。4分音符ごとに鳴るこの形を「4つ打ち」と呼びます。',
+    targets:[0,4,8,12] },
+  { no:'ステップ 2', part:1, title:'スネアを重ねる',
+    one:'P2 に切り替えて、5 と 13 に置きましょう。',
+    more:'2拍目と4拍目で鳴り、キックと合わさって「ドン・タン・ドン・タン」になります。キックは消えていません。PONKEY は<b>パートごとに別々に記録される</b>ので、上に足していけます。',
+    targets:[4,12] },
+  { no:'ステップ 3', part:2, title:'ハイハットで刻む',
+    one:'P3 に切り替えて、印のついた偶数を全部押しましょう。',
+    more:'8分音符で刻むリズムになります。<b>刻みを細かくするほど、同じ BPM でも速く感じます。</b>テンポを変えずに勢いを出したいときに使う手です。',
+    targets:[1,3,5,7,9,11,13,15] },
+  { no:'ステップ 4', part:3, title:'タムでつなぐ',
+    one:'P4 に切り替えて、終わりのほうに 3つ置きましょう。',
+    more:'小節の終わりに少しだけ入れると、次の小節へ流れ込む「フィル」になります。<b>入れすぎると流れが止まります。</b>3つ程度で十分です。',
+    targets:[13,14,15] },
+  { no:'ステップ 5', part:4, title:'ベースを録音する',
+    one:'P5 を押さえたまま、グリッドを 3か所押しましょう。',
+    more:'シンセは押した瞬間に鳴りますが、それだけでは残りません。<b>P キーを押さえている間の演奏が、1ループぶんそのまま録音されます。</b>いつ押していつ離したかまで覚えているので、長く押せば長い音になります。（パソコンで操作している場合は、スペースキーを押している間が「P キーを押している」状態になります。）',
+    rec:3 },
+  { no:'ステップ 6', part:5, title:'メロディを録音する',
+    one:'P6 を押さえたまま、メロディを 3音入れましょう。',
+    more:'キーには音階の名前が書いてあります。どこを押しても外れません。<b>ルーパーは重ねられます。</b>すでに録音した音は消えないので、上から足していけます。消したいときはパートごとにダブルクリックです。',
+    rec:3 },
+  { no:'ステップ 7', part:6, title:'パッドで空間を埋める',
+    one:'P7 を押さえたまま、2音だけ入れましょう。',
+    more:'減衰の長い音で、後ろをふんわり埋める役です。長めに押さえると、そのぶん長く伸びます。これで<b>7つのパートが全部そろいました。</b>',
+    rec:2 },
+  { no:'ステップ 8', title:'テンポを変える',
+    one:'Fn を押しながら P2、そのあとグリッドを押しましょう。',
+    more:'左端が 60、右端が 210 で、10刻みで BPM が変わります。<b>Fn 系の操作は Fn を押している間だけ有効</b>です。離すと元のモードに戻ります。',
+    bpmStep:true },
+  { no:'ステップ 9', title:'できあがり',
+    one:'再生ボタンを押して、通して聴いてみましょう。',
+    more:'7つのパートが重なって、ひとつのループになりました。気に入らないところがあれば、P キーで切り替えて差し替えられます。',
+    finale:true },
+  { no:'さいご', title:'ぜんぶ消す',
+    one:'P1 から順に、P キーをダブルクリックして消しましょう。',
+    more:'パートキーを素早く2回押すと、<b>そのパートの音だけがまとめて消えます。</b>実機では LED がフラッシュして、消えたことが分かります。全部消えたらレッスン1は終わりです。',
+    clearAll:true },
+];
+const L2=[
+  { no:'ステップ 1', part:0, title:'土台を選ぶ',
+    one:'デモを押して、キックの型を 3つ聴き比べましょう。',
+    more:'同じキックでも、置き方で曲の性格が決まります。<b>4つ打ち</b>はまっすぐ前へ進む感じ。<b>8ビート</b>は弾む感じ。<b>裏打ち</b>は浮いた感じ。デモを押すたびに切り替わるので、気に入ったものを残して次へ進んでください。',
+    demoSet:[[0,4,8,12],[0,3,6,8,11,14],[2,6,10,14]],
+    demoNames:['4つ打ち','8ビート','裏打ち'], needAny:true },
+  { no:'ステップ 2', part:2, title:'引いてみる',
+    one:'ハットを全部埋めてから、何か所か消しましょう。',
+    more:'足すほど良くなるわけではありません。<b>抜いたところに、前へ進む力が生まれます。</b>デモで16個すべて埋めたあと、好きなところをもう一度押して消してください。消したところで曲が息をします。',
+    demoSet:[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]],
+    demoNames:['全部埋める'], between:[6,14] },
+  { no:'ステップ 3', part:4, title:'ベースを合わせる',
+    one:'P5 を押さえたまま、キックと同じ位置に置きましょう。',
+    more:'キックとベースが<b>同じ位置で鳴ると、重心がそろって安定します。</b>ずらすと跳ねた感じになります。デモで両方に切り替わるので、聴き比べてから自分で置き直してみてください。',
+    demoSet:[[{s:0,k:0,d:2},{s:4,k:0,d:2},{s:8,k:2,d:2},{s:12,k:0,d:2}],
+             [{s:2,k:0,d:1},{s:6,k:2,d:1},{s:10,k:0,d:1},{s:14,k:3,d:1}]],
+    demoNames:['そろえる','ずらす'], rec:2 },
+  { no:'ステップ 4', part:5, title:'メロディは音数を減らす',
+    one:'P6 を押さえたまま、3音だけ入れましょう。',
+    more:'<b>音数が少ないほど、覚えやすい旋律になります。</b>思いついたら足すのではなく、まず3音で形を作ってください。グリッドには音階の音だけが並んでいるので、どこを押しても外れません。',
+    demoSet:[[{s:0,k:7,d:3},{s:6,k:9,d:2},{s:10,k:7,d:4}]],
+    demoNames:['お手本'], rec:3 },
+  { no:'ステップ 5', title:'音階を変える',
+    one:'グリッドで音階を選んで、同じフレーズを聴き比べましょう。',
+    more:'一音も置き換えずに、曲の国籍が変わります。<b>琉球</b>にすると沖縄風、<b>都節</b>にすると和風、<b>ブルース</b>にすると渋くなります。実機では <b>Fn を押しながら P4 を3回</b>押すと音階のページに入ります。',
+    scaleStep:true },
+  { no:'ステップ 6', title:'長さを変える',
+    one:'ループの長さを 16 以外にしてみましょう。',
+    more:'16 のままだと必ず4拍子に聞こえます。<b>12 にすると3拍子っぽく、6 にすると忙しく</b>聞こえます。実機では <b>Fn を押しながら P3</b>、そのあとグリッドを押すと、そこまでの長さでループします。',
+    loopStep:true },
+];
+const LESSONS=[{name:'つかいかた',steps:L1},{name:'つくりかた',steps:L2}];
+
+const PARTS=[
+  {n:'P1',s:'キック'},{n:'P2',s:'スネア'},{n:'P3',s:'ハット'},{n:'P4',s:'タム'},
+  {n:'P5',s:'ベース'},{n:'P6',s:'リード'},{n:'P7',s:'パッド'},{n:'Fn',s:'機能'},
+];
+const LED=[
+  {hex:'#BA523B',tint:'#F3E4DF',line:'#7E3524',ink:'#FFFFFF'},
+  {hex:'#4C913B',tint:'#E4EFE0',line:'#33612A',ink:'#FFFFFF'},
+  {hex:'#4067B5',tint:'#E0E6F2',line:'#2B457A',ink:'#FFFFFF'},
+  {hex:'#9E479E',tint:'#F0E4F0',line:'#6B2F6B',ink:'#FFFFFF'},
+  {hex:'#368C86',tint:'#DEEDEB',line:'#245D59',ink:'#FFFFFF'},
+  {hex:'#939039',tint:'#EDECDE',line:'#625F25',ink:'#FFFFFF'},
+  {hex:'#7647B8',tint:'#E7E1F1',line:'#4F2E7C',ink:'#FFFFFF'},
+  {hex:'#8A8A8F',tint:'#EEEEF0',line:'#5C5C60',ink:'#FFFFFF'},
+];
+const SCALES=[
+  {n:'メジャーペンタ',iv:[0,2,4,7,9]},{n:'マイナーペンタ',iv:[0,3,5,7,10]},
+  {n:'琉球',iv:[0,4,5,7,11]},{n:'都節',iv:[0,1,5,7,8]},
+  {n:'メジャー',iv:[0,2,4,5,7,9,11]},{n:'ドリアン',iv:[0,2,3,5,7,9,10]},
+  {n:'ブルース',iv:[0,3,5,6,7,10]},{n:'ホールトーン',iv:[0,2,4,6,8,10]},
+];
+const NOTE_ABC=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_KANA=['ド','ド#','レ','レ#','ミ','ファ','ファ#','ソ','ソ#','ラ','ラ#','シ'];
+const DEMO1=[
+  [0,4,8,12],[4,12],[0,2,4,6,8,10,12,14],[13,14,15],
+  [{s:0,k:0,d:2},{s:6,k:2,d:2},{s:8,k:0,d:2},{s:14,k:4,d:2}],
+  [{s:0,k:7,d:2},{s:4,k:9,d:2},{s:8,k:11,d:2},{s:12,k:9,d:4}],
+  [{s:0,k:4,d:8},{s:8,k:7,d:8}],
+];
+const ICON={
+  play:'<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3.4 2.1 9.6 5.6a.45.45 0 0 1 0 .8L3.4 9.9A.45.45 0 0 1 2.7 9.5V2.5a.45.45 0 0 1 .7-.4z"/></svg>',
+  stop:'<svg viewBox="0 0 12 12" fill="currentColor"><rect x="3" y="3" width="6" height="6"/></svg>',
+  check:'<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.4 5.6 10.4 11.5 3.9"/></svg>',
+  next:'<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5 9.5 7 5 11.5"/></svg>',
+  down:'<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2.5v9M3.2 7.8 7 11.6l3.8-3.8"/></svg>',
+};
+
+/* =====================================================================
+   2. 投影
+   ===================================================================== */
+const ISO={ox:118,oy:32,colx:62,coly:10,rowx:-20,rowy:38,rows:4,cols:4};
+const CYL_R=0.45,CYL_UP=22,CYL_LEN=50;
+const PW=.5,PD=.5,PR0=ISO.rows+.28;
+const P=(c,r)=>[ISO.ox+c*ISO.colx+r*ISO.rowx, ISO.oy+c*ISO.coly+r*ISO.rowy];
+function quad(c,r,w,d){
+  w=w===undefined?1:w; d=d===undefined?1:d;
+  const a=P(c,r),b=P(c+w,r),e=P(c+w,r+d),f=P(c,r+d);
+  return `M${a[0]} ${a[1]}L${b[0]} ${b[1]}L${e[0]} ${e[1]}L${f[0]} ${f[1]}Z`;
+}
+const LIE=`matrix(1 ${ISO.coly/ISO.colx} ${ISO.rowx/ISO.colx} ${ISO.rowy/ISO.colx} 0 0)`;
+function ellipseGeom(rho){
+  const a=ISO.colx,c=ISO.rowx,b=ISO.coly,d=ISO.rowy;
+  const S11=a*a+c*c,S12=a*b+c*d,S22=b*b+d*d;
+  const tr=S11+S22,gap=Math.sqrt((S11-S22)*(S11-S22)+4*S12*S12);
+  const l1=(tr+gap)/2,l2=(tr-gap)/2;
+  const ang=Math.abs(S12)<1e-9?(S11>=S22?0:90):Math.atan2(l1-S11,S12)*180/Math.PI;
+  return {rx:Math.sqrt(l1)*rho,ry:Math.sqrt(l2)*rho,ang};
+}
+const SIL_R=Math.sqrt(ISO.colx*ISO.colx+ISO.rowx*ISO.rowx);
+const SIL_DX=CYL_R*SIL_R;
+const SIL_DY=CYL_R*(ISO.colx*ISO.coly+ISO.rowx*ISO.rowy)/SIL_R;
+
+/* =====================================================================
+   3. 状態
+   ---------------------------------------------------------------------
+   音符は {s:開始ステップ, k:キー, d:長さ(ステップ)}。
+   ルーパーは「いつ押していつ離したか」を覚えるので、d を持つ。
+   ===================================================================== */
+const S={
+  lesson:null, idx:0,
+  song:[[],[],[],[],[],[],[]], sel:0,
+  done:[], hitCount:0, demoIdx:-1, interacted:false, clearing:false,
+  playing:false, bpm:100, cur:-1, loopLen:16, scale:0,
+  connected:false, sync:false, device:null, logChar:null, cmdChar:null, midiChar:null,
+  held:new Set(), space:false, pending:null,
+};
+const prog=()=>S.lesson===null?[]:LESSONS[S.lesson].steps;
+const cur =()=>prog()[S.idx]||{};
+const hasKey=(p,k)=>S.song[p].some(n=>n.k===k);
+function toggleDrum(p,i){
+  const j=S.song[p].findIndex(n=>n.s===i);
+  if(j<0){S.song[p].push({s:i,k:i,d:1});return true;}
+  S.song[p].splice(j,1);return false;
+}
+const recording=()=>S.sel>=4&&(S.held.has(S.sel)||S.space);
+function scaleSemi(key){
+  const iv=SCALES[S.scale].iv,len=iv.length;
+  return Math.floor(key/len)*12+iv[key%len];
+}
+const noteAbc =k=>NOTE_ABC[scaleSemi(k)%12];
+const noteKana=k=>NOTE_KANA[scaleSemi(k)%12];
+
+/* =====================================================================
+   4. 音
+   ===================================================================== */
+let AC=null,master=null;
+function audio(){
+  if(AC) return AC;
+  AC=new (window.AudioContext||window.webkitAudioContext)();
+  master=AC.createGain(); master.gain.value=.8; master.connect(AC.destination);
+  return AC;
+}
+function env(g,t,a,d,peak){
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(peak,t+a);
+  g.gain.exponentialRampToValueAtTime(.0001,t+a+d);
+}
+let noiseBuf=null;
+function noise(){
+  if(noiseBuf) return noiseBuf;
+  const ac=audio(),n=ac.sampleRate;
+  noiseBuf=ac.createBuffer(1,n,ac.sampleRate);
+  const d=noiseBuf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  return noiseBuf;
+}
+const midi=m=>440*Math.pow(2,(m-69)/12);
+/* dur … シンセの音の長さ(秒)。ルーパーが覚えた押している時間 */
+function play(part,key,when,dur){
+  if(S.sync) return;
+  const ac=audio(); const t=when||ac.currentTime;
+  const g=ac.createGain(); g.connect(master);
+  if(part===0){
+    const o=ac.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+.12);
+    env(g,t,.002,.3,1.0); o.connect(g); o.start(t); o.stop(t+.35);
+  } else if(part===1){
+    const s=ac.createBufferSource(); s.buffer=noise();
+    const f=ac.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1900; f.Q.value=.8;
+    env(g,t,.002,.17,.6); s.connect(f); f.connect(g); s.start(t); s.stop(t+.22);
+    const o=ac.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(190,t);
+    const g2=ac.createGain(); env(g2,t,.002,.1,.35); o.connect(g2); g2.connect(master);
+    o.start(t); o.stop(t+.14);
+  } else if(part===2){
+    const s=ac.createBufferSource(); s.buffer=noise();
+    const f=ac.createBiquadFilter(); f.type='highpass'; f.frequency.value=8000;
+    env(g,t,.001,.05,.32); s.connect(f); f.connect(g); s.start(t); s.stop(t+.07);
+  } else if(part===3){
+    const o=ac.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(260,t); o.frequency.exponentialRampToValueAtTime(110,t+.2);
+    env(g,t,.003,.28,.8); o.connect(g); o.start(t); o.stop(t+.34);
+  } else {
+    const k=key||0, base=part===4?36:(part===5?60:48);
+    const hold=Math.max(.12, dur||.3);
+    const o=ac.createOscillator();
+    o.type=part===4?'square':(part===5?'sawtooth':'sine');
+    o.frequency.value=midi(base+scaleSemi(k));
+    const f=ac.createBiquadFilter(); f.type='lowpass';
+    f.frequency.value=part===4?600:(part===5?3200:1400);
+    const A=part===6?.22:.004, D=hold+(part===6?.5:.18);
+    env(g,t,A,D,part===6?.28:.42);
+    o.connect(f); f.connect(g); o.start(t); o.stop(t+A+D+.1);
+    if(part===6){
+      const o2=ac.createOscillator(); o2.type='sine';
+      o2.frequency.value=midi(base+scaleSemi(k))*1.005;
+      const g2=ac.createGain(); env(g2,t,A,D,.2);
+      o2.connect(g2); g2.connect(master); o2.start(t); o2.stop(t+A+D+.1);
+    }
+  }
+}
+
+/* =====================================================================
+   5. シーケンサ
+   ===================================================================== */
+let nextTime=0,nextStep=0,timer=null;
+const stepDur=()=>60/S.bpm/4;
+function scheduler(){
+  const ac=audio();
+  while(nextTime<ac.currentTime+.12){
+    const st=nextStep;
+    for(let p=0;p<7;p++) for(const n of S.song[p])
+      if(n.s===st) play(p,n.k,nextTime,(n.d||1)*stepDur());
+    const at=nextTime;
+    setTimeout(()=>showStep(st),Math.max(0,(at-ac.currentTime)*1000));
+    nextTime+=stepDur(); nextStep=(nextStep+1)%S.loopLen;
+  }
+}
+function startSeq(){
+  if(S.sync) return;
+  audio(); if(AC.state==='suspended') AC.resume();
+  S.playing=true; nextTime=AC.currentTime+.05; nextStep=0;
+  timer=setInterval(scheduler,25);
+  el('playIcon').innerHTML=ICON.stop; el('playLabel').textContent='停止';
+}
+function stopSeq(){
+  S.playing=false; clearInterval(timer); timer=null; S.cur=-1;
+  el('playIcon').innerHTML=ICON.play; el('playLabel').textContent='再生';
+  paintGrid(); allDown();
+}
+/* 円柱が動くのは「いま選んでいるパート」の音だけ。パートごとに独立 */
+function showStep(i){
+  if(!S.playing) return;
+  S.cur=i; paintGrid();
+  if(S.sel>=7) return;
+  for(const n of S.song[S.sel])
+    if(n.s===i) popCyl(n.k, Math.min(900,(n.d||1)*stepDur()*1000));
+}
+
+/* =====================================================================
+   6. 盤面
+   ===================================================================== */
+const el=id=>document.getElementById(id);
+const SVGNS='http://www.w3.org/2000/svg';
+const sockets=[],cyls=[],nums=[],subs=[],pkeys=[],plabels=[],pnotes=[],pleads=[],parrows=[];
+let lockVeil=null,lockText=null;
+function mk(tag,attrs){
+  const n=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) n.setAttribute(k,attrs[k]);
+  return n;
+}
+function buildPanel(){
+  const svg=el('panel'),E=ellipseGeom(CYL_R);
+  const defs=mk('defs',{}); svg.appendChild(defs);
+  for(let k=0;k<16;k++){
+    const ctr=P((k&3)+.5,(k>>2)+.5),X=ctr[0],Y=ctr[1];
+    const cp=mk('clipPath',{id:'hole'+k});
+    cp.appendChild(mk('path',{d:
+      `M-500 -500L900 -500L900 ${Y+SIL_DY}L${X+SIL_DX} ${Y+SIL_DY}`+
+      `A${E.rx} ${E.ry} ${E.ang} 0 1 ${X-SIL_DX} ${Y-SIL_DY}L-500 ${Y-SIL_DY}Z`}));
+    defs.appendChild(cp);
+  }
+  for(let r=0;r<ISO.rows;r++){
+    for(let c=0;c<ISO.cols;c++){
+      const k=r*4+c,s=mk('path',{class:'socket',d:quad(c,r)});
+      svg.appendChild(s); sockets[k]=s;
+    }
+    for(let c=0;c<ISO.cols;c++){
+      const k=r*4+c,ctr=P(c+.5,r+.5),X=ctr[0],Y=ctr[1];
+      const clip=mk('g',{'clip-path':'url(#hole'+k+')'});
+      const g=mk('g',{class:'cyl'});
+      g.appendChild(mk('ellipse',{class:'cyl-base',rx:E.rx,ry:E.ry,
+        transform:`translate(${X} ${Y+CYL_LEN}) rotate(${E.ang})`}));
+      g.appendChild(mk('path',{class:'cyl-side',d:
+        `M${X-SIL_DX} ${Y-SIL_DY}L${X-SIL_DX} ${Y-SIL_DY+CYL_LEN}`+
+        `L${X+SIL_DX} ${Y+SIL_DY+CYL_LEN}L${X+SIL_DX} ${Y+SIL_DY}Z`}));
+      g.appendChild(mk('line',{class:'cyl-edge',x1:X-SIL_DX,y1:Y-SIL_DY,x2:X-SIL_DX,y2:Y-SIL_DY+CYL_LEN}));
+      g.appendChild(mk('line',{class:'cyl-edge',x1:X+SIL_DX,y1:Y+SIL_DY,x2:X+SIL_DX,y2:Y+SIL_DY+CYL_LEN}));
+      g.appendChild(mk('ellipse',{class:'cyl-cap',rx:E.rx,ry:E.ry,
+        transform:`translate(${X} ${Y}) rotate(${E.ang})`}));
+      const a=P(c+.5,r+.42), b=P(c+.5,r+.63);
+      const t=mk('text',{class:'tnum',x:0,y:0,transform:`translate(${a[0]} ${a[1]}) ${LIE}`});
+      g.appendChild(t); nums[k]=t;
+      const t2=mk('text',{class:'tsub',x:0,y:0,transform:`translate(${b[0]} ${b[1]}) ${LIE}`});
+      g.appendChild(t2); subs[k]=t2;
+      clip.appendChild(g); svg.appendChild(clip); cyls[k]=g;
+    }
+  }
+  for(let u=0;u<8;u++){
+    const c0=u*PW;
+    const p=mk('path',{class:'pkey',d:quad(c0,PR0,PW,PD)});
+    p.style.setProperty('--pled',LED[u].hex); p.style.setProperty('--pled-line',LED[u].line);
+    svg.appendChild(p); pkeys[u]=p;
+    const lp=P(c0+PW/2,PR0+PD/2);
+    const t=mk('text',{class:'plabel',x:0,y:0,transform:`translate(${lp[0]} ${lp[1]}) ${LIE}`});
+    t.style.setProperty('--pled-ink',LED[u].ink);
+    t.textContent=PARTS[u].n; svg.appendChild(t); plabels[u]=t;
+    const ap=P(c0+PW/2,PR0+PD+.12);
+    const arrow=mk('path',{class:'parrow',
+      d:`M${ap[0]-4.5} ${ap[1]+5.5}L${ap[0]+4.5} ${ap[1]+5.5}L${ap[0]} ${ap[1]}Z`});
+    arrow.style.display='none'; svg.appendChild(arrow); parrows[u]=arrow;
+    // 注釈はキーから離して置き、点線で指す
+    const kb=P(c0+PW/2,PR0+PD);                       // キーの手前の辺の中央
+    const hi=P(c0+PW/2,PR0+PD+.78), lo=P(c0+PW/2,PR0+PD+1.26);
+    const lead=mk('path',{class:'plead',d:''});
+    svg.appendChild(lead); pleads[u]=lead;
+    const note=mk('text',{class:'pnote',x:hi[0],y:(u%2?lo[1]:hi[1])});
+    note.dataset.yHi=hi[1]; note.dataset.yLo=lo[1];
+    note.dataset.kx=kb[0]; note.dataset.ky=kb[1]; note.dataset.nx=hi[0];
+    svg.appendChild(note); pnotes[u]=note;
+  }
+  for(let k=0;k<16;k++){
+    const h=mk('path',{class:'hitarea',d:quad(k&3,k>>2)});
+    bindPress(h,()=>gridDown(k),()=>gridUp(k));
+    svg.appendChild(h);
+  }
+  for(let u=0;u<8;u++){
+    const h=mk('path',{class:'hitarea',d:quad(u*PW,PR0-.06,PW,1.0)});
+    bindPress(h,()=>partDown(u),()=>partUp(u));
+    svg.appendChild(h);
+  }
+  // 盤面ロック（Push!! 中は操作させない）
+  const tl=P(0,0), br=P(4,4);
+  lockVeil=mk('path',{class:'lockveil',
+    d:`M${P(0,0)[0]-14} ${P(0,0)[1]-30}L${P(4,0)[0]+14} ${P(4,0)[1]-30}`+
+      `L${P(4,4)[0]+14} ${P(4,4)[1]+8}L${P(0,4)[0]-14} ${P(0,4)[1]+8}Z`});
+  lockVeil.style.display='none'; svg.appendChild(lockVeil);
+  const mid=P(2,2);
+  lockText=mk('text',{class:'locktext',x:mid[0],y:mid[1]});
+  lockText.style.display='none'; svg.appendChild(lockText);
+}
+function bindPress(node,down,up){
+  node.addEventListener('pointerdown',e=>{e.preventDefault();down();});
+  node.addEventListener('pointerup',up);
+  node.addEventListener('pointerleave',up);
+  node.addEventListener('pointercancel',up);
+}
+const cylTimer=new Array(16).fill(0);
+function popCyl(k,ms){
+  const g=cyls[k]; if(!g) return;
+  g.classList.add('up'); clearTimeout(cylTimer[k]);
+  cylTimer[k]=setTimeout(()=>g.classList.remove('up'), ms||170);
+}
+function dropCyl(k){const g=cyls[k];if(!g)return;clearTimeout(cylTimer[k]);g.classList.remove('up');}
+function allDown(){for(let k=0;k<16;k++) dropCyl(k);}
+
+function applyLed(){
+  const L=LED[S.sel<7?S.sel:7],root=document.documentElement.style;
+  root.setProperty('--led',L.hex); root.setProperty('--led-tint',L.tint);
+  root.setProperty('--led-line',L.line); root.setProperty('--led-ink',L.ink);
+}
+function pushTarget(){
+  const st=cur();
+  if(st.part===undefined) return null;
+  return S.sel===st.part?null:st.part;
+}
+function paintParts(){
+  const need=pushTarget(),st=cur();
+  pkeys.forEach((p,i)=>{
+    const sel=S.sel===i,hold=sel&&recording(),push=need===i;
+    p.classList.toggle('sel',sel&&!hold);
+    p.classList.toggle('hold',hold);
+    p.classList.toggle('push',push);
+    plabels[i].classList.toggle('sel',sel);
+    plabels[i].classList.toggle('push',push);
+    const learned=i<7&&(S.lesson===1||S.idx>=i+1);
+    const note=pnotes[i],arrow=parrows[i],lead=pleads[i];
+    const show=push||learned;
+    note.textContent=push?'Push !!':(learned?PARTS[i].s:'');
+    note.setAttribute('class','pnote'+(push?' push pushgrp':''));
+    const y=i%2?note.dataset.yLo:note.dataset.yHi;
+    note.setAttribute('y',y);
+    arrow.setAttribute('class','parrow'+(push?' pushgrp':''));
+    arrow.style.display=push?'':'none';
+    // 点線のリーダー線。キーの手前の辺から注釈の少し上まで
+    if(show){
+      lead.setAttribute('d',`M${note.dataset.kx} ${note.dataset.ky}L${note.dataset.nx} ${(+y)-6}`);
+      lead.setAttribute('class','plead'+(push?' push pushgrp':''));
+      lead.style.display='';
+    } else lead.style.display='none';
+  });
+  applyLed();
+  let extra='';
+  if(recording()) extra='<em>録音中</em>';
+  else if(st.scaleStep) extra='<em>'+SCALES[S.scale].n+'</em>';
+  else if(st.loopStep) extra='<em>'+S.loopLen+' ステップ</em>';
+  el('selName').innerHTML=(S.sel<7?'<i></i>選択中 <b>'+PARTS[S.sel].n+'</b> '+PARTS[S.sel].s:'')+extra;
+}
+function paintGrid(){
+  const st=cur(),need=pushTarget(),show=need===null;
+  const synth=S.sel>=4&&S.sel<7;
+  for(let i=0;i<16;i++){
+    const on=S.sel<7&&hasKey(S.sel,i);
+    const want=show&&(st.targets?st.targets.includes(i):false)&&!on;
+    cyls[i].classList.toggle('on',on);
+    cyls[i].classList.toggle('want',want);
+    cyls[i].classList.toggle('outside',i>=S.loopLen);
+    sockets[i].classList.toggle('want',want);
+    sockets[i].classList.toggle('outside',i>=S.loopLen);
+    sockets[i].classList.toggle('now',S.playing&&S.cur===i);
+    // シンセのときは音階名（アルファベット＋カタカナ）
+    nums[i].textContent = synth?noteAbc(i):(i+1);
+    subs[i].textContent = synth?noteKana(i):'';
+  }
+  // Push!! 中は盤面を覆って操作させない
+  if(lockVeil){
+    lockVeil.style.display=show?'none':'';
+    lockText.style.display=show?'none':'';
+    if(!show) lockText.textContent=PARTS[need].n+' を押す';
+  }
+}
+function paintStep(){
+  const st=cur();
+  el('stepNo').textContent=st.no;
+  el('stepTitle').textContent=st.title;
+  el('stepOne').textContent=st.one;
+  el('stepMore').innerHTML=st.more||'';
+  el('prog').innerHTML=prog().map((_,i)=>
+    '<i class="'+(i===S.idx?'now':(S.done[i]?'done':''))+'"></i>').join('');
+  el('btnPrev').disabled=S.idx===0;
+  el('btnNext').textContent=S.idx===prog().length-1?'レッスンを選ぶ':'次へ';
+  el('demoLabel').textContent=st.demoNames
+    ?(S.demoIdx>=0?st.demoNames[S.demoIdx]:'きいてみる'):'DEMO';
+  paintParts(); paintGrid(); paintStatus();
+}
+function paintStatus(){
+  const st=cur(),box=el('status'),need=pushTarget();
+  let txt,done=false,push=false;
+  if(need!==null){
+    txt=PARTS[need].n+' を押して「'+PARTS[need].s+'」に切り替えよう'; push=true;
+  } else if(st.clearAll){
+    const left=S.song.filter(a=>a.length>0).length;
+    done=left===0; txt=done?'全部消えました':'あと '+left+' パート';
+  } else if(st.between){
+    const n=S.song[st.part].length;
+    done=n>=st.between[0]&&n<=st.between[1];
+    txt=n===0?'デモで全部埋めよう':(n>st.between[1]?'もう少し抜いてみよう':'いい抜け方です');
+  } else if(st.targets){
+    const part=st.part!==undefined?st.part:S.sel;
+    const have=st.targets.filter(i=>hasKey(part,i)).length;
+    done=have===st.targets.length;
+    txt=done?'置けました':'あと '+(st.targets.length-have)+'か所';
+  } else if(st.rec){
+    const n=S.song[st.part].length;
+    done=n>=st.rec;
+    txt=done?'録音できました':'P'+(st.part+1)+' を押さえたまま、あと '+(st.rec-n)+'音';
+  } else if(st.needAny){
+    done=S.song[st.part].length>0; txt=done?'これでいきましょう':'デモを押すか、自分で置いてみよう';
+  } else if(st.scaleStep){
+    done=S.scale!==0; txt=done?'いまの音階：'+SCALES[S.scale].n:'グリッド 1〜8 で音階を選ぼう';
+  } else if(st.loopStep){
+    done=S.loopLen!==16; txt=done?'ループの長さ：'+S.loopLen+' ステップ':'グリッドを押して長さを変えよう';
+  } else if(st.free){
+    done=S.hitCount>0; txt=done?'いいですね':'どれか押してみよう';
+  } else if(st.bpmStep){
+    txt='現在 '+S.bpm+' BPM'; done=S.hitCount>0;
+  } else if(st.finale){
+    txt=S.sync?'本体で聴いてみよう':'再生ボタンで聴いてみよう'; done=true;
+  } else { txt='準備ができたら次へ'; done=true; }
+  const was=S.done[S.idx];
+  S.done[S.idx]=done;
+  box.className='status jp'+(done?' done':'')+(push?' push':'');
+  box.innerHTML=(push?ICON.down:(done?ICON.check:ICON.next))+'<span>'+txt+'</span>';
+  // 自力でクリアしたときだけ CLEAR → 1ループ再生 → 自動で次へ
+  if(done&&!was&&S.interacted&&!S.clearing) runClear();
+}
+
+/* CLEAR を出して 1ループぶん聴かせ、自動で次のお題へ */
+function runClear(){
+  S.clearing=true;
+  const st=cur();
+  el('clearBox').classList.add('on');
+  if(st.clearAll) finishLesson();
+  else if(!S.playing&&!S.sync) startSeq();
+  const wait=Math.max(1200, S.loopLen*stepDur()*1000+250);
+  setTimeout(()=>{
+    el('clearBox').classList.remove('on');
+    S.clearing=false;
+    go(1);
+  }, wait);
+}
+
+/* =====================================================================
+   7. 操作
+   ===================================================================== */
+const DOUBLE_MS=400,lastPartTap=new Array(8).fill(0);
+function partDown(u){
+  audio(); if(AC.state==='suspended') AC.resume();
+  if(u===7){ S.held.add(7); paintParts(); return; }
+  const now=performance.now();
+  if(now-lastPartTap[u]<DOUBLE_MS){ lastPartTap[u]=0; clearPart(u); }
+  else lastPartTap[u]=now;
+  S.held.add(u); S.sel=u; S.interacted=true;
+  paintParts(); paintGrid(); paintStatus();
+}
+function partUp(u){
+  S.held.delete(u);
+  if(S.pending&&S.pending.part===u) endNote();      // P キーを離したら録音終了
+  paintParts();
+}
+function clearPart(u){ S.song[u]=[]; paintGrid(); paintStatus(); }
+
+function gridDown(i){
+  audio(); if(AC.state==='suspended') AC.resume();
+  const st=cur();
+  if(S.clearing) return;
+  if(pushTarget()!==null) return;          // 盤面ロック中
+  if(S.held.has(7)) return;                // Fn 押下中は本体では別機能
+  S.interacted=true;
+  if(st.bpmStep){
+    S.bpm=60+i*10;
+    if(S.playing){stopSeq();startSeq();}
+    popCyl(i); S.hitCount++; paintStatus(); return;
+  }
+  if(st.scaleStep){
+    if(i<8){ S.scale=i; play(5,7,0,.5); }
+    popCyl(i); S.hitCount++; paintParts(); paintGrid(); paintStatus(); return;
+  }
+  if(st.loopStep){
+    S.loopLen=((i>>2)+1)*((i&3)+1);
+    if(S.playing){stopSeq();startSeq();}
+    popCyl(i); S.hitCount++; paintParts(); paintGrid(); paintStatus(); return;
+  }
+  if(S.sel<4){
+    // ドラムは打ち込みだけ。音も円柱もインジケータが来たときに動く
+    toggleDrum(S.sel,i);
+    S.hitCount++; paintGrid(); paintStatus(); return;
+  }
+  // シンセ：その場で鳴る。P キーを押さえていれば録音を開始
+  play(S.sel,i,0,.8);
+  popCyl(i,900);
+  if(recording()) startNote(i);
+  S.hitCount++; paintGrid(); paintStatus();
+}
+function gridUp(i){
+  if(S.pending&&S.pending.k===i) endNote();
+}
+/* ルーパー：押した位置と離した位置を覚える。同じキーでも消さず、重ねる */
+function startNote(k){
+  if(S.pending) endNote();
+  S.pending={part:S.sel,k,start:(S.playing&&S.cur>=0)?S.cur:0};
+}
+function endNote(){
+  const p=S.pending; S.pending=null; if(!p) return;
+  const end=(S.playing&&S.cur>=0)?S.cur:p.start;
+  let d=((end-p.start)+S.loopLen)%S.loopLen; if(d<1) d=1;
+  S.song[p.part].push({s:p.start,k:p.k,d});
+  paintGrid(); paintStatus();
+}
+function finishLesson(){
+  S.song=[[],[],[],[],[],[],[]];
+  if(S.connected) sendCC(CC_RESET,0);
+  paintGrid();
+}
+function demo(){
+  audio(); if(AC.state==='suspended') AC.resume();
+  if(S.clearing) return;
+  const st=cur();
+  const p=st.part!==undefined?st.part:(S.sel<7?S.sel:0);
+  S.interacted=true;
+  const src=st.demoSet?(S.demoIdx=(S.demoIdx+1)%st.demoSet.length, st.demoSet[S.demoIdx]):DEMO1[p];
+  S.song[p]=src.map(n=>typeof n==='number'?{s:n,k:n,d:1}:{s:n.s,k:n.k,d:n.d||1});
+  S.sel=p;
+  if(!S.playing&&!S.sync) startSeq();
+  paintStep();
+}
+
+/* =====================================================================
+   8. 実機との接続
+   ===================================================================== */
+const UUID_MIDI='03b80e5a-ede8-4b33-a751-6ce34ec4c700';
+const UUID_MIDI_CHAR='7772e5db-3868-4112-a1a9-f2669d106bf3';
+const UUID_DBG='504f4e4b-4559-4442-5047-445342000001';
+const UUID_LOG='504f4e4b-4559-4442-5047-445442000002';
+const UUID_CMD='504f4e4b-4559-4442-5047-445443000003';
+const CC_RESET=0x42;
+async function sendCC(cc,val){
+  if(!S.midiChar) return;
+  const ts=Date.now()&0x1FFF;
+  const pkt=new Uint8Array([0x80|((ts>>7)&0x3F),0x80|(ts&0x7F),0xB0,cc,val]);
+  try{ await S.midiChar.writeValueWithoutResponse(pkt); }catch(e){ console.warn(e); }
+}
+function onPacket(ev){
+  const d=new Uint8Array(ev.target.value.buffer);
+  if(d.length<11||d[0]!==0xA5) return;
+  const cat=d[8],id=d[9],p=d.subarray(11,11+d[10]);
+  if(cat===0x03){ if(id===0x01) popCyl(p[0]); else if(id===0x02) dropCyl(p[0]); return; }
+  if(cat!==0x02||S.lesson===null) return;
+  if(id===0x01) gridDown(p[0]);
+  else if(id===0x02) gridUp(p[0]);
+  else if(id===0x03) partDown(p[0]);
+  else if(id===0x04) partUp(p[0]);
+}
+function setSync(on){
+  S.sync=on; el('btnPlay').disabled=on;
+  if(on){
+    if(S.playing) stopSeq();
+    el('playIcon').innerHTML=''; el('playLabel').textContent='本体で再生'; allDown();
+  } else { el('playIcon').innerHTML=ICON.play; el('playLabel').textContent='再生'; }
+  if(S.lesson!==null) paintStatus();
+}
+async function connect(){
+  if(!navigator.bluetooth){ showErr('このブラウザでは接続できません。Chrome を使ってください。'); return; }
+  showErr('');
+  try{
+    S.device=await navigator.bluetooth.requestDevice({
+      filters:[{namePrefix:'PONKEY'},{services:[UUID_MIDI]}],
+      optionalServices:[UUID_DBG,UUID_MIDI]});
+    S.device.addEventListener('gattserverdisconnected',onDisc);
+    const server=await S.device.gatt.connect();
+    const dbg=await server.getPrimaryService(UUID_DBG);
+    S.logChar=await dbg.getCharacteristic(UUID_LOG);
+    S.cmdChar=await dbg.getCharacteristic(UUID_CMD);
+    S.logChar.addEventListener('characteristicvaluechanged',onPacket);
+    await S.logChar.startNotifications();
+    await S.cmdChar.writeValue(new Uint8Array([0xA6,0x01,0x00]));
+    try{
+      const ms=await server.getPrimaryService(UUID_MIDI);
+      S.midiChar=await ms.getCharacteristic(UUID_MIDI_CHAR);
+      await sendCC(CC_RESET,0);
+      S.song=[[],[],[],[],[],[],[]];
+      showErr('本体のパターンを消して、空の状態から合わせました。');
+    }catch(e){ showErr('本体のパターンを消せませんでした。画面と本体がずれる可能性があります。'); }
+    S.connected=true;
+    el('connLabel').textContent='接続中'; el('btnConn').classList.add('on');
+    setSync(true);
+    if(S.lesson!==null) paintStep();
+  }catch(e){ showErr('接続できませんでした: '+(e.message||e)); }
+}
+function onDisc(){
+  S.connected=false; S.midiChar=null;
+  el('connLabel').textContent='接続'; el('btnConn').classList.remove('on');
+  setSync(false);
+}
+function showErr(m){const b=el('err');b.style.display=m?'block':'none';b.textContent=m||'';}
+
+/* =====================================================================
+   9. 読み上げ
+   ===================================================================== */
+function say(text){
+  if(!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(String(text).replace(/<[^>]+>/g,''));
+  u.lang='ja-JP'; u.rate=1.0;
+  speechSynthesis.speak(u);
+}
+const readStep=()=>{const st=cur(); say(st.one+' '+(st.more||''));};
+
+/* =====================================================================
+   10. 進行
+   ===================================================================== */
+function openLesson(n){
+  S.lesson=n; S.idx=0; S.demoIdx=-1; S.hitCount=0;
+  S.interacted=false; S.clearing=false; S.pending=null;
+  S.done=new Array(prog().length).fill(false);
+  S.song=[[],[],[],[],[],[],[]];
+  S.sel=0; S.scale=0; S.loopLen=16; S.bpm=100;
+  if(S.playing) stopSeq();
+  document.body.classList.remove('home');
+  el('wmSub').textContent='レッスン'+(n+1);
+  paintStep(); scrollTo(0,0);
+  if(!S.sync&&cur().part!==undefined) startSeq();
+  readStep();
+}
+function goHome(){
+  if(S.playing) stopSeq();
+  finishLesson();
+  S.lesson=null; S.clearing=false;
+  document.body.classList.add('home');
+  el('wmSub').textContent='レッスン';
+  el('clearBox').classList.remove('on');
+  window.speechSynthesis&&speechSynthesis.cancel();
+  scrollTo(0,0);
+}
+function go(d){
+  if(S.idx===prog().length-1&&d>0){ goHome(); return; }
+  S.idx=Math.max(0,Math.min(prog().length-1,S.idx+d));
+  S.hitCount=0; S.demoIdx=-1; S.interacted=false; S.pending=null;
+  paintStep(); scrollTo({top:0,behavior:'smooth'});
+  if(!S.playing&&!S.sync&&cur().part!==undefined) startSeq();
+  readStep();
+}
+buildPanel();
+el('playIcon').innerHTML=ICON.play;
+el('l0').onclick=()=>openLesson(0);
+el('l1').onclick=()=>openLesson(1);
+el('btnNext').onclick=()=>go(1);
+el('btnPrev').onclick=()=>go(-1);
+el('btnPlay').onclick=()=>{ if(S.sync) return; S.playing?stopSeq():startSeq(); };
+el('btnConn').onclick=connect;
+// レッスン中は「‹」でレッスン選択へ、選択画面ではアプリ一覧へ戻る
+el('btnBack').onclick=e=>{ if(S.lesson!==null){ e.preventDefault(); goHome(); } };
+el('btnDemo').onclick=demo;
+addEventListener('keydown',e=>{
+  if(e.code==='Space'&&!e.repeat&&S.lesson!==null){e.preventDefault();S.space=true;paintParts();}
+});
+addEventListener('keyup',e=>{
+  if(e.code==='Space'&&S.lesson!==null){S.space=false;if(S.pending)endNote();paintParts();}
+});
+addEventListener('scroll',()=>{el('navbar').classList.toggle('scrolled',scrollY>10);},{passive:true});
+</script>
+</body>
+</html>
