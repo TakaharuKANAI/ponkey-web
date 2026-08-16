@@ -16,6 +16,18 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 - `groove-engine.js` — 解析・提案エンジン（純粋関数、SEQUENCE と GROOVE が共有）。設計は `PONKEY_GROOVE_CONCEPT.md`
 - `sync.html` — SYNC
 - `trance.html` — TRANCE
+- `echo.html` — ECHO（その日の演奏を本体から読み出して残す日記＋共有リンク）。
+  取り込みは `SONG_CMD_DUMP_SLOT`(0x07, payload 0xFE=中身のある全スロット)。ソングモード不要・副作用なし。
+  応答は `DBG_EV_SONG_META` → `DBG_EV_SONG_SLOT_DUMP`（分割・要組み立て）で、スロットは **V2 形式(先頭 0xF2)**。
+  **書き戻しは非可逆**: ファームの `LOAD_SLOT`(`parseSlotPayload`) は V1 形式しか受けず、
+  ①ドラムの非対角ビット（SCALE 化したドラムパート）と矩形設定、②シンセの重ね録りレイヤー
+  （`dur` の bit7。`dur>64` の丸めで消える）が落ちる。保存データ側は V2 のまま無傷なので、
+  ファームが V2 受信に対応すれば後から完全復元できる。落ちた件数はログに出す。
+  **バックアップは GitHub Gist**（非公開＝secret gist。ただし URL を知る人は見られる＝完全な非公開ではない）。
+  トークンは記録本体とは**別の localStorage キー** `ponkey_echo_gist_v01` に置く（`ponkey_echo_v01` と混ぜると
+  「書き出し」の JSON にトークンが載ってしまうため）。同期は id で突き合わせる和集合マージだが、
+  **削除は墓標 `store.deleted` が必須**（無いと消した記録が次の同期で Gist から蘇る）。
+  Gist は 1MB 超で `content` が切り詰められるので `truncated` なら `raw_url` から取り直す
 - `ponkey-sound-guide.html` — 音の世界観・リスニングガイド
 - `manifest.json` / `sw.js` / `icon-*.png` — PWA（インストール・オフライン）
 - `PONKEY_SESSION_CONCEPT.md` — 設計思想ドキュメント。**なぜその挙動なのかはここに書いてある**

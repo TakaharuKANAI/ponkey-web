@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ECHO</title>
+<meta name="theme-color" content="#0e0f12">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY ECHO">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ニュートラル・ダーク (SEQUENCE / SYNC と統一) */
+  :root{--bg:#0e0f12;--panel:#15171b;--panel2:#1b1e23;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;
+        --teal:#6fb0b8;--red:#c96a5e;}
+  *{box-sizing:border-box;border-radius:0}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:14px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
+  header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  header .home{font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none;margin-right:2px}
+  h1{font-size:19px;margin:0 12px 0 0;font-weight:400;letter-spacing:.08em}
+  h2{font-size:11px;color:var(--dim);margin:0 0 10px;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
+  b{font-weight:500;color:var(--txt)}
+  button{font:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:8px 13px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;
+         transition:background .12s,border-color .12s}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button:disabled{opacity:.35;cursor:default;background:transparent;color:var(--dim);border-color:var(--line)}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:rgba(111,176,184,.12)}
+  button.danger{border-color:var(--red);color:var(--red)}
+  button.danger:hover{background:rgba(201,106,94,.12)}
+  /* 小さいボタン。クラス名 .mini はパターン図のグリッドで使っているので衝突させない */
+  button.sm{padding:4px 9px;font-size:11.5px}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .pad{padding:14px;max-width:1120px;margin:0 auto}
+  .panel{background:var(--panel);border:1px solid var(--line);padding:14px;margin-bottom:14px}
+  .cols{display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start}
+  @media(max-width:900px){.cols{grid-template-columns:1fr}}
+  .hint{font-size:12px;color:var(--dim);line-height:1.6}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  input[type=text],input[type=password]{font:inherit;background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);padding:7px 9px;width:100%}
+  input[type=text]:focus,input[type=password]:focus{outline:none;border-color:var(--teal)}
+  /* 警告バンド: 未書き出しが溜まったら出す(ブラウザのストレージ削除で消えるため) */
+  .warn{border:1px solid var(--red);color:var(--red);background:rgba(201,106,94,.07);
+        padding:10px 12px;font-size:12.5px;line-height:1.6;margin-bottom:14px;display:none}
+  .warn.on{display:block}
+  /* 取り込みプレビューの 16 スロット */
+  .slots{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px}
+  .sc{aspect-ratio:1.15;border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;letter-spacing:.04em}
+  .sc.has{border-color:var(--teal);color:var(--teal)}
+  .sc .n{font-size:13px;font-weight:400;margin-bottom:2px}
+  /* タイムライン */
+  .day{margin-bottom:18px}
+  .daylab{font-size:11px;color:var(--dim);letter-spacing:.14em;border-bottom:1px solid var(--line);
+          padding-bottom:5px;margin-bottom:10px;display:flex;gap:10px;align-items:baseline}
+  .entry{border:1px solid var(--line);background:var(--panel2);padding:11px 12px;margin-bottom:8px}
+  .entry.sel{border-color:var(--teal)}
+  .ehead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .etime{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .ename{font-size:14px;font-weight:400}
+  .ename.no{color:var(--dim)}
+  .emeta{font-size:11px;color:var(--dim);margin-left:auto}
+  .minis{display:flex;gap:6px;overflow-x:auto;margin:9px 0 2px;padding-bottom:3px}
+  .mwrap{flex:0 0 auto}
+  .mini{display:grid;grid-template-columns:repeat(16,4px);grid-template-rows:repeat(7,4px);gap:1px;
+        background:#0a0b0e;padding:3px;border:1px solid var(--line)}
+  .mini i{background:#23262c}
+  .mini i.d{background:var(--teal)}
+  .mini i.s{background:var(--red)}
+  .mlab{font-size:9px;color:var(--dim);text-align:center;margin-top:2px;letter-spacing:.04em}
+  .eacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+  /* ヒートマップ(直近12週) */
+  .heat{display:grid;grid-template-rows:repeat(7,9px);grid-auto-flow:column;grid-auto-columns:9px;gap:2px;margin-top:8px}
+  .heat i{background:#1b1e23;border:1px solid #22262c}
+  .heat i.l1{background:rgba(111,176,184,.30);border-color:rgba(111,176,184,.30)}
+  .heat i.l2{background:rgba(111,176,184,.60);border-color:rgba(111,176,184,.60)}
+  .heat i.l3{background:var(--teal);border-color:var(--teal)}
+  .heat i.fut{background:transparent;border-color:transparent}
+  .stats{display:flex;gap:16px;font-size:12px;color:var(--dim);margin-top:10px;flex-wrap:wrap}
+  .stats b{font-size:16px;font-weight:400;color:var(--teal)}
+  .log{height:96px;overflow:auto;background:#0a0b0e;border:1px solid var(--line);padding:8px;
+       font:12px/1.6 ui-monospace,monospace;color:var(--dim);font-weight:300}
+  .empty{color:var(--dim);font-size:13px;padding:22px 0;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <a class="home" href="index.html" title="アプリ一覧へ">‹</a>
+  <h1>ECHO</h1>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <button class="primary" id="btnCapture" disabled>本体から取り込む</button>
+  <span id="dirty" class="pill" style="display:none">本体に未取り込みの変更</span>
+  <span style="flex:1"></span>
+  <button id="btnExport">書き出し</button>
+  <button id="btnImport">読み込み</button>
+  <input type="file" id="file" accept="application/json" style="display:none">
+</header>
+
+<div class="pad">
+  <div class="warn" id="warn"></div>
+
+  <div class="cols">
+    <div>
+      <div class="panel">
+        <h2>今日の取り込み</h2>
+        <div class="hint" id="capHint">本体を接続して「本体から取り込む」を押すと、中身のあるスロットを丸ごと読み出します。<b>本体の演奏は止まりません</b>(読み出しは副作用なし)。</div>
+        <div class="slots" id="slots"></div>
+        <div class="row" style="margin-top:12px">
+          <input type="text" id="capName" placeholder="タイトル(空でも可)" disabled>
+        </div>
+        <div class="row">
+          <button class="primary" id="btnSave" disabled>この内容を保存</button>
+          <button id="btnDiscard" disabled>捨てる</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>記録</h2>
+        <div class="heat" id="heat"></div>
+        <div class="stats" id="stats"></div>
+      </div>
+
+      <div class="panel">
+        <h2>バックアップ (GitHub Gist)</h2>
+        <div class="hint">
+          記録を非公開の Gist に置いて、消失と端末またぎに備えます。<br>
+          必要な権限は <b>gist だけ</b>（classic トークンなら gist スコープのみ、fine-grained なら Gists の read and write）。<br>
+          トークンは<b>このブラウザにだけ</b>保存され、「書き出し」の JSON には入りません。<br>
+          <span style="color:var(--red)">シークレット Gist は検索には出ませんが、<b>URL を知っている人は誰でも見られます</b>。完全な非公開ではありません。</span>
+        </div>
+        <div class="row"><input type="password" id="ghToken" placeholder="GitHub トークン" autocomplete="off"></div>
+        <div class="row"><input type="text" id="ghGist" placeholder="Gist ID（空なら初回同期時に新規作成）" autocomplete="off"></div>
+        <div class="row">
+          <button class="primary" id="btnGhSync">今すぐ同期</button>
+          <button id="btnGhSave">設定を保存</button>
+          <button class="danger" id="btnGhClear">解除</button>
+        </div>
+        <div class="hint" id="ghStat">未設定</div>
+      </div>
+
+      <div class="panel">
+        <h2>ログ</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>タイムライン</h2>
+      <div id="timeline"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================ ファーム一致の定数
+// 出典: ponkey-midi/ponkey-firmware/PONKEY_PT2_v4_5_34/(PONKEY_PT2_v4_5_34.ino / PONKEY_V2_DEBUG.h)
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
+const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
+const DBG_CMD_MAGIC=0xA6, CMD_LOG_DISABLE_ALL=0x02, CMD_LOG_ENABLE_CAT=0x03;
+const DBG_PKT_MAGIC=0xA5, CAT_SONG=0x09;
+const EV_SLOT_EDIT=0x08, EV_SLOT_DUMP=0x09, EV_SONG_META=0x0A;
+const SONG_MAGIC=0x5A, S_ENTER=0x01, S_EXIT=0x02, S_LOAD_SLOT=0x04, S_SET_SEQ=0x05, S_DUMP=0x07;
+const DUMP_ALL=0xFE;                                    // 0xFE = 中身のある全スロット
+const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;
+const SLOT_FMT_V2=0xF2;                                 // serializeSlotV2 の形式識別
+const SLOT_COUNT=16, MAX_SUBSTEPS=64, QUANTIZE_RATIO=4, MAX_DUR=64;
+const PARTS=['KICK','SNARE','HAT','TOM','BASS','LEAD','PAD'];
+const ECHO_MAGIC=0xE1;                                  // 共有リンクの形式識別 (ECHO v1)
+const LS='ponkey_echo_v01';
+
+// ============================================================ 状態
+let dev,gatt,midiCh,cmdCh,logCh,connected=false;
+// deleted は「消した id → 消した時刻」の墓標。これが無いと、消した記録が次の同期で Gist から蘇る。
+let store={entries:[],lastExport:0,deleted:{}};
+let capture=null;                                       // 取り込み中/取り込み済みの内容
+let dumpAsm={}, dumpPending=null, dumpTimer=null;
+let selId=null;
+
+function log(m){const e=document.getElementById('log');
+  e.innerHTML+=`[${new Date().toLocaleTimeString()}] ${m}<br>`;e.scrollTop=e.scrollHeight;}
+function save(){try{localStorage.setItem(LS,JSON.stringify(store));}catch(e){log('保存に失敗: '+e);}}
+function load(){try{const o=JSON.parse(localStorage.getItem(LS));
+  if(o&&Array.isArray(o.entries))store=Object.assign(store,o);}catch(e){}
+  if(!store.deleted||typeof store.deleted!=='object')store.deleted={};}
+
+// ============================================================ BLE
+document.getElementById('btnConnect').onclick=async()=>{ try{
+  log('デバイス選択…');
+  dev=await navigator.bluetooth.requestDevice({filters:[{name:'PONKEY_PT2'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
+  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断');});
+  gatt=await dev.gatt.connect();
+  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  const ds=await gatt.getPrimaryService(DBG_SERVICE);
+  cmdCh=await ds.getCharacteristic(DBG_CMD); logCh=await ds.getCharacteristic(DBG_LOG);
+  await logCh.startNotifications(); logCh.addEventListener('characteristicvaluechanged',onLog);
+  // SONG カテゴリだけ通す。全カテゴリを開けるとダンプのチャンクが他のログに押し出される。
+  await writeCmd([DBG_CMD_MAGIC,CMD_LOG_DISABLE_ALL,0x00]);
+  await writeCmd([DBG_CMD_MAGIC,CMD_LOG_ENABLE_CAT,0x01,CAT_SONG]);
+  setConn(true); log('接続完了 (SONG ログのみ有効化)');
+}catch(e){log('接続エラー: '+e);} };
+
+function setConn(c){connected=c;
+  const p=document.getElementById('conn');
+  p.textContent=c?'接続済み':'未接続'; p.className='pill '+(c?'ok':'ng');
+  document.getElementById('btnCapture').disabled=!c;
+  if(!c)setDirty(false);
+  renderTimeline();                                     // 「本体へ戻す」の可否が変わる
+}
+function setDirty(d){document.getElementById('dirty').style.display=d?'':'none';}
+async function writeCmd(b){if(!cmdCh)return;const u=Uint8Array.from(b);
+  try{cmdCh.writeValueWithoutResponse?await cmdCh.writeValueWithoutResponse(u):await cmdCh.writeValue(u);}
+  catch(e){try{await cmdCh.writeValue(u);}catch(_){}}}
+async function writeMIDI(s,d1,d2){if(!midiCh)return;const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  try{await midiCh.writeValueWithoutResponse(u);}catch(e){try{await midiCh.writeValue(u);}catch(_){}}}
+
+// ============================================================ 受信
+function onLog(e){
+  const b=new Uint8Array(e.target.value.buffer);
+  if(b.length<11||b[0]!==DBG_PKT_MAGIC||b[8]!==CAT_SONG)return;
+  const ev=b[9], dl=b[10], data=b.slice(11,11+dl);
+  if(ev===EV_SLOT_EDIT){ setDirty(true); return; }       // 本体側で編集された合図(中身は見ない)
+  if(ev===EV_SONG_META)  return onMeta(data);
+  if(ev===EV_SLOT_DUMP)  return onSlotDump(data);
+}
+
+// META: [bpm-60][currentSlot][isPlaying][scaleEnMask][scale0..2][root][swing][accent][voice×7][hasLo][hasHi]
+function onMeta(d){
+  if(!dumpPending||d.length<19)return;
+  dumpPending.meta={bpm:d[0]+60,currentSlot:d[1],playing:!!d[2],scaleEn:d[3],
+    scale:[d[4],d[5],d[6]],root:d[7],swing:d[8],accent:d[9],
+    voices:[d[10],d[11],d[12],d[13],d[14],d[15],d[16]]};
+  dumpPending.expect=[];
+  const has=d[17]|(d[18]<<8);
+  for(let s=0;s<SLOT_COUNT;s++)if((has>>s)&1)dumpPending.expect.push(s);
+  log(`メタ受信: BPM${dumpPending.meta.bpm} / 中身のあるスロット ${dumpPending.expect.length}`);
+  if(!dumpPending.expect.length)finishDump('本体に中身のあるスロットがありません');
+  renderSlots();
+}
+
+// SLOT_DUMP: [gen][chunkIdx][chunkCount][payload...] を組み立てて V2 スロットを復元
+function onSlotDump(d){
+  if(!dumpPending)return;
+  if(d.length<4){log('⚠ スロットが大きすぎて本体が送れませんでした');return;}
+  const gen=d[0],idx=d[1],cnt=d[2],part=d.slice(3);
+  let a=dumpAsm[gen]; if(!a||a.cnt!==cnt){a={cnt,parts:{}};dumpAsm[gen]=a;}
+  a.parts[idx]=part;
+  if(Object.keys(a.parts).length<cnt)return;
+  let tot=0;for(let c=0;c<cnt;c++)tot+=a.parts[c].length;
+  const full=new Uint8Array(tot);
+  let off=0;for(let c=0;c<cnt;c++){full.set(a.parts[c],off);off+=a.parts[c].length;}
+  delete dumpAsm[gen];
+  const slot=parseSlotV2(full);
+  if(!slot){log('⚠ 未知の形式のスロットを無視しました');return;}
+  dumpPending.slots=dumpPending.slots.filter(s=>s.slot!==slot.slot);
+  dumpPending.slots.push(slot); dumpPending.slots.sort((a,b)=>a.slot-b.slot);
+  renderSlots();
+  const need=dumpPending.expect;
+  if(need&&need.every(s=>dumpPending.slots.some(x=>x.slot===s)))finishDump();
+}
+
+// V2: [0xF2][slot][loopLen][oct×3][rectRow][rectCol][drumCnt]{(p<<4)|step,maskLo,maskHi}[synCnt]{(l<<4)|key,sub,raw}
+function parseSlotV2(d){
+  let i=0; if(d[i++]!==SLOT_FMT_V2)return null;
+  const slot=d[i++],loopLen=d[i++];
+  const oct=[d[i++],d[i++],d[i++]].map(v=>(v<<24)>>24);
+  const rectRow=d[i++],rectCol=d[i++];
+  const dc=d[i++],drums=[];
+  for(let n=0;n<dc&&i+2<d.length;n++){const b=d[i++],lo=d[i++],hi=d[i++];
+    drums.push([(b>>4)&0xf,b&0xf,lo|(hi<<8)]);}
+  const sc=d[i++],synth=[];
+  for(let n=0;n<sc&&i+2<d.length;n++){const b=d[i++],sub=d[i++],raw=d[i++];
+    synth.push([(b>>4)&0xf,b&0xf,sub,raw]);}
+  return {slot,loopLen,oct,rectRow,rectCol,drums,synth};
+}
+
+// ============================================================ 取り込み
+document.getElementById('btnCapture').onclick=async()=>{
+  if(!connected)return;
+  dumpAsm={}; dumpPending={meta:null,expect:null,slots:[]};
+  capture=null; renderSlots(); setCapUI(false);
+  log('読み出し要求を送信…');
+  await writeCmd([SONG_MAGIC,S_DUMP,0x00,DUMP_ALL]);
+  clearTimeout(dumpTimer);
+  dumpTimer=setTimeout(()=>finishDump('タイムアウト(届いた分だけ取り込みました)'),5000);
+};
+function finishDump(msg){
+  clearTimeout(dumpTimer);
+  if(!dumpPending)return;
+  const p=dumpPending; dumpPending=null;
+  if(!p.slots.length){capture=null;renderSlots();setCapUI(false);log(msg||'取り込めるスロットがありませんでした');return;}
+  capture={meta:p.meta,slots:p.slots};
+  setDirty(false);
+  renderSlots(); setCapUI(true);
+  const notes=p.slots.reduce((a,s)=>a+s.drums.length+s.synth.length,0);
+  log(`取り込み完了: ${p.slots.length}スロット / ${notes}イベント${msg?' ('+msg+')':''}`);
+}
+function setCapUI(on){
+  document.getElementById('btnSave').disabled=!on;
+  document.getElementById('btnDiscard').disabled=!on;
+  document.getElementById('capName').disabled=!on;
+  if(on)document.getElementById('capName').focus();
+}
+document.getElementById('btnDiscard').onclick=()=>{capture=null;document.getElementById('capName').value='';
+  renderSlots();setCapUI(false);log('取り込み内容を捨てました');};
+document.getElementById('btnSave').onclick=()=>{
+  if(!capture)return;
+  const name=document.getElementById('capName').value.trim();
+  store.entries.push({id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    ts:Date.now(),name,data:capture});
+  save(); capture=null; document.getElementById('capName').value='';
+  renderSlots(); setCapUI(false); renderAll();
+  log('保存しました'); gistAuto();
+};
+
+function renderSlots(){
+  const g=document.getElementById('slots'); g.innerHTML='';
+  const cur=capture?capture.slots:(dumpPending?dumpPending.slots:[]);
+  for(let s=0;s<SLOT_COUNT;s++){
+    const has=cur.find(x=>x.slot===s);
+    const c=document.createElement('div'); c.className='sc'+(has?' has':'');
+    const n=has?(has.drums.length+has.synth.length):0;
+    c.innerHTML=`<span class="n">${s+1}</span><span>${has?n+'音':'—'}</span>`;
+    g.appendChild(c);
+  }
+}
+
+// ============================================================ ミニ図 (7パート×16ステップ)
+function miniHTML(slot){
+  const on=Array.from({length:7},()=>new Array(16).fill(false));
+  // ドラム: V2 は「そのステップで鳴るグリッドセルのビットマスク」。1つでも立っていれば発音あり。
+  for(const [p,step,mask] of slot.drums) if(mask&&p<4&&step<16) on[p][step]=true;
+  // シンセ: サブステップ(0-63) を 16 ステップへ丸める
+  for(const [l,,sub] of slot.synth){ const st=Math.floor(sub/QUANTIZE_RATIO); if(l<3&&st<16) on[4+l][st]=true; }
+  let h='';
+  for(let r=0;r<7;r++)for(let s=0;s<16;s++)h+=`<i class="${on[r][s]?(r<4?'d':'s'):''}"></i>`;
+  return h;
+}
+
+// ============================================================ タイムライン
+function dayKey(ts){const d=new Date(ts);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function dayLabel(k){const [y,m,d]=k.split('-').map(Number);
+  const w=['日','月','火','水','木','金','土'][new Date(y,m-1,d).getDay()];
+  return `${y}.${String(m).padStart(2,'0')}.${String(d).padStart(2,'0')} (${w})`;}
+
+function renderTimeline(){
+  const t=document.getElementById('timeline'); t.innerHTML='';
+  if(!store.entries.length){t.innerHTML='<div class="empty">まだ記録がありません。本体を接続して取り込んでください。</div>';return;}
+  const sorted=store.entries.slice().sort((a,b)=>b.ts-a.ts);
+  const days=[];
+  for(const e of sorted){const k=dayKey(e.ts);
+    let g=days.find(x=>x.k===k); if(!g){g={k,items:[]};days.push(g);} g.items.push(e);}
+  for(const g of days){
+    const wrap=document.createElement('div'); wrap.className='day';
+    const lab=document.createElement('div'); lab.className='daylab';
+    lab.innerHTML=`<span>${dayLabel(g.k)}</span><span style="color:var(--dim);opacity:.7">${g.items.length}件</span>`;
+    wrap.appendChild(lab);
+    for(const e of g.items) wrap.appendChild(entryEl(e));
+    t.appendChild(wrap);
+  }
+}
+function entryEl(e){
+  const d=document.createElement('div'); d.className='entry'+(e.id===selId?' sel':'');
+  const time=new Date(e.ts).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+  const notes=e.data.slots.reduce((a,s)=>a+s.drums.length+s.synth.length,0);
+  const bpm=e.data.meta?e.data.meta.bpm:null;
+  const head=document.createElement('div'); head.className='ehead';
+  head.innerHTML=`<span class="etime">${time}</span>`+
+    `<span class="ename${e.name?'':' no'}">${e.name?esc(e.name):'(無題)'}</span>`+
+    `<span class="emeta">${e.data.slots.length}スロット / ${notes}音${bpm?' / BPM'+bpm:''}</span>`;
+  d.appendChild(head);
+  const minis=document.createElement('div'); minis.className='minis';
+  for(const s of e.data.slots){
+    const w=document.createElement('div'); w.className='mwrap';
+    w.innerHTML=`<div class="mini">${miniHTML(s)}</div><div class="mlab">${s.slot+1}</div>`;
+    minis.appendChild(w);
+  }
+  d.appendChild(minis);
+  const acts=document.createElement('div'); acts.className='eacts';
+  acts.innerHTML=`<button class="sm primary" data-a="send"${connected?'':' disabled title="接続すると使えます"'}>本体へ戻す</button>`+
+    `<button class="sm" data-a="link">リンクをコピー</button>`+
+    `<button class="sm" data-a="rename">名前</button>`+
+    `<button class="sm danger" data-a="del">削除</button>`;
+  acts.querySelector('[data-a=send]').onclick=()=>sendToDevice(e);
+  acts.querySelector('[data-a=link]').onclick=()=>copyLink(e);
+  acts.querySelector('[data-a=rename]').onclick=()=>{
+    const n=prompt('タイトル',e.name||''); if(n===null)return;
+    e.name=n.trim(); e.mtime=Date.now();          // 同期時にこちらを新しい方と判定させる
+    save(); renderTimeline(); gistAuto();};
+  acts.querySelector('[data-a=del]').onclick=()=>{
+    if(!confirm('この記録を削除します。Gist に同期している場合はそちらからも消えます。'))return;
+    store.entries=store.entries.filter(x=>x.id!==e.id);
+    store.deleted[e.id]=Date.now();
+    save(); renderAll(); log('削除しました'); gistAuto();};
+  d.appendChild(acts);
+  return d;
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// ============================================================ 本体へ戻す
+// 注意: ファームの LOAD_SLOT (parseSlotPayload) は V1 形式しか受けない。V2 で保存した情報のうち
+//   ・ドラムの「ステップと違うセル」(= SCALE 化したドラムパート) と矩形設定
+//   ・シンセの重ね録りレイヤー(dur の bit7。ファームが dur>64 を 64 に丸める過程で消える)
+//   は書き戻せない。保存データ側は無傷なので、ファームが対応すれば後から完全復元できる。
+async function sendToDevice(e){
+  if(!connected){log('未接続です');return;}
+  const slots=e.data.slots;
+  if(!confirm(`本体のスロット ${slots.map(s=>s.slot+1).join(',')} を、この記録で上書きします。よろしいですか。`))return;
+  let lostDrum=0,lostLayer=0;
+  await writeCmd([SONG_MAGIC,S_ENTER,0x00]);
+  for(const s of slots){
+    const body=[s.loopLen||MAX_SUBSTEPS,s.oct[0]&0xff,s.oct[1]&0xff,s.oct[2]&0xff];
+    const dr=[];
+    for(const [p,step,mask] of s.drums){
+      if((mask>>step)&1) dr.push(((p&0xf)<<4)|(step&0xf));   // 対角のみ V1 で表現できる
+      for(let b=0;b<16;b++) if(b!==step&&((mask>>b)&1)) lostDrum++;
+    }
+    body.push(dr.length&0xff,...dr);
+    // 件数は「ノート数」であってバイト数ではない (ファームは synCount 回だけ 3 バイトずつ読む)
+    const sy=[];
+    for(const [l,k,sub,raw] of s.synth){
+      if(raw&0x80) lostLayer++;
+      let dur=raw&0x7f; if(dur===0)dur=1; if(dur>MAX_DUR)dur=MAX_DUR;   // bit7 は落として長さを守る
+      sy.push([((l&0xf)<<4)|(k&0xf),sub&0x3f,dur]);
+    }
+    body.push(sy.length&0xff); for(const n of sy) body.push(n[0],n[1],n[2]);
+    await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,s.slot&0xf,...body]);
+  }
+  const seq=slots.map(s=>s.slot&0xf);
+  await writeCmd([SONG_MAGIC,S_SET_SEQ,0x00,seq.length&0xff,...seq]);
+  const m=e.data.meta;
+  if(m){
+    await writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,m.bpm-60)));
+    await writeMIDI(0xB0,CC_GROOVE_SWING,m.swing&0x7f);
+    await writeMIDI(0xB0,CC_GROOVE_ACCENT,m.accent&0x7f);
+  }
+  await writeMIDI(0xB0,CC_PLAY_STOP,1);
+  let msg=`本体へ戻しました (${slots.length}スロット)`;
+  if(lostDrum||lostLayer){
+    msg+=' ⚠ ';
+    if(lostDrum) msg+=`ドラムの非対角 ${lostDrum} 個`;
+    if(lostDrum&&lostLayer) msg+=' / ';
+    if(lostLayer) msg+=`重ね録りレイヤー ${lostLayer} 音`;
+    msg+=' はファームの LOAD_SLOT が受け取れないため復元されていません(保存データには残っています)';
+  }
+  log(msg);
+}
+
+// ============================================================ 共有リンク (base64url)
+// [0xE1][bpm-60][swing][accent][root][scaleEn][scale×3][voices 7×4bit=4B][slotCount]
+//   slot: [idx][loopLen][oct×3][rectRow][rectCol][dCnt]{b,lo,hi}[sCnt]{b,sub,raw}
+//   末尾: [nameLen][UTF-8]
+function encodeEntry(e){
+  const m=e.data.meta||{bpm:120,swing:0,accent:0,root:0,scaleEn:0,scale:[0,0,0],voices:[0,0,0,0,0,0,0]};
+  const b=[ECHO_MAGIC,Math.max(0,Math.min(127,m.bpm-60)),m.swing&0x7f,m.accent&0x7f,
+           m.root&0xff,m.scaleEn&0xff,m.scale[0]&0xff,m.scale[1]&0xff,m.scale[2]&0xff];
+  const v=m.voices;                                     // 7 ニブル → 4 バイト (末尾ニブルは未使用)
+  b.push(((v[0]&15)<<4)|(v[1]&15),((v[2]&15)<<4)|(v[3]&15),((v[4]&15)<<4)|(v[5]&15),(v[6]&15)<<4);
+  b.push(e.data.slots.length&0xff);
+  for(const s of e.data.slots){
+    b.push(s.slot&0xf,s.loopLen&0xff,s.oct[0]&0xff,s.oct[1]&0xff,s.oct[2]&0xff,s.rectRow&0xff,s.rectCol&0xff);
+    b.push(s.drums.length&0xff);
+    for(const [p,st,mask] of s.drums) b.push(((p&0xf)<<4)|(st&0xf),mask&0xff,(mask>>8)&0xff);
+    b.push(s.synth.length&0xff);
+    for(const [l,k,sub,raw] of s.synth) b.push(((l&0xf)<<4)|(k&0xf),sub&0xff,raw&0xff);
+  }
+  const nm=new TextEncoder().encode(e.name||'');
+  b.push(Math.min(255,nm.length)); for(let i=0;i<Math.min(255,nm.length);i++)b.push(nm[i]);
+  return b64uEnc(Uint8Array.from(b));
+}
+function decodeEntry(str){
+  const d=b64uDec(str); if(!d||d[0]!==ECHO_MAGIC)return null;
+  let i=1;
+  const meta={bpm:d[i++]+60,swing:d[i++],accent:d[i++],root:d[i++],scaleEn:d[i++],
+              scale:[d[i++],d[i++],d[i++]],voices:[]};
+  const v0=d[i++],v1=d[i++],v2=d[i++],v3=d[i++];
+  meta.voices=[v0>>4,v0&15,v1>>4,v1&15,v2>>4,v2&15,v3>>4];
+  const n=d[i++],slots=[];
+  for(let s=0;s<n&&i<d.length;s++){
+    const slot=d[i++],loopLen=d[i++];
+    const oct=[d[i++],d[i++],d[i++]].map(x=>(x<<24)>>24);
+    const rectRow=d[i++],rectCol=d[i++];
+    const dc=d[i++],drums=[];
+    for(let k=0;k<dc&&i+2<d.length;k++){const b=d[i++],lo=d[i++],hi=d[i++];drums.push([(b>>4)&0xf,b&0xf,lo|(hi<<8)]);}
+    const sc=d[i++],synth=[];
+    for(let k=0;k<sc&&i+2<d.length;k++){const b=d[i++],sub=d[i++],raw=d[i++];synth.push([(b>>4)&0xf,b&0xf,sub,raw]);}
+    slots.push({slot,loopLen,oct,rectRow,rectCol,drums,synth});
+  }
+  let name='';
+  if(i<d.length){const nl=d[i++]; if(nl&&i+nl<=d.length)name=new TextDecoder().decode(d.slice(i,i+nl));}
+  return {name,data:{meta,slots}};
+}
+function b64uEnc(u8){let s='';for(const b of u8)s+=String.fromCharCode(b);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function b64uDec(str){try{
+  const s=atob(str.replace(/-/g,'+').replace(/_/g,'/'));
+  const u=new Uint8Array(s.length); for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i); return u;
+}catch(e){return null;}}
+
+async function copyLink(e){
+  const url=location.href.split('#')[0]+'#d='+encodeEntry(e);
+  try{ await navigator.clipboard.writeText(url); log(`リンクをコピーしました (${url.length}文字)`); }
+  catch(_){ prompt('コピーしてください', url); }
+}
+
+// ============================================================ 記録(ヒートマップ・連続日数)
+function renderStats(){
+  const days=new Set(store.entries.map(e=>dayKey(e.ts)));
+  const counts={};
+  for(const e of store.entries){const k=dayKey(e.ts);counts[k]=(counts[k]||0)+1;}
+  // 直近12週。左上を12週前の日曜にして、列=週 / 行=曜日 で並べる
+  const today=new Date(); today.setHours(0,0,0,0);
+  const start=new Date(today); start.setDate(start.getDate()-today.getDay()-7*11);
+  const h=document.getElementById('heat'); h.innerHTML='';
+  for(let w=0;w<12;w++)for(let dw=0;dw<7;dw++){
+    const d=new Date(start); d.setDate(start.getDate()+w*7+dw);
+    const i=document.createElement('i');
+    if(d>today){i.className='fut';}
+    else{const k=dayKey(d.getTime()),c=counts[k]||0;
+      i.className=c>=3?'l3':c===2?'l2':c===1?'l1':'';
+      i.title=`${dayLabel(k)} — ${c}件`;}
+    h.appendChild(i);
+  }
+  // 連続日数: 今日(まだ無ければ昨日)から遡る
+  let streak=0; const cur=new Date(today);
+  if(!days.has(dayKey(cur.getTime())))cur.setDate(cur.getDate()-1);
+  while(days.has(dayKey(cur.getTime()))){streak++;cur.setDate(cur.getDate()-1);}
+  document.getElementById('stats').innerHTML=
+    `<span><b>${store.entries.length}</b> 記録</span><span><b>${days.size}</b> 日</span><span>連続 <b>${streak}</b> 日</span>`;
+}
+
+// ============================================================ 書き出し / 読み込み
+document.getElementById('btnExport').onclick=()=>{
+  const blob=new Blob([JSON.stringify(store,null,1)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='ponkey-echo-'+dayKey(Date.now())+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+  store.lastExport=Date.now(); save(); renderWarn();
+  log(`書き出しました (${store.entries.length}件)`);
+};
+document.getElementById('btnImport').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').onchange=async(ev)=>{
+  const f=ev.target.files[0]; if(!f)return; ev.target.value='';
+  try{
+    const o=JSON.parse(await f.text());
+    if(!o||!Array.isArray(o.entries))throw new Error('形式が違います');
+    const before=store.entries.length;
+    store.deleted=mergeTombs(store.deleted,o.deleted);
+    store.entries=mergeEntries(store.entries,o.entries,store.deleted);
+    save(); renderAll(); gistAuto();
+    log(`読み込みました (新規 ${store.entries.length-before}件 / ファイル内 ${o.entries.length}件)`);
+  }catch(e){log('読み込み失敗: '+e.message);}
+};
+
+// 逃がしていない記録の警告。localStorage はブラウザのストレージ削除で消えるので、溜めたままにさせない。
+// Gist 同期と JSON 書き出しのどちらか新しい方を「安全な線」として数える。
+function renderWarn(){
+  const safe=Math.max(store.lastExport||0, gh.lastSync||0);
+  const un=store.entries.filter(e=>e.ts>safe).length;
+  const w=document.getElementById('warn');
+  if(un>=10){ w.className='warn on';
+    w.innerHTML=`どこにも逃がしていない記録が <b>${un}件</b> あります。この記録はブラウザ内(localStorage)にだけあり、`+
+      `ブラウザのストレージを削除すると消えます。`+
+      (gh.token?'Gist 同期が失敗し続けている可能性があります（下のバックアップ欄を確認してください）。'
+              :'下の「バックアップ」を設定するか、右上の「書き出し」で JSON を保存してください。'); }
+  else w.className='warn';
+}
+
+// ============================================================ GitHub Gist 同期
+// 記録本体(LS)とは別のキーに持つ。こうしておけば「書き出し」の JSON にトークンが混ざらない。
+const LS_GH='ponkey_echo_gist_v01', GIST_FILE='ponkey-echo.json';
+let gh={token:'',gistId:'',lastSync:0}, ghBusy=false;
+function ghLoad(){try{const o=JSON.parse(localStorage.getItem(LS_GH));if(o)gh=Object.assign(gh,o);}catch(e){}}
+function ghSaveCfg(){try{localStorage.setItem(LS_GH,JSON.stringify(gh));}catch(e){}}
+function ghStat(msg,bad){
+  const e=document.getElementById('ghStat');
+  e.style.color=bad?'var(--red)':'var(--dim)';
+  if(msg){e.textContent=msg;return;}
+  e.textContent=!gh.token?'未設定'
+    :!gh.gistId?'トークンのみ設定済み（「今すぐ同期」で Gist を新規作成します）'
+    :`接続済み — 最終同期 ${gh.lastSync?new Date(gh.lastSync).toLocaleString('ja-JP'):'なし'}`;
+}
+async function ghFetch(path,opt={}){
+  const r=await fetch('https://api.github.com'+path,{...opt,headers:{
+    'Authorization':'Bearer '+gh.token,'Accept':'application/vnd.github+json',
+    'X-GitHub-Api-Version':'2022-11-28',...(opt.headers||{})}});
+  if(!r.ok){
+    if(r.status===401)throw new Error('401 トークンが無効か期限切れです');
+    if(r.status===403)throw new Error('403 権限不足かレート制限です（gist の権限があるか確認してください）');
+    if(r.status===404)throw new Error('404 Gist が見つかりません（ID とトークンの持ち主を確認してください）');
+    throw new Error(r.status+' '+r.statusText);
+  }
+  return r.json();
+}
+// id で突き合わせ、同じ id なら新しい方(mtime 優先、無ければ ts)を採る。
+// tomb にある id は復活させない。編集が墓標より後なら、消したあとの編集とみなして残す。
+function mergeEntries(a,b,tomb){
+  const m=new Map();
+  for(const e of a.concat(b)){
+    if(!e||!e.id||!e.data||!Array.isArray(e.data.slots))continue;
+    const t=tomb[e.id];
+    if(t&&(e.mtime||e.ts)<=t)continue;
+    const p=m.get(e.id);
+    if(!p||(e.mtime||e.ts)>(p.mtime||p.ts))m.set(e.id,e);
+  }
+  return [...m.values()].sort((x,y)=>x.ts-y.ts);
+}
+function mergeTombs(a,b){
+  const t=Object.assign({},a||{});
+  for(const [k,v] of Object.entries(b||{})) if(!t[k]||v>t[k]) t[k]=v;
+  return t;
+}
+async function gistSync(quiet){
+  if(!gh.token){if(!quiet)ghStat('トークンが未設定です',true);return false;}
+  if(ghBusy)return false;
+  ghBusy=true; ghStat('同期中…');
+  try{
+    let remote=[], remoteTomb={};
+    if(gh.gistId){
+      const g=await ghFetch('/gists/'+gh.gistId);
+      const f=g.files&&g.files[GIST_FILE];
+      if(f){
+        // 1MB を超えると content は切り詰められるので raw_url から取り直す
+        const text=f.truncated?await(await fetch(f.raw_url)).text():f.content;
+        let o=null; try{o=JSON.parse(text);}catch(e){throw new Error('Gist の中身が JSON として読めません');}
+        if(o&&Array.isArray(o.entries)){remote=o.entries; remoteTomb=o.deleted||{};}
+      }
+    }
+    const tomb=mergeTombs(store.deleted,remoteTomb);
+    const merged=mergeEntries(store.entries,remote,tomb);
+    const pulled=merged.length-store.entries.length;
+    const body={description:'PONKEY ECHO — 演奏の記録',
+                files:{[GIST_FILE]:{content:JSON.stringify({version:1,entries:merged,deleted:tomb},null,1)}}};
+    if(gh.gistId){ await ghFetch('/gists/'+gh.gistId,{method:'PATCH',body:JSON.stringify(body)}); }
+    else{ body.public=false;
+      const res=await ghFetch('/gists',{method:'POST',body:JSON.stringify(body)});
+      gh.gistId=res.id; document.getElementById('ghGist').value=res.id;
+      log('Gist を新規作成しました: '+res.id); }
+    store.entries=merged; store.deleted=tomb; save();
+    gh.lastSync=Date.now(); ghSaveCfg();
+    renderAll(); ghStat();
+    log(`Gist と同期しました（合計 ${merged.length}件${pulled>0?' / 取り込み '+pulled+'件':''}）`);
+    return true;
+  }catch(e){
+    ghStat('同期に失敗: '+e.message,true);
+    log('Gist 同期エラー: '+e.message);
+    return false;
+  }finally{ ghBusy=false; }
+}
+// 保存・取り込みのあとに黙って走らせる。オフラインなら失敗するが、次の機会に送られる。
+function gistAuto(){ if(gh.token) gistSync(true); }
+
+document.getElementById('btnGhSave').onclick=()=>{
+  gh.token=document.getElementById('ghToken').value.trim();
+  gh.gistId=document.getElementById('ghGist').value.trim();
+  ghSaveCfg(); ghStat(); renderWarn();
+  log(gh.token?'バックアップ設定を保存しました':'バックアップ設定を空にしました');
+};
+document.getElementById('btnGhSync').onclick=()=>{
+  gh.token=document.getElementById('ghToken').value.trim();
+  gh.gistId=document.getElementById('ghGist').value.trim();
+  ghSaveCfg(); gistSync();
+};
+document.getElementById('btnGhClear').onclick=()=>{
+  if(!confirm('このブラウザからトークンと Gist ID を消します。Gist 側の記録は消えません。'))return;
+  gh={token:'',gistId:'',lastSync:0};
+  localStorage.removeItem(LS_GH);
+  document.getElementById('ghToken').value=''; document.getElementById('ghGist').value='';
+  ghStat(); renderWarn(); log('バックアップ設定を解除しました');
+};
+
+// ============================================================ 共有リンクからの受け取り
+function checkHash(){
+  const m=location.hash.match(/^#d=(.+)$/); if(!m)return;
+  const got=decodeEntry(m[1]);
+  history.replaceState(null,'',location.pathname+location.search);
+  if(!got){log('リンクの中身を読めませんでした');return;}
+  const notes=got.data.slots.reduce((a,s)=>a+s.drums.length+s.synth.length,0);
+  if(!confirm(`共有リンクを受け取りました。\n${got.name||'(無題)'} — ${got.data.slots.length}スロット / ${notes}音\nタイムラインに追加しますか。`))return;
+  store.entries.push({id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    ts:Date.now(),name:got.name,data:got.data});
+  save(); renderAll(); log('共有リンクを取り込みました'); gistAuto();
+}
+
+// ============================================================ 起動
+function renderAll(){renderTimeline();renderStats();renderWarn();}
+load(); ghLoad();
+document.getElementById('ghToken').value=gh.token||'';
+document.getElementById('ghGist').value=gh.gistId||'';
+ghStat();
+renderSlots(); renderAll(); checkHash();
+if(gh.token) gistSync(true);                            // 起動時に一度、他端末の分を引いてくる
+if(!navigator.bluetooth)log('⚠ このブラウザは Web Bluetooth 非対応です (Edge / Chrome で開いてください)');
+</script>
+</body>
+</html>
