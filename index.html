@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PONKEY PARK</title>
-<meta name="theme-color" content="#0e0f12">
+<meta name="theme-color" content="#06070a">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -16,11 +16,45 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0e0f12;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;--red:#c96a5e;}
+  :root{--bg:#06070a;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;--red:#c96a5e;}
   *{box-sizing:border-box}
   body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
     font-weight:300;letter-spacing:.01em;max-width:720px;margin:0 auto;padding:34px 20px 60px;min-height:100vh}
   h1{font-size:22px;font-weight:400;letter-spacing:.14em;margin:0 0 22px;text-transform:uppercase}
+
+  /* ===== 宇宙: 星を敷き詰めた2層をゆっくり流す + 上方向のかすかな星雲 ===== */
+  .sky,.sky::before,.sky::after{position:fixed;inset:0;pointer-events:none}
+  .sky{z-index:-2;background:
+    radial-gradient(900px 520px at 50% -12%, rgba(111,176,184,.10), transparent 70%),
+    radial-gradient(600px 400px at 88% 108%, rgba(201,106,94,.07), transparent 70%)}
+  .sky::before,.sky::after{content:""}
+  /* 遠景: 細かい星。ゆっくり流れる */
+  .sky::before{background-image:
+      radial-gradient(1px 1px at 18px 32px,#aab8c8 50%,transparent 51%),
+      radial-gradient(1px 1px at 96px 118px,#8e9cad 50%,transparent 51%),
+      radial-gradient(1px 1px at 158px 54px,#9fadbd 50%,transparent 51%),
+      radial-gradient(1px 1px at 62px 176px,#7d8b9a 50%,transparent 51%),
+      radial-gradient(1px 1px at 208px 142px,#aab8c8 50%,transparent 51%),
+      radial-gradient(1px 1px at 132px 208px,#8e9cad 50%,transparent 51%),
+      radial-gradient(1px 1px at 34px 96px,#9fadbd 50%,transparent 51%),
+      radial-gradient(1px 1px at 186px 12px,#7d8b9a 50%,transparent 51%);
+    background-size:230px 230px;animation:drift 96s linear infinite}
+  /* 近景: 少し大きく明るい星。速く流れて奥行きが出る */
+  .sky::after{background-image:
+      radial-gradient(1.8px 1.8px at 44px 68px,#eef3f8 50%,transparent 51%),
+      radial-gradient(1.8px 1.8px at 176px 24px,#dfe7f0 50%,transparent 51%),
+      radial-gradient(2px 2px at 118px 152px,#6fb0b8 50%,transparent 51%),
+      radial-gradient(1.8px 1.8px at 262px 214px,#eef3f8 50%,transparent 51%),
+      radial-gradient(2px 2px at 20px 246px,#c96a5e 50%,transparent 51%);
+    background-size:310px 310px;animation:drift2 54s linear infinite}
+  @keyframes drift{to{background-position:0 230px}}
+  @keyframes drift2{to{background-position:0 310px}}
+  /* 遠くを横切るインベーダーの編隊。本家と同じで、なめらかに動かず一定歩幅で寄ってくる */
+  .fleet{position:fixed;top:10px;left:0;right:0;display:flex;justify-content:center;gap:26px;
+    opacity:.62;animation:march 9s steps(6,end) infinite alternate}
+  .fleet .m svg{height:14px}
+  @keyframes march{to{transform:translateX(84px)}}
+
   /* ブランド行: タイトルの下端(ベースライン)とモンキーの足元を揃える */
   .brandrow{display:flex;align-items:flex-end;gap:16px;margin:0 0 22px}
   .brandrow h1{margin:0;line-height:1}
@@ -33,26 +67,49 @@
   .m .f2{position:absolute;left:0;bottom:0}
   .mo svg{height:24px}   /* 12ドット */
   .mg svg{height:30px}   /* 15ドット(アンテナ付き)。ドットサイズは同じ */
-  .f1{animation:mkA .88s steps(1,end) infinite}
-  .f2{animation:mkB .88s steps(1,end) infinite}
+  .f1{animation:mkA .88s step-end infinite}
+  .f2{animation:mkB .88s step-end infinite}
   .mg .f1,.mg .f2{animation-delay:-.44s}   /* 2匹は交互に足を出す */
   @keyframes mkA{0%,49.99%{opacity:1}50%,100%{opacity:0}}
   @keyframes mkB{0%,49.99%{opacity:0}50%,100%{opacity:1}}
-  @media(prefers-reduced-motion:reduce){.f1,.f2{animation:none}.f2{display:none}}
-  .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,210px));gap:14px;justify-content:center}
+
+  /* 1fr にして、パネルの左右端をタイトル文字の位置に揃える */
+  .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
   a.app{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
-    text-decoration:none;color:var(--txt);background:var(--panel);border:1px solid var(--line);padding:16px;
+    text-decoration:none;color:var(--txt);background:rgba(21,23,27,.74);border:1px solid var(--line);padding:16px;
+    backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
     transition:border-color .12s,background .12s}
-  a.app:hover{border-color:var(--teal);background:#1a1d23}
-  .thumb{width:66px;height:66px;background:#0a0b0e;border:1px solid var(--line)}
+  a.app:hover{border-color:var(--teal);background:rgba(26,29,35,.9)}
+  .thumb{width:66px;height:66px;background:rgba(6,7,10,.9);border:1px solid var(--line)}
   .thumb svg{display:block;width:100%;height:100%}
   .nm{font-size:17px;color:var(--teal);letter-spacing:.06em;margin-top:14px}
   .desc{font-size:10.5px;color:var(--dim);margin-top:7px;line-height:1.5}
   .en{font-size:11px;color:var(--dim);opacity:.75;margin-top:2px;line-height:1.4}
   footer{color:var(--dim);font-size:11px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
+
+  /* ===== アイコンのコマ送り: .n2/.n3/.n4 = コマ数。中の .k1〜.k4 を順に1コマずつ見せる ===== */
+  .k1,.k2,.k3,.k4{opacity:0}
+  .n2 .k1,.n2 .k2{animation:fr2 1.12s step-end infinite}
+  .n2 .k2{animation-delay:-.56s}
+  .n3 .k1,.n3 .k2,.n3 .k3{animation:fr3 1.12s step-end infinite}
+  .n3 .k2{animation-delay:-.3733s} .n3 .k3{animation-delay:-.7467s}
+  .n4 .k1,.n4 .k2,.n4 .k3,.n4 .k4{animation:fr4 1.12s step-end infinite}
+  .n4 .k2{animation-delay:-.28s} .n4 .k3{animation-delay:-.56s} .n4 .k4{animation-delay:-.84s}
+  @keyframes fr2{0%,49.99%{opacity:1}50%,100%{opacity:0}}
+  @keyframes fr3{0%,33.32%{opacity:1}33.33%,100%{opacity:0}}
+  @keyframes fr4{0%,24.99%{opacity:1}25%,100%{opacity:0}}
+
+  @media(prefers-reduced-motion:reduce){
+    .sky::before,.sky::after{animation:none}
+    .f1,.f2,.k1,.k2,.k3,.k4{animation:none}
+    .f2,.k2,.k3,.k4{display:none}
+    .f1,.k1{opacity:1}
+  }
 </style>
 </head>
 <body>
+  <div class="sky" aria-hidden="true"><div class="fleet" id="fleet"></div></div>
+
   <div class="brandrow">
     <h1>PONKEY PARK</h1>
     <div class="mascots" id="mascots" role="img" aria-label="PONKEY MONKEY"></div>
@@ -83,45 +140,55 @@
     }
     document.getElementById('mascots').innerHTML =
       walker(BODY,PAL_O,'mo') + walker(ANT.concat(BODY),PAL_G,'mg');
+    // 背景の編隊は同じスプライトを暗く落としたもの
+    var PAL_D={O:'#38424f',E:'#38424f'}, fleet='';
+    for(var i=0;i<7;i++) fleet+=walker(BODY,PAL_D,'mo');
+    document.getElementById('fleet').innerHTML=fleet;
   })();
   </script>
 
   <div class="apps">
+    <!-- LESSON: 上の段から順に埋まり、赤い印(いま学んでいる段)が下りていく 3コマ -->
     <a class="app" href="lesson.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <div class="thumb"><svg class="ico n3" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
         <line x1="9" y1="12" x2="9" y2="44" stroke="#2f343b" stroke-width="1.5" stroke-dasharray="2 3"/>
         <g fill="#23262c"><rect x="14" y="12" width="8" height="8"/><rect x="25" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><rect x="47" y="12" width="6" height="8"/>
         <rect x="14" y="24" width="8" height="8"/><rect x="25" y="24" width="8" height="8"/><rect x="36" y="24" width="8" height="8"/><rect x="47" y="24" width="6" height="8"/>
         <rect x="14" y="36" width="8" height="8"/><rect x="25" y="36" width="8" height="8"/><rect x="36" y="36" width="8" height="8"/><rect x="47" y="36" width="6" height="8"/></g>
-        <g fill="#6fb0b8"><rect x="14" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/>
-        <rect x="14" y="24" width="8" height="8"/><rect x="25" y="24" width="8" height="8"/>
-        <circle cx="9" cy="16" r="2"/><circle cx="9" cy="28" r="2"/></g>
-        <g fill="#c96a5e"><rect x="14" y="36" width="8" height="8"/><circle cx="9" cy="40" r="2"/></g>
+        <g class="k1" fill="#c96a5e"><rect x="14" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><circle cx="9" cy="16" r="2"/></g>
+        <g class="k2"><g fill="#6fb0b8"><rect x="14" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><circle cx="9" cy="16" r="2"/></g>
+          <g fill="#c96a5e"><rect x="14" y="24" width="8" height="8"/><rect x="25" y="24" width="8" height="8"/><circle cx="9" cy="28" r="2"/></g></g>
+        <g class="k3"><g fill="#6fb0b8"><rect x="14" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><circle cx="9" cy="16" r="2"/>
+          <rect x="14" y="24" width="8" height="8"/><rect x="25" y="24" width="8" height="8"/><circle cx="9" cy="28" r="2"/></g>
+          <g fill="#c96a5e"><rect x="14" y="36" width="8" height="8"/><circle cx="9" cy="40" r="2"/></g></g>
       </svg></div>
       <div class="nm">LESSON</div>
       <div class="desc">順番に音を重ねる使い方講座</div>
       <div class="en">Step-by-step lessons</div>
     </a>
 
+    <!-- SYNC: 下の台の拍がずれている(赤) → 揃う(青) の 2コマ -->
     <a class="app" href="sync.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <div class="thumb"><svg class="ico n2" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
         <line x1="7" y1="20" x2="49" y2="20" stroke="#2f343b" stroke-width="1.5"/>
         <line x1="7" y1="36" x2="49" y2="36" stroke="#2f343b" stroke-width="1.5"/>
-        <g fill="#6fb0b8"><rect x="12" y="13" width="3.5" height="14"/><rect x="26" y="13" width="3.5" height="14"/><rect x="40" y="13" width="3.5" height="14"/>
-        <rect x="12" y="29" width="3.5" height="14"/><rect x="26" y="29" width="3.5" height="14"/><rect x="40" y="29" width="3.5" height="14"/></g>
+        <g fill="#6fb0b8"><rect x="12" y="13" width="3.5" height="14"/><rect x="26" y="13" width="3.5" height="14"/><rect x="40" y="13" width="3.5" height="14"/></g>
+        <g class="k1" fill="#c96a5e"><rect x="17" y="29" width="3.5" height="14"/><rect x="31" y="29" width="3.5" height="14"/><rect x="45" y="29" width="3.5" height="14"/></g>
+        <g class="k2" fill="#6fb0b8"><rect x="12" y="29" width="3.5" height="14"/><rect x="26" y="29" width="3.5" height="14"/><rect x="40" y="29" width="3.5" height="14"/></g>
       </svg></div>
       <div class="nm">SYNC</div>
       <div class="desc">複数台のBPMを合わせる</div>
       <div class="en">Match BPM across devices</div>
     </a>
 
+    <!-- LOOPS: ループの長さが1つずつ伸びていく 4コマ -->
     <a class="app" href="loops.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
-        <rect x="7" y="26" width="27" height="12" fill="none" stroke="#6fb0b8" stroke-width="1.5"/>
-        <line x1="16" y1="26" x2="16" y2="38" stroke="#6fb0b8" stroke-width="1.5"/>
-        <line x1="25" y1="26" x2="25" y2="38" stroke="#6fb0b8" stroke-width="1.5"/>
-        <rect x="34" y="26" width="15" height="12" fill="none" stroke="#2f343b" stroke-width="1.5" stroke-dasharray="3 3"/>
-        <line x1="34" y1="22" x2="34" y2="42" stroke="#6fb0b8" stroke-width="2.5"/>
+      <div class="thumb"><svg class="ico n4" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <rect x="7" y="26" width="42" height="12" fill="none" stroke="#2f343b" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <g class="k1"><rect x="7" y="26" width="10.5" height="12" fill="#6fb0b8" opacity=".3"/><line x1="17.5" y1="22" x2="17.5" y2="42" stroke="#6fb0b8" stroke-width="2.5"/></g>
+        <g class="k2"><rect x="7" y="26" width="21" height="12" fill="#6fb0b8" opacity=".3"/><line x1="28" y1="22" x2="28" y2="42" stroke="#6fb0b8" stroke-width="2.5"/></g>
+        <g class="k3"><rect x="7" y="26" width="31.5" height="12" fill="#6fb0b8" opacity=".3"/><line x1="38.5" y1="22" x2="38.5" y2="42" stroke="#6fb0b8" stroke-width="2.5"/></g>
+        <g class="k4"><rect x="7" y="26" width="42" height="12" fill="#6fb0b8" opacity=".3"/><line x1="49" y1="22" x2="49" y2="42" stroke="#6fb0b8" stroke-width="2.5"/></g>
         <circle cx="20.5" cy="14" r="4.5" fill="#c96a5e"/>
         <path d="M20.5 25 L16.8 17.5 L24.2 17.5 Z" fill="#c96a5e"/>
       </svg></div>
@@ -130,28 +197,33 @@
       <div class="en">Stretch the loop sequence</div>
     </a>
 
+    <!-- GROOVE: アクセント(赤い高い棒)が左から右へ移る 3コマ -->
     <a class="app" href="groove.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <div class="thumb"><svg class="ico n3" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
         <g fill="#23262c"><rect x="8" y="30" width="6" height="8"/><rect x="20" y="30" width="6" height="8"/><rect x="32" y="30" width="6" height="8"/><rect x="44" y="30" width="6" height="8"/></g>
-        <g fill="#6fb0b8"><rect x="8" y="18" width="6" height="20"/><rect x="32" y="22" width="6" height="16"/></g>
-        <g fill="#c96a5e"><rect x="23" y="26" width="6" height="12"/><rect x="47" y="24" width="6" height="14"/></g>
         <path d="M8 14 C 20 8, 36 20, 50 12" fill="none" stroke="#6fb0b8" stroke-width="1.5" stroke-dasharray="2 2"/>
+        <g class="k1"><rect x="8" y="18" width="6" height="20" fill="#c96a5e"/><rect x="20" y="28" width="6" height="10" fill="#6fb0b8"/><rect x="32" y="24" width="6" height="14" fill="#6fb0b8"/><rect x="44" y="30" width="6" height="8" fill="#6fb0b8"/></g>
+        <g class="k2"><rect x="8" y="26" width="6" height="12" fill="#6fb0b8"/><rect x="20" y="18" width="6" height="20" fill="#c96a5e"/><rect x="32" y="28" width="6" height="10" fill="#6fb0b8"/><rect x="44" y="24" width="6" height="14" fill="#6fb0b8"/></g>
+        <g class="k3"><rect x="8" y="28" width="6" height="10" fill="#6fb0b8"/><rect x="20" y="24" width="6" height="14" fill="#6fb0b8"/><rect x="32" y="18" width="6" height="20" fill="#c96a5e"/><rect x="44" y="26" width="6" height="12" fill="#6fb0b8"/></g>
       </svg></div>
       <div class="nm">GROOVE</div>
       <div class="desc">ワンボタンで曲にノリを足す</div>
       <div class="en">One-tap swing &amp; accent</div>
     </a>
 
+    <!-- INVADERS: 本家と同じ、足を開く2コマ歩き -->
     <a class="app" href="invaders.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+      <div class="thumb"><svg class="ico n2" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
         <g fill="none" stroke="#2f343b" stroke-width="1"><rect x="8" y="8" width="40" height="40"/>
         <line x1="18" y1="8" x2="18" y2="48"/><line x1="28" y1="8" x2="28" y2="48"/><line x1="38" y1="8" x2="38" y2="48"/>
         <line x1="8" y1="18" x2="48" y2="18"/><line x1="8" y1="28" x2="48" y2="28"/><line x1="8" y1="38" x2="48" y2="38"/></g>
         <g fill="#e8862e">
         <rect x="19" y="17" width="18" height="3"/><rect x="16" y="20" width="24" height="4"/>
-        <rect x="14" y="24" width="28" height="10"/><rect x="16" y="34" width="24" height="2"/>
-        <rect x="17" y="36" width="3" height="6"/><rect x="23" y="36" width="3" height="6"/>
+        <rect x="14" y="24" width="28" height="10"/><rect x="16" y="34" width="24" height="2"/></g>
+        <g class="k1" fill="#e8862e"><rect x="17" y="36" width="3" height="6"/><rect x="23" y="36" width="3" height="6"/>
         <rect x="30" y="36" width="3" height="6"/><rect x="36" y="36" width="3" height="6"/></g>
+        <g class="k2" fill="#e8862e"><rect x="14" y="36" width="3" height="6"/><rect x="21" y="36" width="3" height="4"/>
+        <rect x="32" y="36" width="3" height="4"/><rect x="39" y="36" width="3" height="6"/></g>
         <g fill="#6699ff">
         <rect x="19" y="27" width="4" height="4"/><rect x="26" y="27" width="4" height="4"/><rect x="33" y="27" width="4" height="4"/></g>
       </svg></div>
@@ -160,8 +232,13 @@
       <div class="en">Catch the monkeys on the beat</div>
     </a>
 
+    <!-- SEQUENCE: 再生ヘッドが4列を順に舐めていく 4コマ -->
     <a class="app" href="sequence.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <div class="thumb"><svg class="ico n4" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <rect class="k1" x="7" y="8" width="12" height="38" fill="#6fb0b8" opacity=".16"/>
+        <rect class="k2" x="19" y="8" width="12" height="38" fill="#6fb0b8" opacity=".16"/>
+        <rect class="k3" x="31" y="8" width="12" height="38" fill="#6fb0b8" opacity=".16"/>
+        <rect class="k4" x="43" y="8" width="12" height="38" fill="#6fb0b8" opacity=".16"/>
         <g fill="#6fb0b8"><rect x="9" y="10" width="8" height="8"/><rect x="33" y="10" width="8" height="8"/>
         <rect x="9" y="22" width="8" height="8"/><rect x="21" y="34" width="8" height="8"/></g>
         <g fill="#c96a5e"><rect x="21" y="10" width="8" height="8"/><rect x="33" y="34" width="8" height="8"/></g>
@@ -172,53 +249,64 @@
       <div class="en">Edit &amp; arrange loops</div>
     </a>
 
+    <!-- TRANCE: MIDI の粒が線の上を渡っていく 4コマ -->
     <a class="app" href="trance.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <div class="thumb"><svg class="ico n4" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
         <rect x="7" y="20" width="15" height="16" rx="2" fill="none" stroke="#6fb0b8" stroke-width="2"/>
         <rect x="34" y="20" width="15" height="16" rx="2" fill="none" stroke="#6fb0b8" stroke-width="2"/>
-        <line x1="22" y1="28" x2="34" y2="28" stroke="#6fb0b8" stroke-width="2"/>
+        <line x1="22" y1="28" x2="34" y2="28" stroke="#2f343b" stroke-width="2"/>
         <path d="M25 25 L22 28 L25 31 Z" fill="#6fb0b8"/><path d="M31 25 L34 28 L31 31 Z" fill="#6fb0b8"/>
-        <g fill="#c96a5e"><circle cx="11.5" cy="28" r="1.6"/><circle cx="44.5" cy="28" r="1.6"/></g>
+        <circle class="k1" cx="23.5" cy="28" r="1.8" fill="#c96a5e"/>
+        <circle class="k2" cx="27" cy="28" r="1.8" fill="#c96a5e"/>
+        <circle class="k3" cx="30.5" cy="28" r="1.8" fill="#c96a5e"/>
+        <circle class="k4" cx="34" cy="28" r="1.8" fill="#c96a5e"/>
       </svg></div>
       <div class="nm">TRANCE</div>
       <div class="desc">Logic/Ableton と MIDI 連携</div>
       <div class="en">Bridge to your DAW</div>
     </a>
 
+    <!-- DIALOGUE: 交互に喋る 2コマ -->
     <a class="app" href="dialogue.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
-        <rect x="7" y="11" width="30" height="15" rx="3" fill="none" stroke="#6fb0b8" stroke-width="2"/>
-        <path d="M14 26 L14 32 L21 26 Z" fill="#6fb0b8"/>
-        <rect x="19" y="30" width="30" height="15" rx="3" fill="none" stroke="#c96a5e" stroke-width="2"/>
-        <path d="M42 45 L42 51 L35 45 Z" fill="#c96a5e"/>
+      <div class="thumb"><svg class="ico n2" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <rect x="7" y="11" width="30" height="15" rx="3" fill="none" stroke="#2f343b" stroke-width="2"/>
+        <rect x="19" y="30" width="30" height="15" rx="3" fill="none" stroke="#2f343b" stroke-width="2"/>
+        <g class="k1"><rect x="7" y="11" width="30" height="15" rx="3" fill="none" stroke="#6fb0b8" stroke-width="2"/>
+          <path d="M14 26 L14 32 L21 26 Z" fill="#6fb0b8"/></g>
+        <g class="k2"><rect x="19" y="30" width="30" height="15" rx="3" fill="none" stroke="#c96a5e" stroke-width="2"/>
+          <path d="M42 45 L42 51 L35 45 Z" fill="#c96a5e"/></g>
       </svg></div>
       <div class="nm">DIALOGUE</div>
       <div class="desc">AIと音で交互に対話・即興</div>
       <div class="en">Improvise with an AI partner</div>
     </a>
 
+    <!-- DUET: 二匹のあいだで音符が入れ替わる 2コマ -->
     <a class="app" href="duet.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <div class="thumb"><svg class="ico n2" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
         <rect x="7" y="17" width="15" height="14" rx="4" fill="#6fb0b8"/>
         <rect x="10.5" y="22" width="2.4" height="3" fill="#0a0b0e"/><rect x="16" y="22" width="2.4" height="3" fill="#0a0b0e"/>
         <g fill="#6fb0b8"><rect x="9" y="31" width="2" height="4"/><rect x="13.5" y="31" width="2" height="4"/><rect x="18" y="31" width="2" height="4"/></g>
         <rect x="34" y="17" width="15" height="14" rx="4" fill="#c96a5e"/>
         <rect x="37.5" y="22" width="2.4" height="3" fill="#0a0b0e"/><rect x="43" y="22" width="2.4" height="3" fill="#0a0b0e"/>
         <g fill="#c96a5e"><rect x="36" y="31" width="2" height="4"/><rect x="40.5" y="31" width="2" height="4"/><rect x="45" y="31" width="2" height="4"/></g>
-        <rect x="25" y="20" width="1.8" height="6" fill="#6fb0b8"/><rect x="29.2" y="16" width="1.8" height="6" fill="#c96a5e"/>
-        <rect x="25" y="27" width="1.8" height="5" fill="#c96a5e"/><rect x="29.2" y="24" width="1.8" height="6" fill="#6fb0b8"/>
+        <g class="k1"><rect x="25" y="20" width="1.8" height="6" fill="#6fb0b8"/><rect x="29.2" y="16" width="1.8" height="6" fill="#c96a5e"/></g>
+        <g class="k2"><rect x="25" y="27" width="1.8" height="5" fill="#c96a5e"/><rect x="29.2" y="24" width="1.8" height="6" fill="#6fb0b8"/></g>
       </svg></div>
       <div class="nm">DUET</div>
       <div class="desc">GoogleのAI(Magenta)とデュエット</div>
       <div class="en">Duet with Magenta AI</div>
     </a>
+
+    <!-- SOUND GUIDE: 下のレベルメーターが動く 3コマ -->
     <a class="app" href="ponkey-sound-guide.html">
-      <div class="thumb"><svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <div class="thumb"><svg class="ico n3" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
         <rect x="13" y="9" width="30" height="38" fill="none" stroke="#2f343b" stroke-width="1.5"/>
         <g stroke="#6fb0b8" stroke-width="1.5"><line x1="19" y1="17" x2="37" y2="17"/>
         <line x1="19" y1="23" x2="37" y2="23"/><line x1="19" y1="29" x2="31" y2="29"/></g>
-        <g fill="#c96a5e"><rect x="19" y="35" width="3" height="6"/><rect x="24" y="33" width="3" height="8"/>
-        <rect x="29" y="36" width="3" height="5"/><rect x="34" y="34" width="3" height="7"/></g>
+        <g class="k1" fill="#c96a5e"><rect x="19" y="35" width="3" height="6"/><rect x="24" y="33" width="3" height="8"/><rect x="29" y="36" width="3" height="5"/><rect x="34" y="34" width="3" height="7"/></g>
+        <g class="k2" fill="#c96a5e"><rect x="19" y="32" width="3" height="9"/><rect x="24" y="36" width="3" height="5"/><rect x="29" y="34" width="3" height="7"/><rect x="34" y="37" width="3" height="4"/></g>
+        <g class="k3" fill="#c96a5e"><rect x="19" y="37" width="3" height="4"/><rect x="24" y="34" width="3" height="7"/><rect x="29" y="32" width="3" height="9"/><rect x="34" y="35" width="3" height="6"/></g>
       </svg></div>
       <div class="nm">SOUND GUIDE</div>
       <div class="desc">音の世界観と、耳を揃える17組</div>
