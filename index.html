@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PONKEY Web Apps</title>
+<title>PONKEY PARK</title>
 <meta name="theme-color" content="#0e0f12">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,11 +21,24 @@
   body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
     font-weight:300;letter-spacing:.01em;max-width:720px;margin:0 auto;padding:34px 20px 60px;min-height:100vh}
   h1{font-size:22px;font-weight:400;letter-spacing:.14em;margin:0 0 22px;text-transform:uppercase}
-  .brandrow{display:flex;align-items:center;gap:16px;margin:0 0 22px}
-  .brandrow h1{margin:0}
-  .mascot{height:44px;image-rendering:pixelated;animation:bob 2.6s ease-in-out infinite}
-  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-  @media(prefers-reduced-motion:reduce){.mascot{animation:none}}
+  /* ブランド行: タイトルの下端(ベースライン)とモンキーの足元を揃える */
+  .brandrow{display:flex;align-items:flex-end;gap:16px;margin:0 0 22px}
+  .brandrow h1{margin:0;line-height:1}
+  .mascots{display:flex;align-items:flex-end;gap:10px}
+  /* オレンジは最下行が輪郭(背景抜き)で描画されないぶん、2px 下げて足元を緑と揃える */
+  .mo{margin-bottom:-2px}
+  /* INVADERS と同じ PONKEY MONKEY。1ドット=2px、拍で足を開く2コマ歩き */
+  .m{position:relative;display:block}
+  .m svg{display:block;width:auto;image-rendering:pixelated}
+  .m .f2{position:absolute;left:0;bottom:0}
+  .mo svg{height:24px}   /* 12ドット */
+  .mg svg{height:30px}   /* 15ドット(アンテナ付き)。ドットサイズは同じ */
+  .f1{animation:mkA .88s steps(1,end) infinite}
+  .f2{animation:mkB .88s steps(1,end) infinite}
+  .mg .f1,.mg .f2{animation-delay:-.44s}   /* 2匹は交互に足を出す */
+  @keyframes mkA{0%,49.99%{opacity:1}50%,100%{opacity:0}}
+  @keyframes mkB{0%,49.99%{opacity:0}50%,100%{opacity:1}}
+  @media(prefers-reduced-motion:reduce){.f1,.f2{animation:none}.f2{display:none}}
   .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,210px));gap:14px;justify-content:center}
   a.app{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
     text-decoration:none;color:var(--txt);background:var(--panel);border:1px solid var(--line);padding:16px;
@@ -41,9 +54,37 @@
 </head>
 <body>
   <div class="brandrow">
-    <h1>PONKEY</h1>
-    <img class="mascot" src="mascot.png" alt="PONKEY マスコット" width="86" height="44">
+    <h1>PONKEY PARK</h1>
+    <div class="mascots" id="mascots" role="img" aria-label="PONKEY MONKEY"></div>
   </div>
+  <script>
+  /* ドット絵の PONKEY MONKEY (invaders.html の sprite と同じ定義)。
+     '.'=透明 / K=輪郭 / O=体 / E=目 を横方向にランレングスして SVG 化する */
+  (function(){
+    var STAND=['KOK.KOK.KOK.KOK','KOK.KOK.KOK.KOK','KK..KK..KK..KK.'],
+        WIDE =['KOKOK.KOK.KOKOK','OK.KOK.KOK.KOKO','K...KK..K...K.K'],
+        EYE  =['KOKEEKEEKEEKOOK','KOKEEKEEKEEKOOK'],
+        BODY =['...KKKKKKKKK...','..KOOOOOOOOOK..','.KOOOOOOOOOOOK.','KOOOOOOOOOOOOOK',
+               EYE[0],EYE[1],'KOOOOOOOOOOOOOK','KOOOOOOOOOOOOOK','.KOOOOOOOOOOOK.'],
+        ANT  =['......OO.......','.......K.......','.......K.......'],
+        PAL_O={O:'#ff8800',E:'#2266ff'},              // オレンジは輪郭が背景抜き
+        PAL_G={K:'#eeeeee',O:'#00cc44',E:'#ffdd00'};  // 緑(AI側)は白フチ
+    function svg(rows,pal,cls){
+      var w=rows[0].length,h=rows.length,out='',y,r,x,n,c;
+      for(y=0;y<h;y++){ r=rows[y]; x=0;
+        while(x<w){ c=pal[r[x]];
+          if(!c){ x++; continue; }
+          n=1; while(x+n<w&&r[x+n]===r[x])n++;
+          out+='<rect x="'+x+'" y="'+y+'" width="'+n+'" height="1" fill="'+c+'"/>'; x+=n; } }
+      return '<svg class="'+cls+'" viewBox="0 0 '+w+' '+h+'" shape-rendering="crispEdges">'+out+'</svg>';
+    }
+    function walker(head,pal,cls){
+      return '<span class="m '+cls+'">'+svg(head.concat(STAND),pal,'f1')+svg(head.concat(WIDE),pal,'f2')+'</span>';
+    }
+    document.getElementById('mascots').innerHTML =
+      walker(BODY,PAL_O,'mo') + walker(ANT.concat(BODY),PAL_G,'mg');
+  })();
+  </script>
 
   <div class="apps">
     <a class="app" href="lesson.html">
