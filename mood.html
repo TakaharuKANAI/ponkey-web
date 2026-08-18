@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MOOD</title>
-<meta name="theme-color" content="#0e0f12">
+<meta name="theme-color" content="#f4f1ea">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -16,10 +16,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  /* SEQUENCE / SYNC と同じニュートラル・ダーク: Inter スリム / ティール+レッド / 1px 細線 / 角なし */
+  /* ライト版。骨格は SEQUENCE のニュートラル・ダークと同じ (Inter / ティール+レッド / 1px細線 / 角なし) で、
+     地だけ GROOVE・LOOPS と同じ紙色にしてある。鍵盤を扱うアプリなので、白鍵が「白」に見える地のほうがいい */
   :root{
-    --bg:#0e0f12; --panel:#15171b; --panel2:#1b1e23; --line:#272a30; --txt:#cbced4; --dim:#6b6f76;
-    --teal:#6fb0b8; --red:#c96a5e; --gold:#c2a85a;
+    --bg:#f4f1ea; --panel:#fbfaf6; --panel2:#efece4; --line:#d9d4c8; --txt:#2a2c30; --dim:#8a8d93;
+    --teal:#3f8f98; --red:#b8574b; --amber:#c98a2e;
+    --tint:rgba(63,143,152,.13);        /* ティールの薄敷き (選択状態) */
   }
   *{box-sizing:border-box;border-radius:0}
   body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
@@ -30,13 +32,13 @@
   h2{font-size:11px;color:var(--dim);margin:0 0 10px;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
   b{font-weight:500;color:var(--txt)}
   button{font:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:8px 13px;
-         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;
+         border:1px solid var(--line);background:var(--panel);color:var(--txt);cursor:pointer;
          transition:background .12s,border-color .12s}
-  button:hover{background:#1c1f25;border-color:#3a3f47}
-  button:disabled{opacity:.35;cursor:default;background:transparent;color:var(--dim);border-color:var(--line)}
+  button:hover{background:#efece4;border-color:#c2bcae}
+  button:disabled{opacity:.4;cursor:default;background:transparent;color:var(--dim);border-color:var(--line)}
   button.primary{border-color:var(--teal);color:var(--teal)}
-  button.primary:hover{background:rgba(111,176,184,.12)}
-  button.on{border-color:var(--teal);color:var(--teal);background:rgba(111,176,184,.12)}
+  button.primary:hover{background:var(--tint)}
+  button.on{border-color:var(--teal);color:var(--teal);background:var(--tint)}
   .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
   .pill.ok{border-color:var(--teal);color:var(--teal)}
   .pill.ng{border-color:var(--red);color:var(--red)}
@@ -47,55 +49,61 @@
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
   .hint{font-size:11.5px;color:var(--dim);line-height:1.65}
   .hint b{color:var(--txt)}
-  select,input[type=text]{font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);padding:6px 9px}
+  select,input[type=text]{font:inherit;background:var(--panel);color:var(--txt);border:1px solid var(--line);padding:6px 9px}
   select:focus{outline:none;border-color:var(--teal)}
   input[type=range]{accent-color:var(--teal);vertical-align:middle}
   label.ck{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--dim);cursor:pointer}
   label.ck input{accent-color:var(--teal)}
+  a{color:var(--teal)}
 
   /* ── 雰囲気プリセット ── */
   .moods{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
   .mood{border:1px solid var(--line);background:var(--panel2);padding:9px 10px;cursor:pointer;text-align:left}
-  .mood:hover{border-color:#3a3f47}
-  .mood.act{border-color:var(--teal)}
+  .mood:hover{border-color:#c2bcae}
+  .mood.act{border-color:var(--teal);background:var(--tint)}
   .mood .mn{font-size:13px;font-weight:400;color:var(--txt)}
   .mood.act .mn{color:var(--teal)}
   .mood .md{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.5}
 
   /* ── 鍵盤の配置ビュー: 低音→高音に 16 本ならべる ── */
   .keys{display:grid;grid-template-columns:repeat(16,1fr);gap:2px;margin-top:8px}
-  .kb{position:relative;height:64px;border:1px solid var(--line);background:#e6e7e2;cursor:pointer;
+  .kb{position:relative;height:64px;border:1px solid #c9c4b7;background:#ffffff;cursor:pointer;
       display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:4px;
-      color:#3a3d42;font-size:9.5px;letter-spacing:.02em;user-select:none}
-  .kb.blk{background:#22252b;color:#8c9199;border-color:#33373e}
-  /* スケール外: 透過で背景に溶かすと「黒鍵」と見分けがつかなくなるので、明度だけ落とす */
-  .kb.out{filter:brightness(.55) saturate(.5)}
+      color:#5a5c60;font-size:9.5px;letter-spacing:.02em;user-select:none}
+  .kb.blk{background:#3a3d42;color:#dcd8cf;border-color:#2a2c30}
+  /* スケール外は褪せさせるが、opacity で一律に薄めると白鍵が地に溶けて枠まで消え、
+     「16本ある」という形が読めなくなる。塗りと文字だけ落とし、白鍵/黒鍵の差は残す */
+  .kb.out{background:#eceadf;color:#a9a69d;border-color:#dcd7ca}
+  .kb.out.blk{background:#9d9f9f;color:#f0efe9;border-color:#8e9090}
   .kb.in::before{content:"";position:absolute;top:3px;left:3px;right:3px;height:5px;background:var(--teal)}
-  .kb.hit{outline:1px solid var(--red)}
-  .kb .ki{position:absolute;top:2px;right:3px;font-size:8px;opacity:.45}
+  .kb.hit{outline:2px solid var(--red);outline-offset:-1px}
+  .kb .ki{position:absolute;top:2px;right:3px;font-size:8px;opacity:.5}
 
   /* ── ピアノロール: 16 鍵 × 16 ステップ ── */
   .tabs{display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap}
-  .tab{padding:5px 12px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:12px;color:var(--txt)}
-  .tab.act{border-color:var(--teal);color:var(--teal)}
+  .tab{padding:5px 12px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:12px;color:var(--txt)}
+  .tab.act{border-color:var(--teal);color:var(--teal);background:var(--tint)}
   .roll{display:grid;grid-template-columns:52px 1fr;gap:0;font-size:0}
   .rlab{display:grid}
   .rl{height:19px;display:flex;align-items:center;justify-content:flex-end;padding-right:7px;
       font-size:10px;color:var(--dim);cursor:pointer;letter-spacing:.02em}
   .rl:hover{color:var(--teal)}
-  .rl.out{opacity:.32}
-  .rl.blk{color:#8c9199}
+  .rl.out{opacity:.42}
+  .rl.blk{color:#5f6268;font-weight:400}
   .rgrid{display:grid;grid-template-columns:repeat(16,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
-  .rc{height:19px;background:#191c21;cursor:pointer}
-  .rc.b4{background:#1f232a}
-  .rc.out{background:#121417;cursor:pointer}
+  /* 明るい地なので、濃い＝閉じている。スケール内の行を白く開け、スケール外は地に沈める
+     (ダーク版と明暗を入れ替えただけだと「使えない行」のほうが目立ってしまう) */
+  .rc{height:19px;background:#fbf9f4;cursor:pointer}
+  .rc.b4{background:#f1ede2}                 /* 拍アタマの列は少し濃く */
+  .rc.out{background:#e3ded2}                /* スケール外の行は地に沈める */
+  .rc.out.b4{background:#dad5c7}
   .rc.on{background:var(--red)}
   .rc.on.p0{background:var(--teal)}
-  .rc.on.p2{background:var(--gold)}
-  .rc.head{box-shadow:inset 0 0 0 1px rgba(203,206,212,.55)}
+  .rc.on.p2{background:var(--amber)}
+  .rc.head{box-shadow:inset 0 0 0 1px rgba(42,44,48,.42)}
   .lg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim);margin-top:8px}
-  .log{height:86px;overflow:auto;background:#0a0b0e;border:1px solid var(--line);padding:8px;
-       font:12px/1.6 ui-monospace,monospace;color:var(--dim);font-weight:300}
+  .log{height:86px;overflow:auto;background:#f8f6f1;border:1px solid var(--line);padding:8px;
+       font:12px/1.6 ui-monospace,monospace;color:#6f7278;font-weight:300}
 </style>
 </head>
 <body>
@@ -199,7 +207,7 @@
     <div class="lg">
       <span><span style="color:var(--teal)">■</span> BASS</span>
       <span><span style="color:var(--red)">■</span> LEAD</span>
-      <span><span style="color:var(--gold)">■</span> PAD</span>
+      <span><span style="color:var(--amber)">■</span> PAD</span>
       <span>左の音名をクリック＝その鍵を1本叩く</span>
     </div>
   </div>
