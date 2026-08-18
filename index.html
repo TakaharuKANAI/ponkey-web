@@ -363,6 +363,27 @@
       <div class="en">Scales, black keys &amp; moods</div>
     </a>
 
+    <!-- DRAWING: 4×4 の上を線が伸びていき、通ったマスが灯る 3コマ -->
+    <a class="app" href="drawing.html">
+      <div class="thumb"><svg class="ico n3" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <g fill="none" stroke="#2f343b" stroke-width="1"><rect x="8" y="8" width="40" height="40"/>
+        <line x1="18" y1="8" x2="18" y2="48"/><line x1="28" y1="8" x2="28" y2="48"/><line x1="38" y1="8" x2="38" y2="48"/>
+        <line x1="8" y1="18" x2="48" y2="18"/><line x1="8" y1="28" x2="48" y2="28"/><line x1="8" y1="38" x2="48" y2="38"/></g>
+        <!-- 通ったマスが灯る -->
+        <g class="k1" fill="#c2a85a" opacity=".22"><rect x="8" y="38" width="10" height="10"/></g>
+        <g class="k2" fill="#c2a85a" opacity=".22"><rect x="8" y="38" width="10" height="10"/><rect x="18" y="28" width="10" height="10"/><rect x="28" y="28" width="10" height="10"/></g>
+        <g class="k3" fill="#c2a85a" opacity=".22"><rect x="8" y="38" width="10" height="10"/><rect x="18" y="28" width="10" height="10"/><rect x="28" y="28" width="10" height="10"/><rect x="38" y="8" width="10" height="10"/></g>
+        <!-- 伸びていく線 -->
+        <g fill="none" stroke="#c2a85a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <path class="k1" d="M13 43 C 15 40, 17 37, 20 35"/>
+        <path class="k2" d="M13 43 C 15 40, 17 37, 20 35 S 30 30, 34 31"/>
+        <path class="k3" d="M13 43 C 15 40, 17 37, 20 35 S 30 30, 34 31 S 41 20, 43 13"/></g>
+      </svg></div>
+      <div class="nm">DRAWING</div>
+      <div class="desc">なぞると PONKEY が動いて光る</div>
+      <div class="en">Draw on the 16 keys</div>
+    </a>
+
     <!-- SOUND GUIDE: 下のレベルメーターが動く 3コマ -->
     <a class="app" href="ponkey-sound-guide.html">
       <div class="thumb"><svg class="ico n3" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">

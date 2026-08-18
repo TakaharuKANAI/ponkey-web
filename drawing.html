@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>DRAWING</title>
+<meta name="theme-color" content="#0e0f12">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DRAWING">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ニュートラル・ダーク (SEQUENCE と同じ骨格)。画面全体がキャンバス。
+     マス目 4×4 = PONKEY の16鍵。線の色 = PONKEY のパート色 (本体 LED と同じ色相) */
+  :root{
+    --bg:#0e0f12; --panel:#15171b; --line:#272a30; --txt:#cbced4; --dim:#6b6f76;
+    --teal:#6fb0b8; --red:#c96a5e;
+  }
+  *{box-sizing:border-box;border-radius:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:13px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none}
+  header{flex:none;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:8px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 10px 0 0;font-weight:400;letter-spacing:.08em}
+  button{font:inherit;font-weight:400;font-size:12.5px;letter-spacing:.04em;padding:7px 12px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:rgba(111,176,184,.12)}
+  button.on{border-color:var(--teal);color:var(--teal);background:rgba(111,176,184,.12)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .sep{width:1px;height:22px;background:var(--line)}
+  .hint{font-size:11px;color:var(--dim);line-height:1.5}
+  .hint b{font-weight:500;color:var(--txt)}
+  input[type=range]{accent-color:var(--teal);vertical-align:middle;width:90px}
+  .how{margin-left:auto}
+  @media(max-width:1180px){.how{display:none}}
+
+  /* パレット: 7色 = P1〜P7。選ぶと本体の色も切り替わる (CC 0-6) */
+  #pal{display:flex;gap:6px;align-items:center}
+  #pal .sw{width:26px;height:26px;border:1px solid var(--line);cursor:pointer;position:relative;
+           display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;color:rgba(0,0,0,.55);
+           transition:transform .1s,box-shadow .12s}
+  #pal .sw:hover{transform:translateY(-1px)}
+  #pal .sw.on{outline:2px solid #fff;outline-offset:1px;box-shadow:0 0 14px var(--c)}
+  #pal .sw::after{content:attr(data-k);position:absolute;bottom:-14px;left:0;right:0;text-align:center;
+                  font-size:9px;color:var(--dim)}
+
+  /* キャンバス。下=描画レイヤ(残る) / 上=マス目とフラッシュ(毎フレーム描き直し) */
+  #stage{flex:1;position:relative;min-height:0;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none}
+  #stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #paint{background:#0a0b0e}
+  #grid{pointer-events:none}
+  #empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;
+         color:var(--dim);font-size:12px;letter-spacing:.14em;text-align:center;line-height:2;transition:opacity .4s}
+  #empty.hide{opacity:0}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
+  <h1>DRAWING</h1>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <span class="sep"></span>
+  <div id="pal" title="線の色 = PONKEY のパート色。キーボードの 1〜7 でも選べる"></div>
+  <span class="sep"></span>
+  <span class="hint">太さ <input type="range" id="size" min="3" max="48" value="14"></span>
+  <button id="btnRepeat" class="on" title="同じマスの中でなぞり続けても叩き続ける">連打</button>
+  <button id="btnFade" title="描いた線が少しずつ消えていく">消えていく</button>
+  <button id="btnClear">クリア</button>
+  <button id="btnSave">PNG</button>
+  <span class="hint how">なぞる=叩く ・ マス=16鍵 ・ 色=P1〜P7 (キー1〜7)</span>
+</header>
+<div id="stage">
+  <canvas id="paint"></canvas>
+  <canvas id="grid"></canvas>
+  <div id="empty">なぞると PONKEY が動いて光る<br><span style="font-size:10px;letter-spacing:.08em">DRAG TO PLAY</span></div>
+</div>
+
+<script>
+// ============================================================ 定数 (ファーム PT2 v4.5.x)
+// BLE NoteOn(0-15) → 本体はその鍵のソレノイドを叩き LED を光らせる (録音も音源も動かない、副作用なし)。
+// CC 0-6 → パート選択 (P1〜P7 を押すのと同じ)。LED の色相がそのパートの色になる。
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+// パート色。色相はファームの PART_BASE_HUE と同じ (KICK 11 / SNARE 108 / HAT 220 / TOM 300 / BASS 176 / LEAD 58 / PAD 265)
+const PARTS=[
+  {cc:0,name:'KICK', hue:11 },
+  {cc:1,name:'SNARE',hue:108},
+  {cc:2,name:'HAT',  hue:220},
+  {cc:3,name:'TOM',  hue:300},
+  {cc:4,name:'BASS', hue:176},
+  {cc:5,name:'LEAD', hue:58 },
+  {cc:6,name:'PAD',  hue:265},
+];
+PARTS.forEach(p=>{p.color=`hsl(${p.hue} 95% 62%)`;p.glow=`hsl(${p.hue} 100% 70% / .6)`;});
+// 本体 → アプリ: 物理キーを押すと NoteOn が来る。音高 → 鍵番号 の逆引き (INVADERS と同じ表)
+const NOTE_TABLE_BASS  =[45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
+const NOTE_TABLE_NORMAL=[69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];
+function buildReverse(t){const m=new Map();t.forEach((n,i)=>{if(!m.has(n))m.set(n,i)});return m;}
+const PART_BY_CHANNEL={0:buildReverse(NOTE_TABLE_BASS),3:buildReverse(NOTE_TABLE_NORMAL),4:buildReverse(NOTE_TABLE_NORMAL)};
+function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
+  if(rev.has(note))return rev.get(note);
+  for(let d=1;d<=12;d++){if(rev.has(note-d))return rev.get(note-d);if(rev.has(note+d))return rev.get(note+d);}
+  return null;}
+
+const REPEAT_MS=140;     // 連打の最短間隔 (ソレノイドのパルス幅 ≒ 60000/BPM/4 より少し長め)
+const FLASH_MS=260;      // マスの光り
+
+// ============================================================ 状態
+let midiCh=null, device=null;
+let part=5;              // 現在の色 (index into PARTS)。既定 LEAD=黄
+let brush=14, repeat=true, fade=false;
+const pointers=new Map();          // pointerId → {x,y,cell,lastFire}
+const flash=new Float64Array(16);  // cell → 光り始めた時刻
+let drawn=false;
+
+// ============================================================ BLE
+function writeMIDI(s,d1,d2){ if(!midiCh)return;
+  const b=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  return (midiCh.writeValueWithoutResponse?midiCh.writeValueWithoutResponse(b):midiCh.writeValue(b)).catch(()=>{});}
+function setConn(ok){const e=document.getElementById('conn');e.className='pill '+(ok?'ok':'ng');e.textContent=ok?'接続中':'未接続';
+  document.getElementById('btnConnect').textContent=ok?'切断':'接続';}
+document.getElementById('btnConnect').onclick=async()=>{
+  if(device){try{device.gatt.disconnect();}catch(_){}return;}
+  try{
+    const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
+    const gatt=await dev.gatt.connect();
+    const ch=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+    dev.addEventListener('gattserverdisconnected',()=>{device=null;midiCh=null;setConn(false);});
+    await ch.startNotifications();
+    ch.addEventListener('characteristicvaluechanged',onMidi);
+    device=dev; midiCh=ch; setConn(true);
+    writeMIDI(0xB0,PARTS[part].cc,127);      // 本体の色を今のパレットに揃える
+  }catch(e){console.warn(e);}
+};
+function onMidi(ev){
+  const b=new Uint8Array(ev.target.value.buffer);
+  for(let i=0;i+2<b.length;i++){
+    const st=b[i];
+    if((st&0xF0)===0x90&&b[i+1]<0x80&&b[i+2]>0){       // 本体の鍵が押された → そのマスに今の色で点を打つ
+      const k=lookupKey(st&0x0F,b[i+1]);
+      if(k!=null){splash(k);flash[k]=performance.now();}
+      i+=2;
+    }
+  }
+}
+
+// ============================================================ 出口: 鍵を叩く
+function fire(k){
+  if(!(k>=0&&k<=15))return;
+  flash[k]=performance.now();
+  writeMIDI(0x90,k,100);
+}
+function selectPart(i){
+  part=(i+7)%7;
+  document.querySelectorAll('#pal .sw').forEach((e,j)=>e.classList.toggle('on',j===part));
+  writeMIDI(0xB0,PARTS[part].cc,127);      // 本体の LED 色も切り替わる (P1〜P7 を押したのと同じ)
+}
+
+// ============================================================ キャンバス
+const stage=document.getElementById('stage');
+const paint=document.getElementById('paint'), pctx=paint.getContext('2d');
+const grid=document.getElementById('grid'),  gctx=grid.getContext('2d');
+let W=0,H=0,DPR=1;
+function resize(){
+  const r=stage.getBoundingClientRect(); DPR=Math.min(2,devicePixelRatio||1);
+  const w=Math.round(r.width), h=Math.round(r.height);
+  if(w<8||h<8)return;                 // 非表示タブ等でサイズ 0 のときは触らない (描いた線を潰さない)
+  if(w===W&&h===H)return;
+  // 描いた線をリサイズで失わないよう退避 → 貼り直し
+  let keep=null; if(W&&H){keep=document.createElement('canvas');keep.width=paint.width;keep.height=paint.height;keep.getContext('2d').drawImage(paint,0,0);}
+  W=w;H=h;
+  for(const c of [paint,grid]){c.width=W*DPR;c.height=H*DPR;}
+  pctx.setTransform(DPR,0,0,DPR,0,0); gctx.setTransform(DPR,0,0,DPR,0,0);
+  pctx.lineCap='round'; pctx.lineJoin='round';
+  if(keep)pctx.drawImage(keep,0,0,keep.width,keep.height,0,0,W,H);
+}
+addEventListener('resize',resize); resize();
+if(window.ResizeObserver)new ResizeObserver(resize).observe(stage);   // ヘッダの折返し等でも追従
+
+function cellAt(x,y){
+  const c=Math.min(3,Math.max(0,Math.floor(x/W*4))), r=Math.min(3,Math.max(0,Math.floor(y/H*4)));
+  return r*4+c;   // 左上=0 … 右下=15 (本体の鍵番号と同じ並び)
+}
+function cellRect(k){return {x:(k%4)*W/4,y:Math.floor(k/4)*H/4,w:W/4,h:H/4};}
+
+// 線分ごとに描く。'lighter' だと丸キャップの重なりが数珠状に光ってしまうので source-over + 影(にじみ)で光らせる
+function stroke(x0,y0,x1,y1){
+  const p=PARTS[part];
+  pctx.strokeStyle=p.color; pctx.lineWidth=brush;
+  pctx.shadowColor=p.glow; pctx.shadowBlur=brush*1.4;
+  pctx.beginPath();pctx.moveTo(x0,y0);pctx.lineTo(x1,y1);pctx.stroke();
+  pctx.shadowBlur=0;
+  markDrawn();
+}
+function dot(x,y){stroke(x,y,x+.01,y+.01);}
+function splash(k){   // 本体側からの入力: マスの中心に点
+  const r=cellRect(k); const p=PARTS[part];
+  pctx.fillStyle=p.color; pctx.shadowColor=p.glow; pctx.shadowBlur=brush*2;
+  pctx.beginPath();pctx.arc(r.x+r.w/2,r.y+r.h/2,brush*.9,0,Math.PI*2);pctx.fill();
+  pctx.shadowBlur=0;
+  markDrawn();
+}
+function markDrawn(){if(!drawn){drawn=true;document.getElementById('empty').classList.add('hide');}}
+
+// ── 上レイヤ: マス目 + フラッシュ + 消えていくモードのフェード
+function frame(now){
+  if(fade&&drawn){ pctx.globalCompositeOperation='destination-out'; pctx.fillStyle='rgba(0,0,0,.035)'; pctx.fillRect(0,0,W,H); pctx.globalCompositeOperation='source-over'; }
+  gctx.clearRect(0,0,W,H);
+  gctx.strokeStyle='rgba(255,255,255,.07)'; gctx.lineWidth=1;
+  for(let i=1;i<4;i++){gctx.beginPath();gctx.moveTo(i*W/4+.5,0);gctx.lineTo(i*W/4+.5,H);gctx.stroke();
+                       gctx.beginPath();gctx.moveTo(0,i*H/4+.5);gctx.lineTo(W,i*H/4+.5);gctx.stroke();}
+  gctx.font='500 10px Inter,sans-serif'; gctx.fillStyle='rgba(255,255,255,.14)';
+  for(let k=0;k<16;k++){const r=cellRect(k);gctx.fillText(String(k+1),r.x+7,r.y+15);}
+  const p=PARTS[part];
+  for(let k=0;k<16;k++){
+    const a=1-(now-flash[k])/FLASH_MS; if(a<=0)continue;
+    const r=cellRect(k);
+    gctx.fillStyle=`hsl(${p.hue} 90% 60% / ${(a*.28).toFixed(3)})`; gctx.fillRect(r.x,r.y,r.w,r.h);
+    gctx.strokeStyle=`hsl(${p.hue} 90% 70% / ${(a*.9).toFixed(3)})`; gctx.lineWidth=2;
+    gctx.strokeRect(r.x+1,r.y+1,r.w-2,r.h-2);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ── 入力 (マウス / タッチ / ペン、複数同時OK)
+function pos(e){const r=stage.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+stage.addEventListener('pointerdown',e=>{
+  if(e.button!==undefined&&e.button!==0)return;
+  try{stage.setPointerCapture(e.pointerId);}catch(_){}
+  const {x,y}=pos(e); const k=cellAt(x,y);
+  pointers.set(e.pointerId,{x,y,cell:k,lastFire:performance.now()});
+  dot(x,y); fire(k);
+});
+stage.addEventListener('pointermove',e=>{
+  const s=pointers.get(e.pointerId); if(!s)return;
+  const {x,y}=pos(e); const now=performance.now();
+  stroke(s.x,s.y,x,y);
+  const k=cellAt(x,y);
+  if(k!==s.cell){ s.cell=k; s.lastFire=now; fire(k); }                        // 隣のマスへ入った
+  else if(repeat&&now-s.lastFire>=REPEAT_MS&&(x!==s.x||y!==s.y)){ s.lastFire=now; fire(k); }  // 同じマスをなぞり続けている
+  s.x=x; s.y=y;
+});
+const up=e=>{pointers.delete(e.pointerId);};
+stage.addEventListener('pointerup',up); stage.addEventListener('pointercancel',up); stage.addEventListener('pointerleave',up);
+
+// ── UI
+const pal=document.getElementById('pal');
+PARTS.forEach((p,i)=>{const d=document.createElement('div');d.className='sw'+(i===part?' on':'');
+  d.style.background=p.color; d.style.setProperty('--c',p.glow); d.textContent='P'+(i+1); d.dataset.k=i+1; d.title=p.name+' (キー '+(i+1)+')';
+  d.onclick=()=>selectPart(i); pal.appendChild(d);});
+document.getElementById('size').oninput=e=>brush=+e.target.value;
+document.getElementById('btnRepeat').onclick=e=>{repeat=!repeat;e.target.classList.toggle('on',repeat);};
+document.getElementById('btnFade').onclick=e=>{fade=!fade;e.target.classList.toggle('on',fade);};
+function clearAll(){pctx.clearRect(0,0,W,H);drawn=false;document.getElementById('empty').classList.remove('hide');}
+document.getElementById('btnClear').onclick=clearAll;
+document.getElementById('btnSave').onclick=()=>{
+  const c=document.createElement('canvas');c.width=paint.width;c.height=paint.height;const x=c.getContext('2d');
+  x.fillStyle='#0a0b0e';x.fillRect(0,0,c.width,c.height);x.drawImage(paint,0,0);
+  const a=document.createElement('a');a.download='ponkey-drawing.png';a.href=c.toDataURL('image/png');a.click();
+};
+addEventListener('keydown',e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.key>='1'&&e.key<='7'){selectPart(+e.key-1);e.preventDefault();}
+  else if(e.key==='['){brush=Math.max(3,brush-3);document.getElementById('size').value=brush;}
+  else if(e.key===']'){brush=Math.min(48,brush+3);document.getElementById('size').value=brush;}
+  else if(e.key==='c'||e.key==='C'){clearAll();}
+});
+</script>
+</body>
+</html>
