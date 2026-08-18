@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCALE</title>
+<meta name="theme-color" content="#f4f1ea">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY SCALE">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* MOOD と同じライト骨格 (Inter / ティール+レッド / 1px細線 / 角なし / 紙色の地)。
+     ただし画面は 1 枚だけ: キー → スケール → 16 キーの音名。それ以外は置かない */
+  :root{
+    --bg:#f4f1ea; --panel:#fbfaf6; --panel2:#efece4; --line:#d9d4c8; --txt:#2a2c30; --dim:#8a8d93;
+    --teal:#3f8f98; --red:#b8574b; --amber:#c98a2e;
+    --tint:rgba(63,143,152,.13);
+  }
+  *{box-sizing:border-box;border-radius:0}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:14px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
+  header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 12px 0 0;font-weight:400;letter-spacing:.08em}
+  h2{font-size:11px;color:var(--dim);margin:0 0 10px;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
+  b{font-weight:500;color:var(--txt)}
+  button{font:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:8px 13px;
+         border:1px solid var(--line);background:var(--panel);color:var(--txt);cursor:pointer;
+         transition:background .12s,border-color .12s}
+  button:hover{background:#efece4;border-color:#c2bcae}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:var(--tint)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .pad{padding:14px;max-width:820px;margin:0 auto;display:grid;gap:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);padding:14px}
+  .hint{font-size:11.5px;color:var(--dim);line-height:1.65}
+  .hint b{color:var(--txt)}
+  label.ck{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--dim);cursor:pointer}
+  label.ck input{accent-color:var(--teal)}
+  a{color:var(--teal)}
+
+  /* ── キー: 12 個のチップ ── */
+  .keys12{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}
+  @media(max-width:520px){.keys12{grid-template-columns:repeat(6,1fr)}}
+  .kc{border:1px solid var(--line);background:var(--panel2);padding:10px 0;text-align:center;cursor:pointer;
+      font-size:13px;user-select:none}
+  .kc.blk{background:#e6e2d7;color:#5a5c60}
+  .kc:hover{border-color:#c2bcae}
+  .kc.act{border-color:var(--teal);color:var(--teal);background:var(--tint)}
+  .keys12.dim .kc:not(.act){opacity:.45}
+
+  /* ── スケール: タイル ── */
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  @media(max-width:520px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{border:1px solid var(--line);background:var(--panel2);padding:10px 11px;cursor:pointer;text-align:left;user-select:none}
+  .tile:hover{border-color:#c2bcae}
+  .tile.act{border-color:var(--teal);background:var(--tint)}
+  .tile .tn{font-size:13.5px;font-weight:400}
+  .tile.act .tn{color:var(--teal)}
+  .tile .td{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.5}
+  .tile .ti{font-size:10px;color:var(--dim);margin-top:5px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+
+  /* ── 16 キー: 本体と同じ 4×4 (左上=G1、低い音は左下) ── */
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;max-width:340px}
+  .g{aspect-ratio:1;border:1px solid #c9c4b7;background:#fff;cursor:pointer;display:flex;flex-direction:column;
+     align-items:center;justify-content:center;gap:2px;user-select:none;position:relative}
+  .g.blk{background:#3a3d42;color:#eae7df;border-color:#2a2c30}
+  .g .nn{font-size:15px;font-weight:400}
+  .g .oc{font-size:9.5px;opacity:.6}
+  .g .gi{position:absolute;top:3px;left:5px;font-size:8.5px;opacity:.45}
+  .g.root::after{content:"";position:absolute;bottom:4px;width:5px;height:5px;background:var(--teal)}
+  .g.blk.root::after{background:#8fd0d6}
+  .g.hit{outline:2px solid var(--red);outline-offset:-1px}
+  .log{font-size:11px;color:var(--dim);white-space:pre-wrap;max-height:120px;overflow:auto;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
+  <h1>SCALE</h1>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <span style="flex:1"></span>
+  <label class="ck"><input type="checkbox" id="prev" checked>タップで試聴</label>
+</header>
+
+<div class="pad">
+  <div class="hint">
+    PONKEY の <b>P5・P6・P7</b>（BASS / LEAD / PAD）の 16 キーが弾く音階を切り替える。
+    選ぶと本体にすぐ送られ、電源を切っても本体に残る。「白鍵」に戻せば従来どおり。
+  </div>
+
+  <!-- ══ キー ══ -->
+  <div class="panel">
+    <h2>キー</h2>
+    <div class="keys12" id="keys12"></div>
+  </div>
+
+  <!-- ══ スケール ══ -->
+  <div class="panel">
+    <h2>スケール</h2>
+    <div class="tiles" id="tiles"></div>
+  </div>
+
+  <!-- ══ 16 キー ══ -->
+  <div class="panel">
+    <h2>16 キーの音 <span style="text-transform:none;letter-spacing:0;font-weight:300">（LEAD / PAD。BASS は 2 オクターブ下）</span></h2>
+    <div class="grid" id="grid"></div>
+    <div class="hint" style="margin-top:9px">
+      本体と同じ並び（左上が G1、いちばん低い音は左下）。<span style="color:var(--teal)">■</span> がキーの根音。
+      タップすると手元で試聴できる。本体の音で聴くには本体の 16 キーを押す。<br>
+      ソレノイドはキーの位置をそのまま叩くので、<b>生ピアノは白鍵のまま</b>。変わるのは内蔵音源と BLE MIDI の音。
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>ログ</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════ ファーム側の契約 (PT2 v4.5.64+)
+//   CC_SYNTH_SCALE 0x37: 0-7 = 音階 (下の SCALES の順 = ファーム SCALE_DEFS) / 0x7F = 白鍵 (従来)
+//   CC_KEY         0x38: 0-11 = C..B (曲のキー。本体 Fn×P4 のキーページと同じ値)
+//   どちらも双方向: 本体で変えると通知が来る。接続直後の State Sync にも含まれる。
+//   本体側の算出は scaleNoteForKey(): 根音 C3(48)+key を起点に、音階の度数を下から敷き詰める。
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const CC_SYNTH_SCALE=0x37, CC_KEY=0x38, SCALE_WHITE=0x7F, ROOT_BASE=48;
+const PC=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const IS_BLACK=[0,1,0,1,0,0,1,0,1,0,1,0];
+const WHITE=[0,2,4,5,7,9,11];
+const SCALES=[   // ファーム SCALE_DEFS と同じ順・同じ音程
+  {n:'メジャーペンタ',  en:'MajPenta',  iv:[0,2,4,7,9],       d:'素朴であかるい。外れる音がない'},
+  {n:'マイナーペンタ',  en:'MinPenta',  iv:[0,3,5,7,10],      d:'かげりのある、外さない'},
+  {n:'琉球',            en:'Ryukyu',    iv:[0,4,5,7,11],      d:'南の島。ゆったり'},
+  {n:'都節',            en:'Miyako',    iv:[0,1,5,7,8],       d:'和の陰旋法。しっとり'},
+  {n:'メジャー',        en:'Major',     iv:[0,2,4,5,7,9,11],  d:'ふつうの長調。7 音'},
+  {n:'ドリアン',        en:'Dorian',    iv:[0,2,3,5,7,9,10],  d:'短調だけど少し明るい。ジャズ/ファンク'},
+  {n:'ブルース',        en:'Blues',     iv:[0,3,5,6,7,10],    d:'にごりのある 6 音'},
+  {n:'ホールトーン',    en:'WholeTone', iv:[0,2,4,6,8,10],    d:'全音だけ。浮遊感、夢の中'},
+];
+
+// ════════════════════════════════════════════════ 状態
+const LS='ponkey_scale_v01';
+let store={scale:SCALE_WHITE,key:0,preview:true};
+try{ Object.assign(store,JSON.parse(localStorage.getItem(LS)||'{}')); }catch(_){}
+function save(){ localStorage.setItem(LS,JSON.stringify(store)); }
+let dev,gatt,midiCh,connected=false;
+
+// rank r (0=最低音) → 本体キー番号 (0=左上)。対合なので逆も同じ式
+function keyOfRank(r){ return (3-Math.floor(r/4))*4 + (r%4); }
+// LEAD/PAD の音高 (ファームの rebuildSynthNoteTables と同じ算出)
+function pitchOfRank(r){
+  if(store.scale===SCALE_WHITE) return ROOT_BASE + Math.floor(r/7)*12 + WHITE[r%7];
+  const iv=SCALES[store.scale].iv, L=iv.length;
+  return Math.min(127, ROOT_BASE + store.key + Math.floor(r/L)*12 + iv[r%L]);
+}
+function noteName(n){ return PC[((n%12)+12)%12]; }
+function octOf(n){ return Math.floor(n/12)-1; }
+function isBlack(n){ return !!IS_BLACK[((n%12)+12)%12]; }
+
+// ════════════════════════════════════════════════ 描画
+function render(){
+  const k12=document.getElementById('keys12');
+  if(!k12.children.length){
+    PC.forEach((nm,i)=>{ const d=document.createElement('div'); d.className='kc'+(IS_BLACK[i]?' blk':''); d.textContent=nm;
+      d.onclick=()=>setKey(i); k12.appendChild(d); });
+  }
+  [...k12.children].forEach((d,i)=>d.classList.toggle('act',i===store.key));
+  k12.classList.toggle('dim',store.scale===SCALE_WHITE);
+
+  const tl=document.getElementById('tiles');
+  if(!tl.children.length){
+    const mk=(idx,name,desc)=>{ const d=document.createElement('div'); d.className='tile'; d.dataset.idx=idx;
+      d.innerHTML=`<div class="tn">${name}</div><div class="td">${desc}</div><div class="ti"></div>`;
+      d.onclick=()=>setScale(idx); tl.appendChild(d); };
+    mk(SCALE_WHITE,'白鍵（そのまま）','いつもの PONKEY。C3 から白鍵 16 本');
+    SCALES.forEach((s,i)=>mk(i,s.n,s.d));
+  }
+  [...tl.children].forEach(d=>{ const idx=+d.dataset.idx; d.classList.toggle('act',idx===store.scale);
+    const q=d.querySelector('.ti');
+    if(idx===SCALE_WHITE){ q.textContent='C D E F G A B …'; }
+    else { const s=SCALES[idx]; q.textContent=s.iv.map(v=>PC[(store.key+v)%12]).join(' ')+`  · ${s.iv.length}音 = ${(16/s.iv.length).toFixed(1)}オクターブ`; }
+  });
+
+  const g=document.getElementById('grid');
+  if(!g.children.length){
+    for(let k=0;k<16;k++){ const d=document.createElement('div'); d.className='g'; d.dataset.k=k;
+      d.innerHTML=`<span class="gi">G${k+1}</span><span class="nn"></span><span class="oc"></span>`;
+      d.onclick=()=>tapKey(k); g.appendChild(d); }
+  }
+  for(let k=0;k<16;k++){ const r=keyOfRank(k), n=pitchOfRank(r), d=g.children[k];
+    d.querySelector('.nn').textContent=noteName(n); d.querySelector('.oc').textContent=octOf(n);
+    d.classList.toggle('blk',isBlack(n));
+    d.classList.toggle('root', store.scale!==SCALE_WHITE ? (n%12)===(store.key%12) : (n%12)===0);
+  }
+}
+
+// ════════════════════════════════════════════════ 操作
+async function setScale(idx){
+  store.scale=idx; save(); render();
+  const nm=idx===SCALE_WHITE?'白鍵':SCALES[idx].n;
+  if(connected){ await writeMIDI(0xB0,CC_SYNTH_SCALE,idx); log(`スケール: ${nm} → 本体へ`); }
+  else log(`スケール: ${nm}（未接続。接続すると本体の設定を読み込む）`);
+  arpeggio();
+}
+async function setKey(i){
+  store.key=i; save(); render();
+  if(connected){ await writeMIDI(0xB0,CC_KEY,i); log(`キー: ${PC[i]} → 本体へ`); }
+  else log(`キー: ${PC[i]}（未接続）`);
+  if(store.scale!==SCALE_WHITE) arpeggio();
+}
+function tapKey(k){ const n=pitchOfRank(keyOfRank(k)); flash(k); previewNote(n,.45,.25); }
+function flash(k){ const d=document.getElementById('grid').children[k]; d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),160); }
+// スケールを選んだときの短い上行 (雰囲気が一瞬で分かる)。ranks 0..7
+function arpeggio(){
+  if(!store.preview) return;
+  const c=actx(), t0=c.currentTime;
+  for(let r=0;r<8;r++){ const n=pitchOfRank(r); setTimeout(()=>flash(keyOfRank(r)),r*110); previewNote(n,.32,.18,t0+r*.11); }
+}
+
+// ════════════════════════════════════════════════ 試聴 (WebAudio)。本体の音ではなく「音高」の確認用
+let ac=null;
+function actx(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended')ac.resume(); return ac; }
+function previewNote(midi,dur,gain,at){
+  if(!store.preview) return;
+  const c=actx(), t=at??c.currentTime, o=c.createOscillator(), g=c.createGain();
+  o.type='triangle'; o.frequency.value=440*Math.pow(2,(midi-69)/12);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+.008);
+  g.gain.exponentialRampToValueAtTime(.0008,t+dur);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t+dur+.02);
+}
+
+// ════════════════════════════════════════════════ BLE
+document.getElementById('btnConnect').onclick=async()=>{ try{
+  log('デバイス選択…');
+  dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
+  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断');});
+  gatt=await dev.gatt.connect();
+  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  await midiCh.startNotifications();
+  midiCh.addEventListener('characteristicvaluechanged',onMidi);
+  setConn(true); log('接続完了: '+(dev.name||'PONKEY')+'。本体の現在の設定を待っています…');
+  // 本体が正 (電源を切っても残る設定なので、アプリ側の記憶で上書きしない)。
+  // 接続直後の State Sync に CC_SYNTH_SCALE / CC_KEY が含まれていれば onMidi で画面が追従する。
+  // 数秒待っても来なければ古いファーム。
+  gotSync=false; setTimeout(()=>{ if(connected&&!gotSync) log('⚠ 本体から音階の設定が届きません。ファーム v4.5.64 以降が必要です'); },4000);
+}catch(e){ log('接続エラー: '+e); } };
+let gotSync=false;
+function setConn(c){ connected=c; const el=document.getElementById('conn'); el.textContent=c?'接続済み':'未接続'; el.className='pill '+(c?'ok':'ng'); }
+async function writeMIDI(s,d1,d2){ if(!midiCh)return; const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  try{ await midiCh.writeValueWithoutResponse(u); }catch(e){ try{ await midiCh.writeValue(u); }catch(_){ } } }
+function onMidi(e){
+  const b=new Uint8Array(e.target.value.buffer);
+  for(let i=0;i+2<b.length;i++){
+    if(b[i]!==0xB0) continue;
+    const cc=b[i+1], v=b[i+2];
+    // 本体が正: 届いた値をそのまま採用する (本体の Fn×P4 で変えたときも同じ経路で追従)
+    if(cc===CC_SYNTH_SCALE){ const s=(v<=7)?v:SCALE_WHITE; const ch=s!==store.scale; store.scale=s; save(); render();
+      if(ch||!gotSync) log('本体: スケール '+(s===SCALE_WHITE?'白鍵':SCALES[s].n)); gotSync=true; i+=2; }
+    else if(cc===CC_KEY && v<12){ const ch=v!==store.key; store.key=v; save(); render();
+      if(ch||!gotSync) log('本体: キー '+PC[v]); gotSync=true; i+=2; }
+  }
+}
+
+// ════════════════════════════════════════════════ 雑務
+function log(s){ const el=document.getElementById('log'); el.textContent=(new Date().toLocaleTimeString()+'  '+s+'\n'+el.textContent).slice(0,4000); }
+document.getElementById('prev').checked=store.preview;
+document.getElementById('prev').onchange=e=>{ store.preview=e.target.checked; save(); };
+render();
+</script>
+</body>
+</html>
