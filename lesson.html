@@ -764,19 +764,28 @@ function paintStatus(){
   if(done&&!was&&S.interacted&&!S.clearing) runClear();
 }
 
-/* CLEAR を出して 1ループぶん聴かせ、自動で次のお題へ */
+/* 条件を満たしたら、まず「できあがった1ループ」を頭から聴かせる。
+   聴き終えてから CLEAR を出し、そのあと自動で次のお題へ。
+   置いた瞬間に CLEAR を出すと、自分が作った音を一度も聴かないまま進んでしまう */
+const CLEAR_MS=1100;          // CLEAR を見せている時間
 function runClear(){
   S.clearing=true;
   const st=cur();
-  el('clearBox').classList.add('on');
   if(st.clearAll) finishLesson();
   else if(!S.playing&&!S.sync) startSeq();
-  const wait=Math.max(1200, S.loopLen*stepDur()*1000+250);
+  const step=stepDur()*1000, loop=S.loopLen*step;
+  // いま鳴っているループの残り + 頭から丸1ループ。極端な BPM でも 1.6〜6秒に収める
+  const rest=(S.playing&&S.cur>=0)?(S.loopLen-1-S.cur)*step:0;
+  const listen=Math.min(6000, Math.max(1600, rest+loop));
   setTimeout(()=>{
-    el('clearBox').classList.remove('on');
-    S.clearing=false;
-    go(1);
-  }, wait);
+    if(!S.clearing) return;               // 途中で画面が変わっていたら何もしない
+    el('clearBox').classList.add('on');
+    setTimeout(()=>{
+      el('clearBox').classList.remove('on');
+      S.clearing=false;
+      go(1);
+    }, CLEAR_MS);
+  }, listen);
 }
 
 /* =====================================================================
