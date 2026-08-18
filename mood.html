@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOOD</title>
+<meta name="theme-color" content="#0e0f12">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY MOOD">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* SEQUENCE / SYNC と同じニュートラル・ダーク: Inter スリム / ティール+レッド / 1px 細線 / 角なし */
+  :root{
+    --bg:#0e0f12; --panel:#15171b; --panel2:#1b1e23; --line:#272a30; --txt:#cbced4; --dim:#6b6f76;
+    --teal:#6fb0b8; --red:#c96a5e; --gold:#c2a85a;
+  }
+  *{box-sizing:border-box;border-radius:0}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:14px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
+  header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 12px 0 0;font-weight:400;letter-spacing:.08em}
+  h2{font-size:11px;color:var(--dim);margin:0 0 10px;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
+  b{font-weight:500;color:var(--txt)}
+  button{font:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:8px 13px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;
+         transition:background .12s,border-color .12s}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button:disabled{opacity:.35;cursor:default;background:transparent;color:var(--dim);border-color:var(--line)}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary:hover{background:rgba(111,176,184,.12)}
+  button.on{border-color:var(--teal);color:var(--teal);background:rgba(111,176,184,.12)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .pad{padding:14px;max-width:1120px;margin:0 auto;display:grid;gap:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);padding:14px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:860px){.two{grid-template-columns:1fr}}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+  .hint{font-size:11.5px;color:var(--dim);line-height:1.65}
+  .hint b{color:var(--txt)}
+  select,input[type=text]{font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);padding:6px 9px}
+  select:focus{outline:none;border-color:var(--teal)}
+  input[type=range]{accent-color:var(--teal);vertical-align:middle}
+  label.ck{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--dim);cursor:pointer}
+  label.ck input{accent-color:var(--teal)}
+
+  /* ── 雰囲気プリセット ── */
+  .moods{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+  .mood{border:1px solid var(--line);background:var(--panel2);padding:9px 10px;cursor:pointer;text-align:left}
+  .mood:hover{border-color:#3a3f47}
+  .mood.act{border-color:var(--teal)}
+  .mood .mn{font-size:13px;font-weight:400;color:var(--txt)}
+  .mood.act .mn{color:var(--teal)}
+  .mood .md{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.5}
+
+  /* ── 鍵盤の配置ビュー: 低音→高音に 16 本ならべる ── */
+  .keys{display:grid;grid-template-columns:repeat(16,1fr);gap:2px;margin-top:8px}
+  .kb{position:relative;height:64px;border:1px solid var(--line);background:#e6e7e2;cursor:pointer;
+      display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:4px;
+      color:#3a3d42;font-size:9.5px;letter-spacing:.02em;user-select:none}
+  .kb.blk{background:#22252b;color:#8c9199;border-color:#33373e}
+  /* スケール外: 透過で背景に溶かすと「黒鍵」と見分けがつかなくなるので、明度だけ落とす */
+  .kb.out{filter:brightness(.55) saturate(.5)}
+  .kb.in::before{content:"";position:absolute;top:3px;left:3px;right:3px;height:5px;background:var(--teal)}
+  .kb.hit{outline:1px solid var(--red)}
+  .kb .ki{position:absolute;top:2px;right:3px;font-size:8px;opacity:.45}
+
+  /* ── ピアノロール: 16 鍵 × 16 ステップ ── */
+  .tabs{display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap}
+  .tab{padding:5px 12px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:12px;color:var(--txt)}
+  .tab.act{border-color:var(--teal);color:var(--teal)}
+  .roll{display:grid;grid-template-columns:52px 1fr;gap:0;font-size:0}
+  .rlab{display:grid}
+  .rl{height:19px;display:flex;align-items:center;justify-content:flex-end;padding-right:7px;
+      font-size:10px;color:var(--dim);cursor:pointer;letter-spacing:.02em}
+  .rl:hover{color:var(--teal)}
+  .rl.out{opacity:.32}
+  .rl.blk{color:#8c9199}
+  .rgrid{display:grid;grid-template-columns:repeat(16,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+  .rc{height:19px;background:#191c21;cursor:pointer}
+  .rc.b4{background:#1f232a}
+  .rc.out{background:#121417;cursor:pointer}
+  .rc.on{background:var(--red)}
+  .rc.on.p0{background:var(--teal)}
+  .rc.on.p2{background:var(--gold)}
+  .rc.head{box-shadow:inset 0 0 0 1px rgba(203,206,212,.55)}
+  .lg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim);margin-top:8px}
+  .log{height:86px;overflow:auto;background:#0a0b0e;border:1px solid var(--line);padding:8px;
+       font:12px/1.6 ui-monospace,monospace;color:var(--dim);font-weight:300}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
+  <h1>MOOD</h1>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <span style="width:1px;height:22px;background:var(--line)"></span>
+  <button class="primary" id="btnPlay" disabled>▶</button>
+  <button id="btnStop" disabled>■</button>
+  <span class="hint">BPM <b id="bpmv">104</b></span>
+  <input type="range" id="bpm" min="60" max="187" value="104" style="width:120px">
+  <span id="syncPill" class="pill">自動同期: —</span>
+</header>
+
+<div class="pad">
+
+  <!-- ══ 雰囲気 ══ -->
+  <div class="panel">
+    <h2>雰囲気</h2>
+    <div class="hint" style="margin-bottom:9px">
+      押すと <b>スケール・キー・鍵盤の配置・BPM</b> がまとめて変わる。
+      フレーズはそのまま残り、新しいスケールの音へ寄せられる ＝ 同じ曲の雰囲気だけが変わる。
+    </div>
+    <div class="moods" id="moods"></div>
+  </div>
+
+  <div class="two">
+    <!-- ══ 鍵盤の配置 ══ -->
+    <div class="panel">
+      <h2>鍵盤の配置</h2>
+      <div class="hint" style="margin-bottom:9px">
+        PONKEY のソレノイド16本が、下の鍵盤の<b>どの鍵の上に乗っているか</b>を教える。
+        アプリはこれを元に「どの鍵を叩けばスケールの音になるか」を決める。
+      </div>
+      <div class="row">
+        <button id="btnWhite">白鍵だけ</button>
+        <button id="btnChrom">黒鍵も含む（半音階）</button>
+      </div>
+      <div class="row">
+        <span class="hint">起点（いちばん低い鍵）</span>
+        <select id="anchor"></select>
+        <span class="hint" id="rangeInfo"></span>
+      </div>
+      <div class="keys" id="keys"></div>
+      <div class="hint" style="margin-top:8px">
+        鍵をクリックすると、その場でソレノイドが1本落ちる（配置合わせ用）。
+        <span style="color:var(--teal)">■</span> の付いた鍵がいまのスケールの音。
+      </div>
+    </div>
+
+    <!-- ══ スケールとキー ══ -->
+    <div class="panel">
+      <h2>スケールとキー</h2>
+      <div class="row">
+        <span class="hint" style="width:62px">スケール</span>
+        <select id="scaleSel" style="flex:1;min-width:190px"></select>
+      </div>
+      <div class="row">
+        <span class="hint" style="width:62px">キー</span>
+        <select id="rootSel"></select>
+        <span class="hint" id="scaleWord"></span>
+      </div>
+      <div class="hint" id="scaleInfo" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"></div>
+      <div class="row" style="margin-top:12px">
+        <label class="ck"><input type="checkbox" id="ckSnap" checked>スケールを変えたら音を寄せる</label>
+      </div>
+      <div class="row">
+        <label class="ck"><input type="checkbox" id="ckHide">スケール外の鍵を隠す</label>
+      </div>
+      <div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+        <label class="ck"><input type="checkbox" id="ckSam">本体の内蔵シンセを消す</label>
+      </div>
+      <div class="hint">
+        半音階に置いたときは、本体の内蔵シンセ（SAM2695）だけが白鍵のままズレる。
+        生の鍵盤の音だけで聴きたいときはここを ON。
+      </div>
+      <div class="row">
+        <label class="ck"><input type="checkbox" id="ckPreview">アプリでも鳴らす（試聴）</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ フレーズ ══ -->
+  <div class="panel">
+    <h2>フレーズ</h2>
+    <div class="tabs" id="tabs"></div>
+    <div class="row" style="margin-top:0">
+      <span class="hint">音の長さ</span>
+      <select id="gateSel"></select>
+      <span style="width:1px;height:20px;background:var(--line)"></span>
+      <button id="btnGen">このパートを作りなおす</button>
+      <button id="btnGenAll" class="primary">3パートまとめて作る</button>
+      <button id="btnClear">このパートを消す</button>
+    </div>
+    <div class="roll" id="roll">
+      <div class="rlab" id="rlab"></div>
+      <div class="rgrid" id="rgrid"></div>
+    </div>
+    <div class="lg">
+      <span><span style="color:var(--teal)">■</span> BASS</span>
+      <span><span style="color:var(--red)">■</span> LEAD</span>
+      <span><span style="color:var(--gold)">■</span> PAD</span>
+      <span>左の音名をクリック＝その鍵を1本叩く</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>ログ</h2>
+    <div class="log" id="log"></div>
+    <div class="hint" style="margin-top:8px">
+      ドラムはこのアプリでは扱わない（本体のドラムはステップ位置の鍵を叩くので、音階の話と噛み合わない）。
+      リズムを足すなら <a href="sequence.html" style="color:var(--teal)">SEQUENCE</a> へ。
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════ ファーム側の契約 (PT2 v4.5.x)
+const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
+const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
+const SONG_MAGIC=0x5A, S_ENTER=0x01, S_EXIT=0x02, S_LOAD_SLOT=0x04, S_SET_SEQ=0x05;
+const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54, CC_SAM_MUTE=0x55;
+const STEPS=16, SUB=4;                 // 1小節16ステップ / 1ステップ=4サブステップ (QUANTIZE_RATIO)
+const LOOP_SUBSTEPS=STEPS*SUB;         // 64 = MAX_SUBSTEPS
+const MAX_NOTES=150;                   // 1回の LOAD_SLOT に載せるノート数の上限 (BLE の書き込みサイズを守る)
+const PARTS=['BASS','LEAD','PAD'];     // synthSteps のレイヤー 0/1/2
+
+// ════════════════════════════════════════════════ 鍵の並び
+// グリッドキー index は 4x4 で 0=左上・15=右下。音が低いのは左下なので、
+// 「低い順の番号 (rank 0-15)」から index を引く写像を持っておく (INVADERS / TRANCE と同じ考え方)。
+function keyOfRank(r){ return (3-Math.floor(r/4))*4 + (r%4); }
+const WHITE_STEPS=[0,2,4,5,7,9,11];                    // 白鍵の半音オフセット
+const PC_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const IS_BLACK=[0,1,0,1,0,0,1,0,1,0,1,0];
+function noteName(n){ return PC_NAMES[((n%12)+12)%12] + (Math.floor(n/12)-1); }
+function isBlack(n){ return !!IS_BLACK[((n%12)+12)%12]; }
+
+// rank r の鍵が実際に叩く音。配置モードと起点から決まる。
+function pitchOfRank(r){
+  if(store.layout==='chromatic') return store.anchor + r;
+  return store.anchor + Math.floor(r/7)*12 + WHITE_STEPS[r%7];
+}
+function pitchOfKey(k){ return pitchOfRank(rankOfKey(k)); }
+function rankOfKey(k){ return (3-Math.floor(k/4))*4 + (k%4); }   // 対合なので同じ式でよい
+
+// ════════════════════════════════════════════════ スケール
+const SCALES=[
+  {id:'majpenta', name:'メジャーペンタ',        iv:[0,2,4,7,9],        word:'素朴であかるい'},
+  {id:'minpenta', name:'マイナーペンタ',        iv:[0,3,5,7,10],       word:'かげりのある、外さない'},
+  {id:'major',    name:'メジャー',              iv:[0,2,4,5,7,9,11],   word:'まっすぐ'},
+  {id:'minor',    name:'マイナー',              iv:[0,2,3,5,7,8,10],   word:'しずかに翳る'},
+  {id:'dorian',   name:'ドリアン',              iv:[0,2,3,5,7,9,10],   word:'翳っているのに乾いている'},
+  {id:'mixo',     name:'ミクソリディアン',      iv:[0,2,4,5,7,9,10],   word:'明るいのに落ち着かない'},
+  {id:'lydian',   name:'リディアン',            iv:[0,2,4,6,7,9,11],   word:'浮遊してひらける'},
+  {id:'phrygian', name:'フリジアン',            iv:[0,1,3,5,7,8,10],   word:'張りつめた、異国の'},
+  {id:'harmonic', name:'ハーモニックマイナー',  iv:[0,2,3,5,7,8,11],   word:'劇的で、少し古い'},
+  {id:'ryukyu',   name:'琉球',                  iv:[0,4,5,7,11],       word:'南の陽ざし'},
+  {id:'miyako',   name:'都節',                  iv:[0,1,5,7,8],        word:'和の、静かな翳り'},
+  {id:'blues',    name:'ブルース',              iv:[0,3,5,6,7,10],     word:'にごって、たわむ'},
+  {id:'wholetone',name:'ホールトーン',          iv:[0,2,4,6,8,10],     word:'足場のない、夢の中'},
+  {id:'chromatic',name:'クロマチック（全部）',  iv:[0,1,2,3,4,5,6,7,8,9,10,11], word:'制限なし'},
+];
+const SCALE_BY_ID=Object.fromEntries(SCALES.map(s=>[s.id,s]));
+
+// ════════════════════════════════════════════════ 雰囲気プリセット
+// 「黒鍵が要る音階かどうか」で配置も一緒に決まるのが肝。白鍵配置のまま都節は鳴らせない。
+const MOODS=[
+  {n:'陽だまり',      d:'メジャーペンタ / C / 白鍵',      s:'majpenta', r:0,  L:'white',    a:48, bpm:104},
+  {n:'昼の沖縄',      d:'琉球 / C / 白鍵',                s:'ryukyu',   r:0,  L:'white',    a:48, bpm:116},
+  {n:'雨の街',        d:'ドリアン / D / 白鍵',            s:'dorian',   r:2,  L:'white',    a:48, bpm:92 },
+  {n:'夕方の帰り道',  d:'マイナーペンタ / A / 白鍵',      s:'minpenta', r:9,  L:'white',    a:48, bpm:88 },
+  {n:'夜のネオン',    d:'マイナーペンタ / F# / 半音階',   s:'minpenta', r:6,  L:'chromatic',a:52, bpm:96 },
+  {n:'和の夕暮れ',    d:'都節 / D / 半音階',              s:'miyako',   r:2,  L:'chromatic',a:50, bpm:76 },
+  {n:'ブルースの部屋',d:'ブルース / C / 半音階',          s:'blues',    r:0,  L:'chromatic',a:48, bpm:84 },
+  {n:'宇宙の午後',    d:'ホールトーン / C / 半音階',      s:'wholetone',r:0,  L:'chromatic',a:48, bpm:88 },
+  {n:'古い映画',      d:'ハーモニックマイナー / A / 半音階',s:'harmonic',r:9, L:'chromatic',a:52, bpm:72 },
+  {n:'遠い国の市場',  d:'フリジアン / E / 半音階',        s:'phrygian', r:4,  L:'chromatic',a:52, bpm:108},
+  {n:'ひらけた朝',    d:'リディアン / F / 半音階',        s:'lydian',   r:5,  L:'chromatic',a:53, bpm:100},
+];
+
+// ════════════════════════════════════════════════ 状態
+const LS='ponkey_mood_v01';
+const store={
+  layout:'white', anchor:48, scale:'majpenta', root:0, bpm:104, moodIdx:0,
+  gate:[4,2,8],                                   // パートごとの音の長さ (ステップ数)
+  pat:[mkPat(),mkPat(),mkPat()],                  // pat[part][step] = key の配列
+  snap:true, hide:false, sam:false, preview:false,
+};
+function mkPat(){ return Array.from({length:STEPS},()=>[]); }
+function save(){ try{localStorage.setItem(LS,JSON.stringify(store));}catch(e){} }
+function load(){ try{const o=JSON.parse(localStorage.getItem(LS)); if(o) Object.assign(store,o);}catch(e){}
+  if(!Array.isArray(store.pat)||store.pat.length!==3) store.pat=[mkPat(),mkPat(),mkPat()];
+  store.pat=store.pat.map(p=>Array.isArray(p)&&p.length===STEPS?p.map(c=>Array.isArray(c)?c:[]):mkPat());
+  if(!SCALE_BY_ID[store.scale]) store.scale='majpenta';
+}
+let tab=1;                      // 表示中のパート (初期 LEAD)
+let dev,gatt,midiCh,cmdCh, connected=false, entered=false, playhead=-1;
+function log(m){const e=document.getElementById('log');e.innerHTML+=`[${new Date().toLocaleTimeString()}] ${m}<br>`;e.scrollTop=e.scrollHeight;}
+
+// ════════════════════════════════════════════════ スケール判定
+function scaleIv(){ return SCALE_BY_ID[store.scale].iv; }
+function pcInScale(pc){ return scaleIv().includes((((pc-store.root)%12)+12)%12); }
+function rankInScale(r){ return pcInScale(pitchOfRank(r)%12); }
+function inScaleRanks(){ const out=[]; for(let r=0;r<16;r++) if(rankInScale(r)) out.push(r); return out; }
+// スケール外の鍵を、いちばん近いスケール内の鍵へ寄せる (同距離なら下げる = 落ち着く方へ)
+function snapRank(r){
+  const ok=inScaleRanks(); if(!ok.length) return r;
+  let best=ok[0], bd=99;
+  for(const c of ok){ const d=Math.abs(c-r); if(d<bd||(d===bd&&c<best)){bd=d;best=c;} }
+  return best;
+}
+function snapAll(){
+  let moved=0;
+  for(let p=0;p<3;p++) for(let s=0;s<STEPS;s++){
+    const next=new Set();
+    for(const k of store.pat[p][s]){ const r=rankOfKey(k), nr=snapRank(r); if(nr!==r)moved++; next.add(keyOfRank(nr)); }
+    store.pat[p][s]=[...next];
+  }
+  return moved;
+}
+
+// ════════════════════════════════════════════════ BLE
+document.getElementById('btnConnect').onclick=async()=>{ try{
+  log('デバイス選択…');
+  dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
+  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);entered=false;playhead=-1;renderRoll();
+    log('切断（本体は自動でソングモードを退場し、切断時のループをそのまま繰り返す）');});
+  gatt=await dev.gatt.connect();
+  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
+  await midiCh.startNotifications();
+  midiCh.addEventListener('characteristicvaluechanged',onMidi);
+  cmdCh=await(await gatt.getPrimaryService(DBG_SERVICE)).getCharacteristic(DBG_CMD);
+  setConn(true); log('接続完了: '+(dev.name||'PONKEY'));
+  await writeCmd([SONG_MAGIC,S_ENTER,0x00]); entered=true; log('ソングモードに入場');
+  await sendBpm(); await sendSam(); await fullSync();
+}catch(e){ log('接続エラー: '+e); } };
+
+function setConn(c){ connected=c;
+  const el=document.getElementById('conn'); el.textContent=c?'接続済み':'未接続'; el.className='pill '+(c?'ok':'ng');
+  ['btnPlay','btnStop'].forEach(id=>document.getElementById(id).disabled=!c);
+  setSync(c?'待機':'—');
+}
+function setSync(t){ document.getElementById('syncPill').textContent='自動同期: '+t; }
+async function writeCmd(b){ if(!cmdCh)return; const u=Uint8Array.from(b);
+  try{ cmdCh.writeValueWithoutResponse ? await cmdCh.writeValueWithoutResponse(u) : await cmdCh.writeValue(u); }
+  catch(e){ try{ await cmdCh.writeValue(u); }catch(_){ } } }
+async function writeMIDI(s,d1,d2){ if(!midiCh)return; const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
+  try{ await midiCh.writeValueWithoutResponse(u); }catch(e){ try{ await midiCh.writeValue(u); }catch(_){ } } }
+
+// 本体は小節内の位置を CC_BAR_SYNC で流してくる。再生ヘッドはそれに乗せる (アプリ側で数えない)。
+function onMidi(e){
+  const b=new Uint8Array(e.target.value.buffer);
+  for(let i=0;i+2<b.length;i++){
+    if(b[i]===0xB0 && b[i+1]===CC_BAR_SYNC){ const st=b[i+2]&0x0f;
+      if(st!==playhead){ playhead=st; paintHead(); if(store.preview) previewStep(st); } i+=2; }
+  }
+}
+
+// ════════════════════════════════════════════════ 送信
+// LOAD_SLOT の形式: [loopLen][oct0][oct1][oct2][drumCount][drum...][synCount][(layer<<4)|key, startSub, dur ...]
+// 音の長さは「設定値」と「同じパートの次の音までの距離」の短い方。
+// 同じ鍵で音が重なると本体側で NoteOn/NoteOff が入れ子になり、音が残ることがあるため。
+function noteDurSteps(p,s){
+  for(let d=1;d<=STEPS;d++){ if(store.pat[p][(s+d)%STEPS].length) return Math.min(store.gate[p],d); }
+  return store.gate[p];
+}
+function encodeSlot(){
+  const b=[LOOP_SUBSTEPS,0,0,0, 0];               // ドラムは使わない (count=0)
+  const notes=[];
+  for(let p=0;p<3;p++){
+    for(let s=0;s<STEPS;s++){
+      if(!store.pat[p][s].length) continue;
+      const dur=Math.min(64,Math.max(1,noteDurSteps(p,s)*SUB));
+      for(const k of store.pat[p][s]) notes.push([((p&0xf)<<4)|(k&0xf), s*SUB, dur]);
+    }
+  }
+  const use=notes.slice(0,MAX_NOTES);
+  b.push(use.length); for(const n of use) b.push(n[0],n[1]&0x3f,n[2]&0x7f);
+  return {bytes:b, dropped:notes.length-use.length};
+}
+let syncTimer=null;
+function scheduleSync(){ save(); if(!connected)return; setSync('送信予約…'); clearTimeout(syncTimer); syncTimer=setTimeout(fullSync,250); }
+async function fullSync(){
+  if(!connected||!entered)return;
+  const {bytes,dropped}=encodeSlot();
+  await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,0x00,...bytes]);
+  await writeCmd([SONG_MAGIC,S_SET_SEQ,0x00,1,0]);
+  setSync('✓ 送信ずみ'+(dropped?` ⚠${dropped}音は多すぎて送れず`:''));
+  if(dropped) log(`⚠ ノートが多すぎます (${dropped}音を送れませんでした。上限 ${MAX_NOTES})`);
+}
+async function sendBpm(){ if(connected) await writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,store.bpm-60))); }
+async function sendSam(){ if(connected) await writeMIDI(0xB0,CC_SAM_MUTE,store.sam?127:0); }
+// 鍵を1本その場で叩く。ノート番号 0-15 は本体が「鍵番号そのもの」として受ける。
+async function strike(k){ if(connected) await writeMIDI(0x90,k&0x0f,100); previewNote(pitchOfKey(k),.5,'triangle',.28); }
+
+// ════════════════════════════════════════════════ 試聴 (アプリ内 WebAudio)
+// 鳴らすのは「ソレノイドが叩く生の鍵盤の音高」。本体の内蔵シンセの音高ではない。
+let ac=null;
+function actx(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended')ac.resume(); return ac; }
+function previewNote(midi,dur,wave,gain){
+  if(!store.preview && wave!=='triangle') return;
+  const c=actx(), t=c.currentTime, o=c.createOscillator(), g=c.createGain();
+  o.type=wave; o.frequency.value=440*Math.pow(2,(midi-69)/12);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+.008);
+  g.gain.exponentialRampToValueAtTime(.0008,t+dur);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur+.02);
+}
+const WAVE=['triangle','square','sine'], GAIN=[.30,.16,.09];
+function previewStep(s){
+  for(let p=0;p<3;p++) for(const k of store.pat[p][s]){
+    const secs=(60/store.bpm/4)*noteDurSteps(p,s);
+    previewNote(pitchOfKey(k)-(p===0?12:0), Math.min(2,secs), WAVE[p], GAIN[p]);
+  }
+}
+
+// ════════════════════════════════════════════════ フレーズ生成
+// スケール内の鍵だけを使い、パートごとに音域と密度を変える。
+function generate(p){
+  const ok=inScaleRanks(); if(!ok.length){ log('⚠ いまの配置では、このスケールの音が1つも出せません'); return; }
+  const lo=ok.filter(r=>r<8), hi=ok.filter(r=>r>=6);
+  const pool=(p===0?(lo.length?lo:ok):(p===1?(hi.length?hi:ok):ok));
+  const density=[0.30,0.44,0.16][p];
+  const pat=mkPat();
+  let cur=pool[Math.floor(Math.random()*pool.length)];
+  for(let s=0;s<STEPS;s++){
+    const beat=(s%4===0);
+    if(Math.random() < density*(beat?1.7:1)){
+      // 近い音へ歩く。たまに跳ぶ
+      const i=pool.indexOf(cur), j=Math.random()<.22
+        ? Math.floor(Math.random()*pool.length)
+        : Math.max(0,Math.min(pool.length-1, i+(Math.random()<.5?-1:1)*(1+Math.floor(Math.random()*2))));
+      cur=pool[j<0?0:j];
+      pat[s]=[keyOfRank(cur)];
+    }
+  }
+  if(!pat.some(c=>c.length)) pat[0]=[keyOfRank(pool[0])];
+  if(p===0) pat[0]=[keyOfRank(pool[0])];                       // ベースは頭を鳴らす
+  if(p===2){ const c=[]; for(let n=0;n<Math.min(3,ok.length);n++) c.push(keyOfRank(ok[Math.min(ok.length-1,n*2)]));
+             pat.forEach((_,s)=>pat[s]=[]); pat[0]=c; pat[8]=c.slice(); }   // パッドは和音を2回
+  store.pat[p]=pat;
+}
+
+// ════════════════════════════════════════════════ 描画
+function renderMoods(){
+  const el=document.getElementById('moods'); el.innerHTML='';
+  MOODS.forEach((m,i)=>{
+    const b=document.createElement('button'); b.className='mood'+(i===store.moodIdx?' act':'');
+    b.innerHTML=`<div class="mn">${m.n}</div><div class="md">${m.d}</div>`;
+    b.onclick=()=>applyMood(i); el.appendChild(b);
+  });
+}
+function applyMood(i){
+  const m=MOODS[i];
+  store.moodIdx=i; store.scale=m.s; store.root=m.r; store.layout=m.L; store.anchor=m.a; store.bpm=m.bpm;
+  document.getElementById('bpm').value=m.bpm; document.getElementById('bpmv').textContent=m.bpm;
+  const moved=store.snap?snapAll():0;
+  renderAll(); sendBpm(); scheduleSync();
+  log(`雰囲気「${m.n}」: ${SCALE_BY_ID[m.s].name} / ${PC_NAMES[m.r]} / ${m.L==='white'?'白鍵だけ':'半音階'} / ${m.bpm}BPM`
+      +(moved?` — ${moved}音を寄せました`:''));
+}
+function renderAnchor(){
+  const sel=document.getElementById('anchor'); const cur=store.anchor; sel.innerHTML='';
+  for(let n=36;n<=64;n++){
+    if(store.layout==='white'&&isBlack(n))continue;
+    const o=document.createElement('option'); o.value=n; o.textContent=noteName(n); sel.appendChild(o);
+  }
+  // 白鍵モードに切り替えたとき、起点が黒鍵なら下の白鍵へ寄せる
+  if(store.layout==='white'&&isBlack(cur)) store.anchor=cur-1;
+  sel.value=store.anchor;
+  document.getElementById('rangeInfo').textContent=`→ ${noteName(pitchOfRank(0))} 〜 ${noteName(pitchOfRank(15))}`;
+}
+function renderKeys(){
+  const el=document.getElementById('keys'); el.innerHTML='';
+  for(let r=0;r<16;r++){
+    const n=pitchOfRank(r), k=keyOfRank(r), ok=rankInScale(r);
+    const d=document.createElement('div');
+    d.className='kb'+(isBlack(n)?' blk':'')+(ok?' in':' out');
+    d.innerHTML=`<span class="ki">${k+1}</span>${noteName(n)}`;
+    d.title=`鍵 ${k+1}（グリッドの ${'ABCD'[Math.floor(k/4)]}${k%4+1}）→ ${noteName(n)}`;
+    d.onclick=()=>{ strike(k); d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),140); };
+    el.appendChild(d);
+  }
+}
+function renderScale(){
+  const ss=document.getElementById('scaleSel'); if(!ss.options.length){
+    SCALES.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;ss.appendChild(o);});
+    const rs=document.getElementById('rootSel');
+    PC_NAMES.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent=n;rs.appendChild(o);});
+  }
+  ss.value=store.scale; document.getElementById('rootSel').value=store.root;
+  document.getElementById('scaleWord').textContent=SCALE_BY_ID[store.scale].word;
+  const ok=inScaleRanks(), need=scaleIv().map(v=>PC_NAMES[(store.root+v)%12]);
+  const missing=need.filter(nm=>!Array.from({length:16},(_,r)=>PC_NAMES[pitchOfRank(r)%12]).includes(nm));
+  let msg=`このスケールの音: <b>${need.join(' ')}</b><br>いまの配置で叩ける鍵: <b>${ok.length} / 16 本</b>`;
+  if(missing.length) msg+=`<br><span style="color:var(--red)">${missing.join(' ')} が配置の中にありません。`
+      +(store.layout==='white'?'「黒鍵も含む（半音階）」にすると出せます。':'起点をずらすと入ります。')+'</span>';
+  else if(ok.length<5) msg+=`<br><span style="color:var(--red)">使える鍵が少なすぎます。起点をずらすか配置を変えてください。</span>`;
+  document.getElementById('scaleInfo').innerHTML=msg;
+}
+function renderTabs(){
+  const el=document.getElementById('tabs'); el.innerHTML='';
+  PARTS.forEach((n,i)=>{ const b=document.createElement('button'); b.className='tab'+(i===tab?' act':'');
+    const cnt=store.pat[i].reduce((a,c)=>a+c.length,0);
+    b.textContent=`${n}${cnt?' ('+cnt+')':''}`; b.onclick=()=>{tab=i;renderTabs();renderRoll();renderGate();}; el.appendChild(b); });
+}
+function renderGate(){
+  const g=document.getElementById('gateSel'); g.innerHTML='';
+  [[1,'16分'],[2,'8分'],[4,'4分'],[8,'2分'],[16,'全音符']].forEach(([v,t])=>{
+    const o=document.createElement('option');o.value=v;o.textContent=t;g.appendChild(o);});
+  g.value=store.gate[tab];
+}
+function renderRoll(){
+  const lab=document.getElementById('rlab'), grid=document.getElementById('rgrid');
+  lab.innerHTML=''; grid.innerHTML='';
+  const rows=[]; for(let r=15;r>=0;r--){ if(store.hide&&!rankInScale(r))continue; rows.push(r); }
+  grid.style.gridTemplateRows=`repeat(${rows.length},19px)`;
+  rows.forEach(r=>{
+    const n=pitchOfRank(r), k=keyOfRank(r), ok=rankInScale(r);
+    const l=document.createElement('div');
+    l.className='rl'+(ok?'':' out')+(isBlack(n)?' blk':'');
+    l.textContent=noteName(n); l.title=`鍵 ${k+1} → ${noteName(n)}（クリックで1本叩く）`;
+    l.onclick=()=>strike(k); lab.appendChild(l);
+  });
+  rows.forEach(r=>{
+    const k=keyOfRank(r), ok=rankInScale(r);
+    for(let s=0;s<STEPS;s++){
+      const c=document.createElement('div');
+      c.className='rc'+(s%4===0?' b4':'')+(ok?'':' out')+(store.pat[tab][s].includes(k)?' on p'+tab:'')
+        +(s===playhead?' head':'');
+      c.dataset.s=s; c.dataset.k=k;
+      c.onclick=()=>toggle(s,k);
+      grid.appendChild(c);
+    }
+  });
+}
+function paintHead(){
+  document.querySelectorAll('#rgrid .rc').forEach(c=>c.classList.toggle('head',+c.dataset.s===playhead));
+}
+function toggle(s,k){
+  const cell=store.pat[tab][s], i=cell.indexOf(k);
+  if(i>=0) cell.splice(i,1); else { cell.push(k); previewNote(pitchOfKey(k)-(tab===0?12:0),.35,WAVE[tab],GAIN[tab]); }
+  renderTabs(); renderRoll(); scheduleSync();
+}
+function renderAll(){ renderMoods(); renderAnchor(); renderKeys(); renderScale(); renderTabs(); renderGate(); renderRoll();
+  document.getElementById('btnWhite').className=store.layout==='white'?'on':'';
+  document.getElementById('btnChrom').className=store.layout==='chromatic'?'on':'';
+}
+
+// ════════════════════════════════════════════════ 操作
+function setLayout(m){
+  if(store.layout===m)return;
+  store.layout=m; store.moodIdx=-1;
+  renderAnchor();
+  const moved=store.snap?snapAll():0;
+  renderAll(); scheduleSync();
+  log(`配置: ${m==='white'?'白鍵だけ':'黒鍵も含む（半音階）'}`+(moved?` — ${moved}音を寄せました`:''));
+}
+document.getElementById('btnWhite').onclick=()=>setLayout('white');
+document.getElementById('btnChrom').onclick=()=>setLayout('chromatic');
+document.getElementById('anchor').onchange=e=>{ store.anchor=+e.target.value; store.moodIdx=-1;
+  const moved=store.snap?snapAll():0; renderAll(); scheduleSync();
+  log('起点: '+noteName(store.anchor)+(moved?` — ${moved}音を寄せました`:'')); };
+document.getElementById('scaleSel').onchange=e=>{ store.scale=e.target.value; store.moodIdx=-1;
+  const moved=store.snap?snapAll():0; renderAll(); scheduleSync();
+  log('スケール: '+SCALE_BY_ID[store.scale].name+(moved?` — ${moved}音を寄せました`:'')); };
+document.getElementById('rootSel').onchange=e=>{ store.root=+e.target.value; store.moodIdx=-1;
+  const moved=store.snap?snapAll():0; renderAll(); scheduleSync();
+  log('キー: '+PC_NAMES[store.root]+(moved?` — ${moved}音を寄せました`:'')); };
+document.getElementById('gateSel').onchange=e=>{ store.gate[tab]=+e.target.value; scheduleSync(); };
+document.getElementById('ckSnap').onchange=e=>{ store.snap=e.target.checked; save(); };
+document.getElementById('ckHide').onchange=e=>{ store.hide=e.target.checked; save(); renderRoll(); };
+document.getElementById('ckSam').onchange=e=>{ store.sam=e.target.checked; save(); sendSam();
+  log('本体の内蔵シンセ: '+(store.sam?'消音':'鳴らす')); };
+document.getElementById('ckPreview').onchange=e=>{ store.preview=e.target.checked; save(); if(store.preview)actx(); };
+document.getElementById('btnGen').onclick=()=>{ generate(tab); renderAll(); scheduleSync(); log(PARTS[tab]+' を作りなおしました'); };
+document.getElementById('btnGenAll').onclick=()=>{ for(let p=0;p<3;p++)generate(p); renderAll(); scheduleSync(); log('3パートを作りました'); };
+document.getElementById('btnClear').onclick=()=>{ store.pat[tab]=mkPat(); renderAll(); scheduleSync(); log(PARTS[tab]+' を消しました'); };
+document.getElementById('btnPlay').onclick=()=>{ actx(); writeMIDI(0xB0,CC_PLAY_STOP,1); };
+document.getElementById('btnStop').onclick=()=>{ writeMIDI(0xB0,CC_PLAY_STOP,0); playhead=-1; paintHead(); };
+const bpmEl=document.getElementById('bpm');
+bpmEl.oninput=()=>{ store.bpm=+bpmEl.value; document.getElementById('bpmv').textContent=bpmEl.value; save(); };
+bpmEl.onchange=sendBpm;
+addEventListener('beforeunload',()=>{ if(connected&&entered){ try{ writeCmd([SONG_MAGIC,S_EXIT,0x00]); }catch(e){} } });
+
+// ════════════════════════════════════════════════ 起動
+load();
+document.getElementById('bpm').value=store.bpm; document.getElementById('bpmv').textContent=store.bpm;
+document.getElementById('ckSnap').checked=store.snap;
+document.getElementById('ckHide').checked=store.hide;
+document.getElementById('ckSam').checked=store.sam;
+document.getElementById('ckPreview').checked=store.preview;
+renderAll();
+if(!store.pat.some(p=>p.some(c=>c.length))){ for(let p=0;p<3;p++)generate(p); renderAll(); }
+if(!navigator.bluetooth) log('⚠ このブラウザは Web Bluetooth 非対応です（Edge / Chrome で開いてください）');
+else log('「接続」を押すと、入場 → フレーズ送信まで自動で行います。▶ で本体が鳴ります。');
+</script>
+</body>
+</html>
