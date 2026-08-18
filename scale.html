@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SCALE</title>
 <meta name="theme-color" content="#f4f1ea">
 <link rel="manifest" href="manifest.json">
@@ -16,224 +16,228 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  /* MOOD と同じライト骨格 (Inter / ティール+レッド / 1px細線 / 角なし / 紙色の地)。
-     ただし画面は 1 枚だけ: キー → スケール → 16 キーの音名。それ以外は置かない */
+  /* 1 画面: ヘッダ / キー(1表示・左右送り) / スケール枠(1表示・左右送り + 4×4) / 鍵盤 / 1行ステータス。
+     スマホ縦で収まるように、高さは 100dvh を縦 flex で配り、4×4 だけが残りを吸う */
   :root{
     --bg:#f4f1ea; --panel:#fbfaf6; --panel2:#efece4; --line:#d9d4c8; --txt:#2a2c30; --dim:#8a8d93;
-    --teal:#3f8f98; --red:#b8574b; --amber:#c98a2e;
-    --tint:rgba(63,143,152,.13);
+    --teal:#3f8f98; --red:#b8574b; --tint:rgba(63,143,152,.13);
   }
   *{box-sizing:border-box;border-radius:0}
+  html,body{height:100%}
   body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
-       font-size:14px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
-  header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
-         padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-  h1{font-size:19px;margin:0 12px 0 0;font-weight:400;letter-spacing:.08em}
-  h2{font-size:11px;color:var(--dim);margin:0 0 10px;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
-  b{font-weight:500;color:var(--txt)}
-  button{font:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:8px 13px;
-         border:1px solid var(--line);background:var(--panel);color:var(--txt);cursor:pointer;
-         transition:background .12s,border-color .12s}
-  button:hover{background:#efece4;border-color:#c2bcae}
+       font-size:14px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased;
+       overflow:hidden;overscroll-behavior:none;touch-action:pan-y}
+  .app{height:100dvh;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:8px;
+       padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+  header{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  header a{font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none;padding:4px 6px 4px 0}
+  h1{font-size:17px;margin:0;font-weight:400;letter-spacing:.1em;flex:1}
+  button{font:inherit;font-weight:400;font-size:12px;letter-spacing:.04em;padding:6px 11px;
+         border:1px solid var(--line);background:var(--panel);color:var(--txt);cursor:pointer}
   button.primary{border-color:var(--teal);color:var(--teal)}
-  button.primary:hover{background:var(--tint)}
-  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill{font-size:10.5px;font-weight:500;padding:3px 8px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
   .pill.ok{border-color:var(--teal);color:var(--teal)}
   .pill.ng{border-color:var(--red);color:var(--red)}
-  .pad{padding:14px;max-width:820px;margin:0 auto;display:grid;gap:14px}
-  .panel{background:var(--panel);border:1px solid var(--line);padding:14px}
-  .hint{font-size:11.5px;color:var(--dim);line-height:1.65}
-  .hint b{color:var(--txt)}
-  label.ck{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--dim);cursor:pointer}
-  label.ck input{accent-color:var(--teal)}
-  a{color:var(--teal)}
+  h2{font-size:10px;color:var(--dim);margin:0;text-transform:uppercase;letter-spacing:.16em;font-weight:500}
 
-  /* ── キー: 12 個のチップ ── */
-  .keys12{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}
-  @media(max-width:520px){.keys12{grid-template-columns:repeat(6,1fr)}}
-  .kc{border:1px solid var(--line);background:var(--panel2);padding:10px 0;text-align:center;cursor:pointer;
-      font-size:13px;user-select:none}
-  .kc.blk{background:#e6e2d7;color:#5a5c60}
-  .kc:hover{border-color:#c2bcae}
-  .kc.act{border-color:var(--teal);color:var(--teal);background:var(--tint)}
-  .keys12.dim .kc:not(.act){opacity:.45}
+  /* ── 左右送りの枠 ── */
+  .sel{background:var(--panel);border:1px solid var(--line);user-select:none;-webkit-user-select:none;
+       display:flex;flex-direction:column;touch-action:pan-y;outline:none}
+  .sel:focus-visible,.sel.hov{border-color:#c2bcae}
+  .selrow{display:flex;align-items:center;gap:6px;padding:8px 6px}
+  .arrow{flex:0 0 36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+         color:var(--dim);font-size:18px;border:0;background:transparent;padding:0}
+  .arrow:hover{color:var(--teal)}
+  .selbody{flex:1;min-width:0;text-align:center}
+  .selbody .big{font-size:22px;font-weight:400;letter-spacing:.06em;line-height:1.15}
+  .selbody .sub{font-size:10.5px;color:var(--dim);margin-top:2px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dots{display:flex;gap:4px;justify-content:center;padding:0 0 6px}
+  .dots i{width:4px;height:4px;background:var(--line);display:block}
+  .dots i.on{background:var(--teal)}
+  #keySel .selbody .big{font-size:26px}
+  #keySel.dim .selbody{opacity:.4}
 
-  /* ── スケール: タイル ── */
-  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  @media(max-width:520px){.tiles{grid-template-columns:repeat(2,1fr)}}
-  .tile{border:1px solid var(--line);background:var(--panel2);padding:10px 11px;cursor:pointer;text-align:left;user-select:none}
-  .tile:hover{border-color:#c2bcae}
-  .tile.act{border-color:var(--teal);background:var(--tint)}
-  .tile .tn{font-size:13.5px;font-weight:400}
-  .tile.act .tn{color:var(--teal)}
-  .tile .td{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.5}
-  .tile .ti{font-size:10px;color:var(--dim);margin-top:5px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
-
-  /* ── 16 キー: 本体と同じ 4×4 (左上=G1、低い音は左下) ── */
-  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;max-width:340px}
-  .g{aspect-ratio:1;border:1px solid #c9c4b7;background:#fff;cursor:pointer;display:flex;flex-direction:column;
-     align-items:center;justify-content:center;gap:2px;user-select:none;position:relative}
+  /* ── スケール枠の中の 4×4 (残り高さを吸って正方形) ── */
+  .gridwrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 10px 10px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:6px}
+  /* 一辺は JS (fitGrid) が wrap の幅・高さの小さいほうに合わせる */
+  .g{border:1px solid #c9c4b7;background:#fff;border-radius:50%;cursor:pointer;display:flex;flex-direction:column;
+     align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;position:relative;min-width:0;min-height:0}
   .g.blk{background:#3a3d42;color:#eae7df;border-color:#2a2c30}
-  .g .nn{font-size:15px;font-weight:400}
-  .g .oc{font-size:9.5px;opacity:.6}
-  .g .gi{position:absolute;top:3px;left:5px;font-size:8.5px;opacity:.45}
-  .g.root::after{content:"";position:absolute;bottom:4px;width:5px;height:5px;background:var(--teal)}
-  .g.blk.root::after{background:#8fd0d6}
-  .g.hit{outline:2px solid var(--red);outline-offset:-1px}
-  .log{font-size:11px;color:var(--dim);white-space:pre-wrap;max-height:120px;overflow:auto;line-height:1.6}
+  .g .nn{font-size:clamp(11px,4.2vmin,17px);font-weight:400;line-height:1}
+  .g .oc{font-size:clamp(7px,2.4vmin,10px);opacity:.6;margin-top:1px}
+  .g.root{box-shadow:0 0 0 2px var(--teal)}
+  .g.hit{background:var(--tint);border-color:var(--teal)}
+  .g.blk.hit{background:#4c6f74}
+
+  /* ── 鍵盤 ── */
+  .piano{flex:0 0 auto;background:var(--panel);border:1px solid var(--line);padding:6px 8px 4px}
+  .piano svg{display:block;width:100%;height:78px}
+  .piano text{font-family:Inter,sans-serif;font-size:9px}
+  .status{flex:0 0 auto;font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:14px}
 </style>
 </head>
 <body>
-<header>
-  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
-  <h1>SCALE</h1>
-  <button class="primary" id="btnConnect">接続</button>
-  <span id="conn" class="pill ng">未接続</span>
-  <span style="flex:1"></span>
-  <label class="ck"><input type="checkbox" id="prev" checked>タップで試聴</label>
-</header>
-
-<div class="pad">
-  <div class="hint">
-    PONKEY の <b>P5・P6・P7</b>（BASS / LEAD / PAD）の 16 キーが弾く音階を切り替える。
-    選ぶと本体にすぐ送られ、電源を切っても本体に残る。「白鍵」に戻せば従来どおり。
-  </div>
+<div class="app">
+  <header>
+    <a href="index.html" title="アプリ一覧へ">‹</a>
+    <h1>SCALE</h1>
+    <span id="conn" class="pill ng">未接続</span>
+    <button class="primary" id="btnConnect">接続</button>
+  </header>
 
   <!-- ══ キー ══ -->
-  <div class="panel">
-    <h2>キー</h2>
-    <div class="keys12" id="keys12"></div>
-  </div>
-
-  <!-- ══ スケール ══ -->
-  <div class="panel">
-    <h2>スケール</h2>
-    <div class="tiles" id="tiles"></div>
-  </div>
-
-  <!-- ══ 16 キー ══ -->
-  <div class="panel">
-    <h2>16 キーの音 <span style="text-transform:none;letter-spacing:0;font-weight:300">（LEAD / PAD。BASS は 2 オクターブ下）</span></h2>
-    <div class="grid" id="grid"></div>
-    <div class="hint" style="margin-top:9px">
-      本体と同じ並び（左上が G1、いちばん低い音は左下）。<span style="color:var(--teal)">■</span> がキーの根音。
-      タップすると手元で試聴できる。本体の音で聴くには本体の 16 キーを押す。<br>
-      ソレノイドはキーの位置をそのまま叩くので、<b>生ピアノは白鍵のまま</b>。変わるのは内蔵音源と BLE MIDI の音。
+  <div class="sel" id="keySel" tabindex="0" data-kind="key">
+    <div class="selrow">
+      <button class="arrow" data-d="-1" aria-label="前のキー">‹</button>
+      <div class="selbody"><h2>Key</h2><div class="big" id="keyBig">C</div></div>
+      <button class="arrow" data-d="1" aria-label="次のキー">›</button>
     </div>
   </div>
 
-  <div class="panel">
-    <h2>ログ</h2>
-    <div class="log" id="log"></div>
+  <!-- ══ スケール + 16 キー ══ -->
+  <div class="sel" id="scaleSel" tabindex="0" data-kind="scale" style="flex:1;min-height:0">
+    <div class="selrow">
+      <button class="arrow" data-d="-1" aria-label="前のスケール">‹</button>
+      <div class="selbody"><h2>Scale</h2><div class="big" id="scaleBig"></div><div class="sub" id="scaleSub"></div></div>
+      <button class="arrow" data-d="1" aria-label="次のスケール">›</button>
+    </div>
+    <div class="dots" id="dots"></div>
+    <div class="gridwrap"><div class="grid" id="grid"></div></div>
   </div>
+
+  <!-- ══ 鍵盤 ══ -->
+  <div class="piano"><svg id="piano"></svg></div>
+
+  <div class="status" id="status"></div>
 </div>
 
 <script>
 // ════════════════════════════════════════════════ ファーム側の契約 (PT2 v4.5.64+)
-//   CC_SYNTH_SCALE 0x37: 0-7 = 音階 (下の SCALES の順 = ファーム SCALE_DEFS) / 0x7F = 白鍵 (従来)
+//   CC_SYNTH_SCALE 0x37: 0-7 = 音階 (SCALES の順 = ファーム SCALE_DEFS) / 0x7F = 白鍵 (従来)
 //   CC_KEY         0x38: 0-11 = C..B (曲のキー。本体 Fn×P4 のキーページと同じ値)
-//   どちらも双方向: 本体で変えると通知が来る。接続直後の State Sync にも含まれる。
-//   本体側の算出は scaleNoteForKey(): 根音 C3(48)+key を起点に、音階の度数を下から敷き詰める。
+//   どちらも双方向。接続直後の State Sync に含まれるので本体を正として画面を合わせる。
 const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
 const CC_SYNTH_SCALE=0x37, CC_KEY=0x38, SCALE_WHITE=0x7F, ROOT_BASE=48;
 const PC=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const IS_BLACK=[0,1,0,1,0,0,1,0,1,0,1,0];
 const WHITE=[0,2,4,5,7,9,11];
-const SCALES=[   // ファーム SCALE_DEFS と同じ順・同じ音程
-  {n:'メジャーペンタ',  en:'MajPenta',  iv:[0,2,4,7,9],       d:'素朴であかるい。外れる音がない'},
-  {n:'マイナーペンタ',  en:'MinPenta',  iv:[0,3,5,7,10],      d:'かげりのある、外さない'},
-  {n:'琉球',            en:'Ryukyu',    iv:[0,4,5,7,11],      d:'南の島。ゆったり'},
-  {n:'都節',            en:'Miyako',    iv:[0,1,5,7,8],       d:'和の陰旋法。しっとり'},
-  {n:'メジャー',        en:'Major',     iv:[0,2,4,5,7,9,11],  d:'ふつうの長調。7 音'},
-  {n:'ドリアン',        en:'Dorian',    iv:[0,2,3,5,7,9,10],  d:'短調だけど少し明るい。ジャズ/ファンク'},
-  {n:'ブルース',        en:'Blues',     iv:[0,3,5,6,7,10],    d:'にごりのある 6 音'},
-  {n:'ホールトーン',    en:'WholeTone', iv:[0,2,4,6,8,10],    d:'全音だけ。浮遊感、夢の中'},
+// 表示順: 白鍵 → ファーム SCALE_DEFS 0-7。id はファームに送る値
+const SCALES=[
+  {id:SCALE_WHITE, n:'白鍵',            d:'いつもの PONKEY。C3 から白鍵 16 本'},
+  {id:0, n:'メジャーペンタ',  iv:[0,2,4,7,9],       d:'素朴であかるい。外れる音がない'},
+  {id:1, n:'マイナーペンタ',  iv:[0,3,5,7,10],      d:'かげりのある、外さない'},
+  {id:2, n:'琉球',            iv:[0,4,5,7,11],      d:'南の島。ゆったり'},
+  {id:3, n:'都節',            iv:[0,1,5,7,8],       d:'和の陰旋法。しっとり'},
+  {id:4, n:'メジャー',        iv:[0,2,4,5,7,9,11],  d:'ふつうの長調。7 音'},
+  {id:5, n:'ドリアン',        iv:[0,2,3,5,7,9,10],  d:'短調だけど少し明るい'},
+  {id:6, n:'ブルース',        iv:[0,3,5,6,7,10],    d:'にごりのある 6 音'},
+  {id:7, n:'ホールトーン',    iv:[0,2,4,6,8,10],    d:'全音だけ。浮遊感'},
 ];
+const idxOfId=id=>Math.max(0,SCALES.findIndex(s=>s.id===id));
 
 // ════════════════════════════════════════════════ 状態
 const LS='ponkey_scale_v01';
-let store={scale:SCALE_WHITE,key:0,preview:true};
+let store={scale:SCALE_WHITE,key:0};
 try{ Object.assign(store,JSON.parse(localStorage.getItem(LS)||'{}')); }catch(_){}
-function save(){ localStorage.setItem(LS,JSON.stringify(store)); }
-let dev,gatt,midiCh,connected=false;
+function save(){ localStorage.setItem(LS,JSON.stringify({scale:store.scale,key:store.key})); }
+let dev,gatt,midiCh,connected=false,gotSync=false;
 
-// rank r (0=最低音) → 本体キー番号 (0=左上)。対合なので逆も同じ式
-function keyOfRank(r){ return (3-Math.floor(r/4))*4 + (r%4); }
-// LEAD/PAD の音高 (ファームの rebuildSynthNoteTables と同じ算出)
+function keyOfRank(r){ return (3-Math.floor(r/4))*4 + (r%4); }   // 対合
+function curScale(){ return SCALES[idxOfId(store.scale)]; }
+// LEAD/PAD の音高 (ファーム rebuildSynthNoteTables と同じ算出)
 function pitchOfRank(r){
-  if(store.scale===SCALE_WHITE) return ROOT_BASE + Math.floor(r/7)*12 + WHITE[r%7];
-  const iv=SCALES[store.scale].iv, L=iv.length;
-  return Math.min(127, ROOT_BASE + store.key + Math.floor(r/L)*12 + iv[r%L]);
+  const s=curScale();
+  if(s.id===SCALE_WHITE) return ROOT_BASE + Math.floor(r/7)*12 + WHITE[r%7];
+  const L=s.iv.length;
+  return Math.min(127, ROOT_BASE + store.key + Math.floor(r/L)*12 + s.iv[r%L]);
 }
-function noteName(n){ return PC[((n%12)+12)%12]; }
-function octOf(n){ return Math.floor(n/12)-1; }
-function isBlack(n){ return !!IS_BLACK[((n%12)+12)%12]; }
+const noteName=n=>PC[((n%12)+12)%12], octOf=n=>Math.floor(n/12)-1, isBlack=n=>!!IS_BLACK[((n%12)+12)%12];
+const rootPc=()=>curScale().id===SCALE_WHITE?0:store.key;
 
 // ════════════════════════════════════════════════ 描画
 function render(){
-  const k12=document.getElementById('keys12');
-  if(!k12.children.length){
-    PC.forEach((nm,i)=>{ const d=document.createElement('div'); d.className='kc'+(IS_BLACK[i]?' blk':''); d.textContent=nm;
-      d.onclick=()=>setKey(i); k12.appendChild(d); });
-  }
-  [...k12.children].forEach((d,i)=>d.classList.toggle('act',i===store.key));
-  k12.classList.toggle('dim',store.scale===SCALE_WHITE);
-
-  const tl=document.getElementById('tiles');
-  if(!tl.children.length){
-    const mk=(idx,name,desc)=>{ const d=document.createElement('div'); d.className='tile'; d.dataset.idx=idx;
-      d.innerHTML=`<div class="tn">${name}</div><div class="td">${desc}</div><div class="ti"></div>`;
-      d.onclick=()=>setScale(idx); tl.appendChild(d); };
-    mk(SCALE_WHITE,'白鍵（そのまま）','いつもの PONKEY。C3 から白鍵 16 本');
-    SCALES.forEach((s,i)=>mk(i,s.n,s.d));
-  }
-  [...tl.children].forEach(d=>{ const idx=+d.dataset.idx; d.classList.toggle('act',idx===store.scale);
-    const q=d.querySelector('.ti');
-    if(idx===SCALE_WHITE){ q.textContent='C D E F G A B …'; }
-    else { const s=SCALES[idx]; q.textContent=s.iv.map(v=>PC[(store.key+v)%12]).join(' ')+`  · ${s.iv.length}音 = ${(16/s.iv.length).toFixed(1)}オクターブ`; }
-  });
+  const s=curScale(), white=s.id===SCALE_WHITE;
+  document.getElementById('keyBig').textContent=PC[store.key];
+  document.getElementById('keySel').classList.toggle('dim',white);
+  document.getElementById('scaleBig').textContent=s.n;
+  document.getElementById('scaleSub').textContent= white ? s.d
+    : s.iv.map(v=>PC[(store.key+v)%12]).join(' ')+'  ·  '+s.d;
+  const dots=document.getElementById('dots');
+  if(!dots.children.length) SCALES.forEach(()=>dots.appendChild(document.createElement('i')));
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===idxOfId(store.scale)));
 
   const g=document.getElementById('grid');
   if(!g.children.length){
-    for(let k=0;k<16;k++){ const d=document.createElement('div'); d.className='g'; d.dataset.k=k;
-      d.innerHTML=`<span class="gi">G${k+1}</span><span class="nn"></span><span class="oc"></span>`;
-      d.onclick=()=>tapKey(k); g.appendChild(d); }
+    for(let k=0;k<16;k++){ const d=document.createElement('div'); d.className='g';
+      d.innerHTML='<span class="nn"></span><span class="oc"></span>';
+      d.onclick=()=>{ const n=pitchOfRank(keyOfRank(k)); flash(k); previewNote(n,.45,.25); }; g.appendChild(d); }
   }
-  for(let k=0;k<16;k++){ const r=keyOfRank(k), n=pitchOfRank(r), d=g.children[k];
+  for(let k=0;k<16;k++){ const n=pitchOfRank(keyOfRank(k)), d=g.children[k];
     d.querySelector('.nn').textContent=noteName(n); d.querySelector('.oc').textContent=octOf(n);
-    d.classList.toggle('blk',isBlack(n));
-    d.classList.toggle('root', store.scale!==SCALE_WHITE ? (n%12)===(store.key%12) : (n%12)===0);
-  }
+    d.classList.toggle('blk',isBlack(n)); d.classList.toggle('root',(n%12)===rootPc()); }
+  renderPiano();
 }
 
-// ════════════════════════════════════════════════ 操作
-async function setScale(idx){
-  store.scale=idx; save(); render();
-  const nm=idx===SCALE_WHITE?'白鍵':SCALES[idx].n;
-  if(connected){ await writeMIDI(0xB0,CC_SYNTH_SCALE,idx); log(`スケール: ${nm} → 本体へ`); }
-  else log(`スケール: ${nm}（未接続。接続すると本体の設定を読み込む）`);
-  arpeggio();
+// 鍵盤: 16 キーが叩く音域だけを、C 始まり〜B 終わりで切り出して描く。叩ける鍵に色、根音は濃く
+function renderPiano(){
+  const svg=document.getElementById('piano'), Wpx=svg.clientWidth||300, H=svg.clientHeight||78;
+  const pitches=[]; for(let r=0;r<16;r++) pitches.push(pitchOfRank(r));
+  const lo=Math.floor(Math.min(...pitches)/12)*12, hi=Math.floor(Math.max(...pitches)/12)*12+11;
+  const set=new Set(pitches);
+  const whites=[]; for(let n=lo;n<=hi;n++) if(!isBlack(n)) whites.push(n);
+  const W=Wpx/whites.length, out=[];
+  svg.setAttribute('viewBox',`0 0 ${Wpx} ${H}`);
+  whites.forEach((n,i)=>{ const on=set.has(n), rt=on&&(n%12)===rootPc();
+    out.push(`<rect x="${(i*W).toFixed(2)}" y="0" width="${W.toFixed(2)}" height="${H}" fill="${rt?'#3f8f98':on?'#bfe0e3':'#fbfaf6'}" stroke="#c9c4b7" stroke-width="1" data-n="${n}"/>`);
+    if(n%12===0) out.push(`<text x="${(i*W+W/2).toFixed(2)}" y="${H-4}" text-anchor="middle" fill="${rt?'#fff':'#8a8d93'}">C${octOf(n)}</text>`);
+  });
+  whites.forEach((n,i)=>{ const b=n+1; if(b>hi||!isBlack(b)) return; const on=set.has(b), rt=on&&(b%12)===rootPc();
+    out.push(`<rect x="${(i*W+W*0.66).toFixed(2)}" y="0" width="${(W*0.68).toFixed(2)}" height="${(H*0.6).toFixed(1)}" fill="${rt?'#3f8f98':on?'#4c8f96':'#2a2c30'}" data-n="${b}"/>`);
+  });
+  svg.innerHTML=out.join('');
+  svg.onclick=e=>{ const n=+e.target.getAttribute('data-n'); if(!isNaN(n)&&set.has(n)){ previewNote(n,.45,.25); flash(keyOfRank(pitches.indexOf(n))); } };
 }
-async function setKey(i){
-  store.key=i; save(); render();
-  if(connected){ await writeMIDI(0xB0,CC_KEY,i); log(`キー: ${PC[i]} → 本体へ`); }
-  else log(`キー: ${PC[i]}（未接続）`);
-  if(store.scale!==SCALE_WHITE) arpeggio();
-}
-function tapKey(k){ const n=pitchOfRank(keyOfRank(k)); flash(k); previewNote(n,.45,.25); }
-function flash(k){ const d=document.getElementById('grid').children[k]; d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),160); }
-// スケールを選んだときの短い上行 (雰囲気が一瞬で分かる)。ranks 0..7
-function arpeggio(){
-  if(!store.preview) return;
-  const c=actx(), t0=c.currentTime;
-  for(let r=0;r<8;r++){ const n=pitchOfRank(r); setTimeout(()=>flash(keyOfRank(r)),r*110); previewNote(n,.32,.18,t0+r*.11); }
-}
+// 4×4 を wrap の幅・高さの小さいほうに合わせて正方形にする (円が楕円にならないように)
+function fitGrid(){ const w=document.querySelector('.gridwrap'), g=document.getElementById('grid');
+  const cs=getComputedStyle(w), side=Math.max(80, Math.min(w.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight),
+    w.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)));
+  g.style.width=g.style.height=side+'px'; }
+new ResizeObserver(()=>{ fitGrid(); renderPiano(); }).observe(document.querySelector('.app'));
+function flash(k){ const d=document.getElementById('grid').children[k]; if(!d)return; d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),170); }
+function status(s){ document.getElementById('status').textContent=s; }
 
-// ════════════════════════════════════════════════ 試聴 (WebAudio)。本体の音ではなく「音高」の確認用
+// ════════════════════════════════════════════════ 操作 (左右送り / スワイプ / 矢印キー)
+function step(kind,d){
+  if(kind==='key'){ store.key=(store.key+d+12)%12; save(); render(); sendKey(); if(curScale().id!==SCALE_WHITE) arpeggio(); }
+  else { const i=(idxOfId(store.scale)+d+SCALES.length)%SCALES.length; store.scale=SCALES[i].id; save(); render(); sendScale(); arpeggio(); }
+}
+document.querySelectorAll('.sel').forEach(el=>{
+  const kind=el.dataset.kind;
+  el.querySelectorAll('.arrow').forEach(b=>b.onclick=e=>{ e.stopPropagation(); step(kind,+b.dataset.d); });
+  // スワイプ (タッチ) / ドラッグ (マウス)。縦スクロールは無いので横 40px で確定
+  let x0=null,y0=null;
+  el.addEventListener('pointerdown',e=>{ if(e.target.closest('.g,.arrow'))return; x0=e.clientX; y0=e.clientY; });
+  el.addEventListener('pointerup',e=>{ if(x0===null)return; const dx=e.clientX-x0, dy=e.clientY-y0; x0=null;
+    if(Math.abs(dx)>40 && Math.abs(dx)>Math.abs(dy)*1.5) step(kind, dx<0?1:-1); });
+  el.addEventListener('pointercancel',()=>{x0=null;});
+  // PC: カーソルを乗せた枠に矢印キーが効く
+  el.addEventListener('mouseenter',()=>{ document.querySelectorAll('.sel').forEach(s=>s.classList.remove('hov')); el.classList.add('hov'); });
+  el.addEventListener('mouseleave',()=>el.classList.remove('hov'));
+});
+addEventListener('keydown',e=>{
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+  const el=document.querySelector('.sel.hov')||document.activeElement.closest?.('.sel')||document.getElementById('scaleSel');
+  step(el.dataset.kind, e.key==='ArrowRight'?1:-1); e.preventDefault();
+});
+// スケールを変えたときの短い上行 (雰囲気が一瞬で分かる)
+function arpeggio(){ const c=actx(), t0=c.currentTime;
+  for(let r=0;r<8;r++){ const n=pitchOfRank(r); setTimeout(()=>flash(keyOfRank(r)),r*105); previewNote(n,.3,.16,t0+r*.105); } }
+
+// ════════════════════════════════════════════════ 試聴 (WebAudio)。音高の確認用で本体の音ではない
 let ac=null;
 function actx(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended')ac.resume(); return ac; }
 function previewNote(midi,dur,gain,at){
-  if(!store.preview) return;
   const c=actx(), t=at??c.currentTime, o=c.createOscillator(), g=c.createGain();
   o.type='triangle'; o.frequency.value=440*Math.pow(2,(midi-69)/12);
   g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+.008);
@@ -242,21 +246,20 @@ function previewNote(midi,dur,gain,at){
 }
 
 // ════════════════════════════════════════════════ BLE
+async function sendScale(){ if(connected){ await writeMIDI(0xB0,CC_SYNTH_SCALE,store.scale); status(`本体へ: ${curScale().n}`); } else status(curScale().n+'（未接続）'); }
+async function sendKey(){ if(connected){ await writeMIDI(0xB0,CC_KEY,store.key); status(`本体へ: キー ${PC[store.key]}`); } else status('キー '+PC[store.key]+'（未接続）'); }
 document.getElementById('btnConnect').onclick=async()=>{ try{
-  log('デバイス選択…');
+  status('デバイス選択…');
   dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
-  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断');});
+  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);status('切断');});
   gatt=await dev.gatt.connect();
   midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
   await midiCh.startNotifications();
   midiCh.addEventListener('characteristicvaluechanged',onMidi);
-  setConn(true); log('接続完了: '+(dev.name||'PONKEY')+'。本体の現在の設定を待っています…');
-  // 本体が正 (電源を切っても残る設定なので、アプリ側の記憶で上書きしない)。
-  // 接続直後の State Sync に CC_SYNTH_SCALE / CC_KEY が含まれていれば onMidi で画面が追従する。
-  // 数秒待っても来なければ古いファーム。
-  gotSync=false; setTimeout(()=>{ if(connected&&!gotSync) log('⚠ 本体から音階の設定が届きません。ファーム v4.5.64 以降が必要です'); },4000);
-}catch(e){ log('接続エラー: '+e); } };
-let gotSync=false;
+  setConn(true); status('接続。本体の設定を待っています…');
+  // 本体が正 (電源を切っても残る設定なので、アプリ側の記憶で上書きしない)。State Sync が来なければ古いファーム
+  gotSync=false; setTimeout(()=>{ if(connected&&!gotSync) status('⚠ 本体から音階の設定が届きません（ファーム v4.5.64 以降が必要）'); },4000);
+}catch(e){ status('接続エラー: '+e); } };
 function setConn(c){ connected=c; const el=document.getElementById('conn'); el.textContent=c?'接続済み':'未接続'; el.className='pill '+(c?'ok':'ng'); }
 async function writeMIDI(s,d1,d2){ if(!midiCh)return; const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
   try{ await midiCh.writeValueWithoutResponse(u); }catch(e){ try{ await midiCh.writeValue(u); }catch(_){ } } }
@@ -265,19 +268,11 @@ function onMidi(e){
   for(let i=0;i+2<b.length;i++){
     if(b[i]!==0xB0) continue;
     const cc=b[i+1], v=b[i+2];
-    // 本体が正: 届いた値をそのまま採用する (本体の Fn×P4 で変えたときも同じ経路で追従)
-    if(cc===CC_SYNTH_SCALE){ const s=(v<=7)?v:SCALE_WHITE; const ch=s!==store.scale; store.scale=s; save(); render();
-      if(ch||!gotSync) log('本体: スケール '+(s===SCALE_WHITE?'白鍵':SCALES[s].n)); gotSync=true; i+=2; }
-    else if(cc===CC_KEY && v<12){ const ch=v!==store.key; store.key=v; save(); render();
-      if(ch||!gotSync) log('本体: キー '+PC[v]); gotSync=true; i+=2; }
+    if(cc===CC_SYNTH_SCALE){ store.scale=(v<=7)?v:SCALE_WHITE; save(); render(); status('本体: '+curScale().n); gotSync=true; i+=2; }
+    else if(cc===CC_KEY && v<12){ store.key=v; save(); render(); status('本体: キー '+PC[v]); gotSync=true; i+=2; }
   }
 }
-
-// ════════════════════════════════════════════════ 雑務
-function log(s){ const el=document.getElementById('log'); el.textContent=(new Date().toLocaleTimeString()+'  '+s+'\n'+el.textContent).slice(0,4000); }
-document.getElementById('prev').checked=store.preview;
-document.getElementById('prev').onchange=e=>{ store.preview=e.target.checked; save(); };
-render();
+fitGrid(); render(); status('← → で切り替え。タップで試聴');
 </script>
 </body>
 </html>
