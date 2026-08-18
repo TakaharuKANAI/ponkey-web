@@ -5,8 +5,14 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 ## 構成
 
 - `index.html` — アプリハブ（PONKEY Web Apps）。各アプリへの入口
-- `lesson.html` — LESSON（使い方・作り方のレッスン。ライトテーマ）。**このファイルが唯一の正**。
-  残課題・設計メモは `PONKEY_LESSON_課題.md`
+- `lesson.html` — LESSON（使い方・作り方・しくみの3レッスン。ライトテーマ）。**このファイルが唯一の正**。
+  残課題・設計メモは `PONKEY_LESSON_課題.md`。
+  レッスン3「しくみ」は Fn サブモード / エフェクト / インテリアの解説で、**本体の状態を推定して映す**
+  （本体はモードを報告しないので、キーイベントをファームと同じ規則で追う `D` モデル。
+  BPM/スロット/キー/スケール/グルーブ/音色/オクターブ/ループ矩形は `SONG_CMD_DUMP_SLOT 0xFF` の
+  META+SLOT_DUMP と BLE MIDI の CC 通知で答え合わせ。音量・エフェクト・静音・インテリアは推定のまま = HUD に `?`）。
+  Fn×Pn の割当や音色名はファーム `PONKEY_PT2_v4_5_34.ino` / `PONKEY_V2_DATA_STRUCTURES.h` から写しているので、
+  ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる
 - `duet.html` — PONKEY AI Duet
 - `dialogue.html` — DIALOGUE
 - `sequence.html` — SEQUENCE（＋グルーブパネル）

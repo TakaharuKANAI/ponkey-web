@@ -147,6 +147,27 @@ body:not(.home) .home{display:none}
   background:var(--led);border:1px solid var(--led-line);margin-right:6px;vertical-align:1px}
 .selname em{font-style:normal;color:var(--accent-ink);font-weight:600;margin-left:8px}
 
+/* レッスン3: 本体の状態を映す HUD */
+body.l3 #btnDemo{display:none}
+.hud{display:none;margin:4px 2px 2px;padding:6px 8px 4px;
+  border-top:.5px solid var(--b70-hair);
+  font-size:10.5px;line-height:1.45;color:var(--ink-2);letter-spacing:0}
+body.l3 .hud{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;row-gap:0}
+.hud div{display:flex;justify-content:space-between;gap:6px;min-width:0;white-space:nowrap}
+.hud div span:first-child{color:var(--ink-3);flex:0 0 auto}
+.hud div span:last-child{color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.hud div.wide{grid-column:1/-1}
+.hud .est{color:var(--ink-2);font-weight:400}
+.hud .est::after{content:"?";font-size:9px;vertical-align:super;color:var(--ink-3);margin-left:1px}
+.hud .unk{color:var(--ink-3);font-weight:400}
+.hud .mode span:last-child{color:var(--accent-ink);font-weight:600}
+.pv{font-size:10.5px;color:var(--ink-3);text-align:center;margin-top:2px}
+.pv b{color:var(--accent-ink);font-weight:600}
+.cyl.dim{opacity:.32}
+.cyl.dim .tnum,.cyl.dim .tsub{fill:var(--ink-3)}
+.tsub.long{font-size:7px}
+.pnote.role{fill:var(--ink-2)}
+
 /* CLEAR 表示 */
 .clear{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
   background:rgba(245,245,247,.9);border-radius:var(--r);z-index:5}
@@ -210,7 +231,7 @@ body:not(.home) .home{display:none}
 
 <div class="home jp" id="home">
   <h1>レッスン</h1>
-  <p>ふたつあります。上から順番に。</p>
+  <p>みっつあります。上から順番に。</p>
   <button class="lcard" id="l0">
     <b><i>1</i>つかいかた</b>
     <s>P1 から順に音を重ねて、PONKEY をひととおり動かせるようになります。</s>
@@ -220,6 +241,11 @@ body:not(.home) .home{display:none}
     <b><i>2</i>つくりかた</b>
     <s>置き方・抜き方・音階の選び方。同じ機械で「自分の曲」にしていきます。</s>
     <u>6ステップ · 約10分 · レッスン1のあとで</u>
+  </button>
+  <button class="lcard" id="l2">
+    <b><i>3</i>しくみ</b>
+    <s>Fn を押しながら何が起きているか。BPM・音色・音量・エフェクト・インテリア。本体の今の状態を映しながら、一つずつ。</s>
+    <u>16ステップ · 本体をつないで見るのがおすすめ</u>
   </button>
 </div>
 
@@ -234,6 +260,8 @@ body:not(.home) .home{display:none}
 <div class="stage">
   <svg id="panel" viewBox="0 0 400 326" aria-label="PONKEY の盤面"></svg>
   <div class="selname jp" id="selName"></div>
+  <div class="pv jp" id="pv"></div>
+  <div class="hud jp" id="hud"></div>
   <div class="clear" id="clearBox"><span>CLEAR</span></div>
 </div>
 
@@ -337,7 +365,74 @@ const L2=[
     more:'16 のままだと必ず4拍子に聞こえます。<b>12 にすると3拍子っぽく、6 にすると忙しく</b>聞こえます。実機では <b>Fn を押しながら P3</b>、そのあとグリッドを押すと、そこまでの長さでループします。',
     loopStep:true },
 ];
-const LESSONS=[{name:'つかいかた',steps:L1},{name:'つくりかた',steps:L2}];
+const SUB={NONE:0,BPM:1,VOICE:2,LOOP:3,PVOL:4,OCT:5,MASTER:6,SCALE_SETUP:7,PATTERN:8,SLOT:9,KEY:10,SCALE:11,GROOVE:12};
+const L3=[
+  { no:'ステップ 1', key:'fn', mode:'fn', title:'Fn は「押しながら」のキー',
+    one:'Fn を押したまま、離さずにいてください。',
+    todo:'Fn を押してみよう', doneTxt:'Fn が押されています',
+    more:'Fn だけでは何も変わりません。<b>Fn を押している間だけ P1〜P7 が機能キーに変わり、離すと元に戻ります。</b>だから本体の LED も、Fn を押しただけでは変わりません。盤面の注記が「いま P キーが何の役目か」を示します。（アプリの Fn は、実機がつながっていないときはタップで押しっぱなし扱いになります。）' },
+  { no:'ステップ 2', key:'slot', mode:SUB.SLOT, title:'Fn×P1 スロットと再生・停止',
+    one:'Fn を押しながら P1。そのまま G キーをひとつ押してみましょう。',
+    todo:'Fn×P1 でスロットを選ぼう', doneTxt:'スロットを切り替えました',
+    more:'押している間、G1〜G16 が<b>保存スロット 1〜16</b>になります。白く光るのがいま居るスロット、薄く光るのは中身のあるスロット。<b>G を押さずに離すと再生／停止</b>。G を押した順に複数押すと、その順で続けて再生します（チェーン）。' },
+  { no:'ステップ 3', key:'bpm', mode:SUB.BPM, title:'Fn×P2 テンポ（BPM）',
+    one:'Fn を押しながら P2。G キーで速さを選びましょう。',
+    todo:'Fn×P2 で BPM を選ぼう', doneTxt:'BPM を変えました',
+    more:'G1=60 から G16=210 まで 10 刻み。左上が遅く、右下が速い。本体はいまの BPM のキーだけ白く、ほかは BPM の速さで点滅します。<b>同じキーをもう一度押すと録音クリックの ON/OFF</b>（白=ON、赤=OFF）。' },
+  { no:'ステップ 4', key:'loop', mode:SUB.LOOP, title:'Fn×P3 ループの長さ',
+    one:'Fn を押しながら P3。G キーで四角の大きさを選びましょう。',
+    todo:'Fn×P3 で長さを選ぼう', doneTxt:'ループの長さを変えました',
+    more:'押した G キーを右下の角として、<b>G1 からの四角の中だけが鳴ります</b>。G11 なら 3×3=9 ステップ。16 のままだと 4 拍子、12（3×4 か 4×3）にすると 3 拍子っぽく聞こえます。録音中は変えられません。' },
+  { no:'ステップ 5', key:'oct', mode:SUB.OCT, title:'Fn×P4 ① オクターブ（半音）',
+    one:'Fn を押しながら P4 を 1 回。G キーで高さを選びましょう。',
+    todo:'Fn×P4 で高さを選ぼう', doneTxt:'高さを変えました',
+    more:'名前はオクターブですが<b>単位は半音</b>です。下の段が低く、上の段が高い。G9 が ±0、いちばん下で −4、いちばん上で +11。<b>対象は Fn を押す直前に選んでいたシンセパート</b>（ドラムを選んでいたら P5 ベース）。スロットごとに別々に保存されます。' },
+  { no:'ステップ 6', key:'key', mode:SUB.KEY, title:'Fn×P4 ② 曲のキー',
+    one:'Fn を押したまま P4 をもう 1 回。G1〜G12 から根音を選びましょう。',
+    todo:'Fn×P4 を 2 回、キーを選ぼう', doneTxt:'キーを変えました',
+    more:'G1=C（ド）から G12=B（シ）まで。<b>P1〜P3 を SCALE にしたときのメロディ</b>に効きます（次のページと合わせて使う）。押すといまのキーで 1 音鳴って確かめられます。' },
+  { no:'ステップ 7', key:'scale', mode:SUB.SCALE, title:'Fn×P4 ③ スケール',
+    one:'P4 をもう 1 回。G1〜G8 で音階を選びましょう。',
+    todo:'Fn×P4 を 3 回、音階を選ぼう', doneTxt:'音階を変えました',
+    more:'8 種類。メジャーペンタ／マイナーペンタ／琉球／都節／メジャー／ドリアン／ブルース／ホールトーン。<b>SCALE にした P1〜P3 全部に同じ音階</b>がかかります。P5〜P7 の 16 キーは白鍵のままです（そちらはアプリ SCALE で）。' },
+  { no:'ステップ 8', key:'groove', mode:SUB.GROOVE, title:'Fn×P4 ④ グルーブ',
+    one:'P4 をもう 1 回。上 2 段でスイング、下 2 段でアクセント。',
+    todo:'Fn×P4 を 4 回、G を押そう', doneTxt:'グルーブを変えました',
+    more:'上 G1〜G8 は<b>スイング量</b>（G1=OFF、53〜75%）。8 分の裏だけを遅らせて跳ねさせます。下 G9〜G16 は<b>アクセント型</b>（G9=OFF、拍頭・裏拍・バックビート・ゴースト・うねり・ゆらぎ）。どちらも<b>パターンは書き換えず、再生のときにかけるだけ</b>。OFF に戻せば元どおり。ソレノイドの叩く強さにも 3 段階でかかります。' },
+  { no:'ステップ 9', key:'master', mode:SUB.MASTER, title:'Fn×P5 全体の音量',
+    one:'Fn を押しながら P5。階段のキーで音量を選びましょう。',
+    todo:'Fn×P5 で音量を選ぼう', doneTxt:'全体の音量を変えました',
+    more:'左下 G13（0＝ミュート）から右上 G4（9＝最大）へ<b>階段状の 10 段</b>。階段の形がそのまま音量ゲージです。使うのはその 10 個だけで、ほかのキーは反応しません。本体はこの値をアプリに送らないので、画面の値は推定（?）です。' },
+  { no:'ステップ 10', key:'pvol', mode:SUB.PVOL, title:'Fn×P6 パートの音量',
+    one:'Fn を押しながら P6。階段で、選んでいるパートの音量。',
+    todo:'Fn×P6 で音量を選ぼう', doneTxt:'パートの音量を変えました',
+    more:'階段は P5 と同じ。<b>対象は Fn を押す直前のパート</b>（ドラムも可）。ドラムは叩く強さ、シンセは CC7 で変わります。<b>G1 を 600ms 長押しすると静音モード</b>——ソレノイドの通電だけ止めます（音・LED・録音はそのまま）。' },
+  { no:'ステップ 11', key:'voice', mode:SUB.VOICE, title:'Fn×P7 音色',
+    one:'Fn を押しながら P7。G キーで 16 の音色から選びましょう。',
+    todo:'Fn×P7 で音色を選ぼう', doneTxt:'音色を変えました',
+    more:'対象は Fn 直前のパート。<b>ドラムも 16 種類から選べます</b>。並びは行が世界観です——1 段目＝基本の顔、2 段目＝木と息、3 段目＝環境・霧、4 段目＝8bit・バンド系。押すと 1 音鳴ります。シンセは音色を変えると<b>前の録音が残ったまま重ね録り</b>できます（レイヤー）。' },
+  { no:'ステップ 12', key:'scaleSetup', mode:SUB.SCALE_SETUP, title:'Fn＋グリッド直接 ＝ SCALE 設定',
+    one:'P1〜P3 のどれかを選んでから、Fn を押しながら G1。',
+    todo:'P1〜P3 を選び、Fn を押しながら G を押そう', doneTxt:'SCALE 設定に入りました',
+    more:'ドラムのパートを<b>メロディに変える</b>設定です。P1〜P3 を選んでいるときは、Fn を押しながらそのままグリッドを押すとこのページ。G1 で DRUM⇔SCALE の切替、G5〜G12 で音階、G4 でパターンページへ。SCALE にすると<b>ステップの位置がそのまま音の高さ</b>になります。音色はリードのパレット（オルゴールなど）。' },
+  { no:'ステップ 13', key:'pattern', mode:SUB.PATTERN, title:'パターン流し込み',
+    one:'SCALE 設定ページで G4。そのあと G1〜G16 を押してみましょう。',
+    todo:'G4 でパターンページへ、G を押そう', doneTxt:'パターンを流し込みました',
+    more:'上 2 段は<b>動き 8 種</b>（上り／下り／山／階段／分散／トリル／ランダム／グリス）、下 2 段は<b>リフ 8 種</b>。押すたびに置き換わります（<b>元の打ち込みは消える</b>ので注意）。ランダムは押すたびに違う結果。連打で聴き比べできます。' },
+  { no:'ステップ 14', key:'fx', mode:'fx', offlineToggle:'fx', title:'エフェクトモード（P5＋P6＋P7）',
+    one:'P5・P6・P7 を 3 つ同時に押したまま。',
+    todo:'P5+P6+P7 を押したまま G を押そう', doneTxt:'エフェクトを触りました',
+    more:'押している間だけ。G1〜G4 でリバーブ／コーラス／フィルター／ディレイを選び、G5〜G16 で深さ 1〜12。選択中をもう一度押すと OFF⇔戻す（A/B 比較）。<b>バー G1〜G4 が上がって動くのは、選んでいる効果の「かかり具合」を体で見せるためです。</b>リバーブ＝4 本が一斉に沈んで戻る（深いほど沈んでいる時間が長い＝余韻）。コーラス＝2 本ずつ互い違いに沈む（うねり）。フィルター＝明るいほど立っている本数が増える。ディレイ＝1 本ずつ順に沈む（やまびこ。深いほど速い）。深さ 0 は 4 本とも静止＝効いていない。' },
+  { no:'ステップ 15', key:'interior', mode:'interior', offlineToggle:'interior', title:'インテリアモード',
+    one:'P1〜P4 を 4 つ同時に押して、1 秒待ちます。',
+    todo:'P1〜P4 を 1 秒押そう', doneTxt:'インテリアに入りました',
+    more:'内蔵曲を自動で弾き続ける「置物」モード。<b>Fn＋G で 16 曲</b>から選びます（Dr.Wily／Autobahn／Rydeen／新宝島…）。P1〜P3 は重ね弾きの音色 A／B（1 オクターブ上）／C（主旋律をもらうカラオケ）、P4〜P6 はリバーブ／コーラス／ビブラート、P7 は静音。<b>Fn×P1 で終了</b>。中では BPM（Fn×P2）と音量（Fn×P5・P6）だけ変えられます。' },
+  { no:'ステップ 16', key:'always', mode:'normal', title:'まとめ：階層',
+    one:'Fn を離せば、いつでも通常モードに戻ります。',
+    todo:'', doneTxt:'おつかれさまでした',
+    more:'通常 → <b>Fn を押す</b> → Fn×P1〜P7 のどれか（P4 だけは押すたび ①②③④ と巡る）→ <b>離すと通常へ</b>。特別な入口は 3 つ。<b>P5+P6+P7</b>＝エフェクト、<b>P1〜P4 を 1 秒</b>＝インテリア、<b>P1〜P3 を 1 秒</b>＝テスト（開発用。バーが全部上がる）。Fn を押しながら電源を入れると工場出荷リセットです。' },
+];
+const LESSONS=[{name:'つかいかた',steps:L1},{name:'つくりかた',steps:L2},{name:'しくみ',steps:L3}];
 
 const PARTS=[
   {n:'P1',s:'キック'},{n:'P2',s:'スネア'},{n:'P3',s:'ハット'},{n:'P4',s:'タム'},
@@ -654,6 +749,7 @@ function pushTarget(){
   return S.sel===st.part?null:st.part;
 }
 function paintParts(){
+  if(S.lesson===2){ paintLiveParts(); return; }
   const need=pushTarget(),st=cur();
   pkeys.forEach((p,i)=>{
     const sel=S.sel===i,hold=sel&&recording(),push=need===i;
@@ -686,6 +782,7 @@ function paintParts(){
   el('selName').innerHTML=(S.sel<7?'<i></i>選択中 <b>'+PARTS[S.sel].n+'</b> '+PARTS[S.sel].s:'')+extra;
 }
 function paintGrid(){
+  if(S.lesson===2){ paintLiveGrid(); return; }
   const st=cur(),need=pushTarget(),show=need===null;
   const synth=S.sel>=4&&S.sel<7;
   for(let i=0;i<16;i++){
@@ -723,6 +820,7 @@ function paintStep(){
   paintParts(); paintGrid(); paintStatus();
 }
 function paintStatus(){
+  if(S.lesson===2){ paintLiveStatus(); return; }
   const st=cur(),box=el('status'),need=pushTarget();
   let txt,done=false,push=false;
   if(need!==null){
@@ -793,6 +891,7 @@ function runClear(){
    ===================================================================== */
 const DOUBLE_MS=400,lastPartTap=new Array(8).fill(0);
 function partDown(u){
+  if(S.lesson===2){ livePartDown(u); return; }
   audio(); if(AC.state==='suspended') AC.resume();
   if(u===7){ S.held.add(7); paintParts(); return; }
   const now=performance.now();
@@ -802,6 +901,7 @@ function partDown(u){
   paintParts(); paintGrid(); paintStatus();
 }
 function partUp(u){
+  if(S.lesson===2){ livePartUp(u); return; }
   S.held.delete(u);
   if(S.pending&&S.pending.part===u) endNote();      // P キーを離したら録音終了
   paintParts();
@@ -809,6 +909,7 @@ function partUp(u){
 function clearPart(u){ S.song[u]=[]; paintGrid(); paintStatus(); }
 
 function gridDown(i){
+  if(S.lesson===2){ popCyl(i); devKey('gd',i); return; }
   audio(); if(AC.state==='suspended') AC.resume();
   const st=cur();
   if(S.clearing) return;
@@ -841,7 +942,32 @@ function gridDown(i){
   S.hitCount++; paintGrid(); paintStatus();
 }
 function gridUp(i){
+  if(S.lesson===2){ devKey('gu',i); return; }
   if(S.pending&&S.pending.k===i) endNote();
+}
+/* レッスン3 の P キー。実機なしのときは Fn をタップで押しっぱなし扱いにする
+   (指を離すと戻る本物の Fn を、マウスやタップで再現するため)。P5+P6+P7 や P1〜P4 の
+   同時押しも 1 本指では無理なので、そのステップでは P キーのタップで入退出できるようにする */
+function livePartDown(u){
+  const st=cur();
+  if(!S.sync&&!D.fromDev){
+    if(u===7){
+      if(D.sticky){ D.sticky=false; devKey('pu',7); }
+      else { D.sticky=true; devKey('pd',7); }
+      return;
+    }
+    if(st.offlineToggle==='fx'&&u>=4&&u<7&&!fnMode()){
+      D.fxSticky=!D.fxSticky; D.fx=D.fxSticky; if(D.fx) markSeen('fx'); paintLiveAll(); return;
+    }
+    if(st.offlineToggle==='interior'&&u<4&&!fnMode()){
+      D.interior=!D.interior; if(D.interior){ D.song=D.song??6; } markSeen('interior'); paintLiveAll(); return;
+    }
+  }
+  devKey('pd',u);
+}
+function livePartUp(u){
+  if(!S.sync&&!D.fromDev&&u===7) return;   // オフラインの Fn はタップでトグル
+  devKey('pu',u);
 }
 /* ルーパー：押した位置と離した位置を覚える。同じキーでも消さず、重ねる */
 function startNote(k){
@@ -874,6 +1000,319 @@ function demo(){
 }
 
 /* =====================================================================
+   7b. レッスン3「しくみ」— 本体の状態を映す
+   ---------------------------------------------------------------------
+   本体は「いま何モードか」を教えてくれない。届くのはキーの上げ下げだけ。
+   なので、ファームと同じ規則でキー操作から状態を追いかける (D = 推定した本体)。
+   BPM / スロット / キー / スケール / グルーブ / 音色 / ループ矩形 / オクターブは
+   SONG_CMD_DUMP_SLOT の応答 (META + 現在スロット) で本体から答え合わせできる。
+   音量・エフェクト・静音・インテリアは本体が報告しないので、推定のまま (HUD に ? を付ける)。
+   ===================================================================== */
+const SUB_OF_P=[SUB.SLOT,SUB.BPM,SUB.LOOP,SUB.OCT,SUB.MASTER,SUB.PVOL,SUB.VOICE];   // Fn×P1..P7
+const BPM_PRESETS=[60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210];
+const VOL_LEVEL_OF_KEY=[-1,-1,-1,9, -1,-1,5,8, -1,2,4,7, 0,1,3,6];   // 階段ゲージ (G13=0 … G4=9)
+const VOL_VALUES=[0,40,51,62,73,84,95,106,117,127];
+const OCT_GRID_MAP=[12,13,14,15, 8,9,10,11, 4,5,6,7, 0,1,2,3];       // 位置 p → キー (下段が低い)
+const SCALE_SHORT=['ﾒｼﾞｬｰﾍﾟﾝﾀ','ﾏｲﾅｰﾍﾟﾝﾀ','琉球','都節','メジャー','ドリアン','ブルース','ﾎｰﾙﾄｰﾝ'];
+const SWING_NAMES=['OFF','53%','56%','59%','62%','66%','70%','75%'];
+const ACCENT_NAMES=['OFF','拍頭(弱)','拍頭(強)','裏拍押し','ﾊﾞｯｸﾋﾞｰﾄ','ｺﾞｰｽﾄ16','うねり','ゆらぎ'];
+const ACCENT_SHORT=['OFF','拍頭弱','拍頭強','裏拍','2と4','ｺﾞｰｽﾄ','うねり','ゆらぎ'];
+const PATTERN_NAMES=['上り','下り','山','階段','分散','トリル','ランダム','グリス',
+                     'ロール8度','裏打ち','シンコペ','アシッド','アルペジオ','ウォーク','祭り','ミニマル'];
+const FX_NAMES=['リバーブ','コーラス','フィルタ','ディレイ'];
+const FX_LONG=['リバーブ（残響）','コーラス（うねり）','フィルター（明るさ）','ディレイ（やまびこ）'];
+const SONG_NAMES=['Dr.Wily','Heat Man','Flash Man','Porkies','Autobahn','Robots','Pocket Calc','Get Lucky',
+                  '新宝島','夜の踊り子','Morse','Daylight','Rydeen','Tong Poo','S.S.S.','Technopolis'];
+// 音色 16 種 × 7 パート (ファームの TOYTRONICA パレットと同じ並び。行 = 世界観の層)
+const VOICE_NAMES=[
+  ['ﾌﾛｱﾀﾑ','低ボンゴ','コンガ開','コンガ閉','木ﾌﾞﾛｯｸ低','ﾃｨﾝﾊﾞﾚ低','ｸｲｰｶ開','ｸｲｰｶ閉','低コンガ','タム低','タム中','タム高','バスドラ1','バスドラ2','アゴゴ低','カウベル'],
+  ['ﾘﾑｼｮｯﾄ','クラップ','クラベス','木ﾌﾞﾛｯｸ高','ﾊｲﾎﾞﾝｺﾞ','コンガ閉','ﾃｨﾝﾊﾞﾚ高','アゴゴ高','カバサ','ﾀﾝﾊﾞﾘﾝ','笛(短)','ギロ(短)','スネア','ｴﾚｽﾈｱ','ビブラ','笛(長)'],
+  ['△ﾐｭｰﾄ','△ｵｰﾌﾟﾝ','マラカス','カバサ','クラベス','木ﾌﾞﾛｯｸ高','ｸﾛｰｽﾞHH','ペダルHH','ﾗｲﾄﾞﾍﾞﾙ','ライド','ﾀﾝﾊﾞﾘﾝ','ギロ(長)','ｵｰﾌﾟﾝHH','ｸﾗｯｼｭ1','ｽﾌﾟﾗｯｼｭ','ｸﾗｯｼｭ2'],
+  ['ﾊｲﾎﾞﾝｺﾞ','低ボンゴ','コンガ閉','コンガ開','タム低','タム中低','タム中高','タム高','木ﾌﾞﾛｯｸ高','木ﾌﾞﾛｯｸ低','ｸｲｰｶ開','ビブラ','コンガ低','ﾃｨﾝﾊﾞﾚ高','ﾃｨﾝﾊﾞﾚ低','アゴゴ高'],
+  ['ｱｺｰｽﾃｨｯｸ','エレベ指','ﾌﾚｯﾄﾚｽ','チェロ','ｺﾝﾄﾗﾊﾞｽ','バスーン','チューバ','オルガン','ｼﾝｾﾍﾞｰｽ1','ｼﾝｾﾍﾞｰｽ2','ｴﾚﾍﾞﾋﾟｯｸ','スラップ','GB矩形波','ﾍﾞｰｽ+ﾘｰﾄﾞ','チャラン','ノコギリ'],
+  ['オルゴール','チェレスタ','ｸﾞﾛｯｹﾝ','カリンバ','マリンバ','ﾋﾞﾌﾞﾗﾌｫﾝ','フルート','オカリナ','ﾊﾟﾝﾌﾙｰﾄ','ﾘｺｰﾀﾞｰ','エレピ','琴','ﾌｧﾐｺﾝ矩形','カリオペ','ﾍﾞｰｽ+ﾘｰﾄﾞ','ｸﾘｽﾀﾙ'],
+  ['ﾆｭｰｴｲｼﾞ','ウォーム','ボウド','ヘイロー','ハープ','クワイア','ｽﾄﾘﾝｸﾞｽ','ｺｰﾗｽPad','ｱﾄﾓｽ','エコーズ','波の音','鳥の声','ﾎﾟﾘｼﾝｾ','スイープ','ﾌﾞﾗｲﾄ','ゴブリン'],
+];
+
+const D={};                       // 推定した本体の状態
+function devReset(){
+  Object.assign(D,{
+    fn:false, sub:SUB.NONE, prev:0, sel:0, held:new Set(), heldAt:{},
+    playing:null, slot:0, slotHas:0, p1Grid:false,
+    bpm:null, click:null, rect:[4,4], oct:[null,null,null],
+    root:null, scale:null, swing:null, accent:null,
+    voice:[null,null,null,null,null,null,null], pvol:[null,null,null,null,null,null,null], master:null,
+    fx:false, fxSel:0, fxLv:[8,2,0,0], fxKnown:false,
+    scaleEn:[false,false,false], scaleIdx:[0,0,0], pattern:[null,null,null],
+    interior:false, song:null, iPreset:0, iFx:[false,false,false], iQuiet:false,
+    quiet:false, test:false, seen:{}, fromDev:false, g1DownAt:0, sticky:false, fxSticky:false,
+  });
+}
+devReset();
+const fnMode=()=>D.fn||D.sticky;
+const target=()=>D.prev;                                  // Fn×P4/P6/P7 の対象 = Fn 直前のパート
+const targetSynth=()=>D.prev>=4&&D.prev<7?D.prev-4:0;     // オクターブの対象 (ドラムなら P5)
+function markSeen(k){ if(!D.seen[k]){ D.seen[k]=true; if(S.lesson===2) paintStatus(); } }
+
+/* 本体と同じ規則で状態を進める。t: 'pd' 'pu' 'gd' 'gu' */
+function devKey(t,i){
+  const now=performance.now();
+  if(t==='pd'){
+    D.held.add(i); D.heldAt[i]=now;
+    if(i===7){ D.fn=true; D.prev=D.sel; D.sub=SUB.NONE; D.p1Grid=false; markSeen('fn'); }
+    else if(D.fn){
+      // Fn×Pn = サブモードへ。P4 は押すたびにページが巡る
+      if(D.interior){
+        if(i===0){ D.interior=false; markSeen('interior'); }
+        else if(i===4) D.sub=SUB.MASTER; else if(i===5) D.sub=SUB.PVOL;
+      } else if(i===3){
+        D.sub = D.sub===SUB.OCT?SUB.KEY : D.sub===SUB.KEY?SUB.SCALE : D.sub===SUB.SCALE?SUB.GROOVE : SUB.OCT;
+      } else D.sub=SUB_OF_P[i];
+      if(D.sub===SUB.SLOT){ D.p1Grid=false; markSeen('slot'); }
+    } else if(D.interior){
+      if(i<3) D.iPreset=i; else if(i<6) D.iFx[i-3]=!D.iFx[i-3]; else if(i===6) D.iQuiet=!D.iQuiet;
+      markSeen('interior');
+    } else if(!D.fx){
+      D.sel=i;                                            // 通常: タップ = パート選択
+    }
+  }
+  if(t==='pu'){
+    D.held.delete(i);
+    if(i===7){
+      D.fn=false; D.sub=SUB.NONE;
+    } else if(D.fn&&i===0&&D.sub===SUB.SLOT&&!D.p1Grid&&!D.interior){
+      D.playing=D.playing===null?true:!D.playing; D.sub=SUB.NONE; markSeen('slot');   // 何も押さず離す = 再生/停止
+    } else if(D.fn&&SUB_OF_P[i]===D.sub){ D.sub=SUB.NONE; }
+    if(D.fromDev&&S.connected) queueMeta();                // 答え合わせ
+  }
+  // 同時押しコンボ: P5+P6+P7 = エフェクト (即時) / P1-P4 1秒 = インテリア / P1-P3 1秒 = テスト
+  const h=k=>D.held.has(k);
+  const fxNow=D.fxSticky||(h(4)&&h(5)&&h(6)&&!D.fn&&!D.interior&&!D.test);
+  if(fxNow!==D.fx){ D.fx=fxNow; if(fxNow) markSeen('fx'); }
+  clearTimeout(D.comboT);
+  if(h(0)&&h(1)&&h(2)&&!D.fn){
+    D.comboT=setTimeout(()=>{
+      if(h(0)&&h(1)&&h(2)&&h(3)){ D.interior=!D.interior; if(D.interior){D.song=D.song??6;} markSeen('interior'); }
+      else if(h(0)&&h(1)&&h(2)&&!h(3)){ D.test=!D.test; }
+      D.held.clear(); paintLiveAll();
+    },1000);
+  }
+  if(t==='gd'){
+    if(D.test){ /* 開発用テスト: G1-4=バーFX, G5-16=鍵盤 */ }
+    else if(D.fx){
+      if(i<4){ if(D.fxSel===i){ D.fxLv[i]=D.fxLv[i]?0:(D.fxSaved?.[i]||6); } else D.fxSel=i; }
+      else D.fxLv[D.fxSel]=i-3;
+      D.fxKnown=true; markSeen('fx');
+    }
+    else if(D.interior&&D.fn){ D.song=i; markSeen('interior'); }
+    else if(D.fn){
+      switch(D.sub){
+        case SUB.SLOT: D.p1Grid=true; D.slot=i; markSeen('slot'); break;
+        case SUB.BPM:  if(D.bpm===BPM_PRESETS[i]) D.click=!(D.click??false); else D.bpm=BPM_PRESETS[i]; markSeen('bpm'); break;
+        case SUB.LOOP: D.rect=[(i>>2)+1,(i&3)+1]; markSeen('loop'); break;
+        case SUB.OCT:  { const p=OCT_GRID_MAP.indexOf(i); D.oct[targetSynth()]=Math.max(-4,Math.min(11,p-4)); markSeen('oct'); break; }
+        case SUB.KEY:  if(i<12){ D.root=i; markSeen('key'); } break;
+        case SUB.SCALE:if(i<8){ D.scale=i; markSeen('scale'); } break;
+        case SUB.GROOVE: if(i<8) D.swing=i; else D.accent=i-8; markSeen('groove'); break;
+        case SUB.MASTER:{ const l=VOL_LEVEL_OF_KEY[i]; if(l>=0){ D.master=l; markSeen('master'); } break; }
+        case SUB.PVOL: { const l=VOL_LEVEL_OF_KEY[i]; if(l>=0){ D.pvol[target()]=l; markSeen('pvol'); }
+                         if(i===0) D.g1DownAt=now; break; }
+        case SUB.VOICE:  D.voice[target()]=i; markSeen('voice'); break;
+        case SUB.SCALE_SETUP:{ const p=Math.min(D.prev,2);
+          if(i===0) D.scaleEn[p]=!D.scaleEn[p]; else if(i===3) D.sub=SUB.PATTERN;
+          else if(i>=4&&i<=11) D.scaleIdx[p]=i-4; markSeen('scaleSetup'); break; }
+        case SUB.PATTERN:{ const p=Math.min(D.prev,2); D.pattern[p]=i; markSeen('pattern'); break; }
+        case SUB.NONE:
+          if(!D.interior&&D.prev<3){ D.sub=SUB.SCALE_SETUP; devKey('gd',i); return; }  // Fn+グリッド直接
+          break;
+      }
+    }
+    else { /* 通常のグリッド = 打ち込み/演奏 (レッスン1・2 の範囲) */ }
+  }
+  if(t==='gu'){
+    if(D.fn&&D.sub===SUB.PVOL&&i===0&&D.g1DownAt&&now-D.g1DownAt>=600){ D.quiet=!D.quiet; markSeen('quiet'); }
+    D.g1DownAt=0;
+  }
+  paintLiveAll();
+}
+
+/* 本体からの答え合わせ (SONG_CMD_DUMP_SLOT 0xFF = 現在スロット → META + SLOT_DUMP) */
+let metaT=0;
+function queueMeta(){ clearTimeout(metaT); metaT=setTimeout(requestMeta,250); }
+async function requestMeta(){
+  if(!S.cmdChar) return;
+  try{ await S.cmdChar.writeValueWithoutResponse(new Uint8Array([0x5A,0x07,0x00,0xFF])); }
+  catch(e){ try{ await S.cmdChar.writeValue(new Uint8Array([0x5A,0x07,0x00,0xFF])); }catch(_){ } }
+}
+function onMeta(d){
+  if(d.length<19) return;
+  D.bpm=d[0]+60; D.slot=d[1]; D.playing=!!d[2];
+  D.scaleEn=[!!(d[3]&1),!!(d[3]&2),!!(d[3]&4)];
+  D.scaleIdx=[d[4]&7,d[5]&7,d[6]&7]; D.scale=d[4]&7;
+  D.root=d[7]%12; D.swing=d[8]&7; D.accent=d[9]&7;
+  D.voice=[d[10],d[11],d[12],d[13],d[14],d[15],d[16]].map(v=>v&15);
+  D.slotHas=d[17]|(d[18]<<8);
+  paintLiveAll();
+}
+const dumpAsm={};
+function onSlotDump(d){
+  if(d.length<4) return;
+  const gen=d[0],idx=d[1],cnt=d[2],part=d.slice(3);
+  let a=dumpAsm[gen]; if(!a||a.cnt!==cnt){a={cnt,parts:{}};dumpAsm[gen]=a;}
+  a.parts[idx]=part; if(Object.keys(a.parts).length<cnt) return;
+  const full=[]; for(let c=0;c<cnt;c++) full.push(...a.parts[c]); delete dumpAsm[gen];
+  if(full[0]!==0xF2) return;
+  const loopLen=full[2]; const oct=[full[3],full[4],full[5]].map(v=>(v<<24)>>24);
+  const rr=full[6]||4, rc=full[7]||4;
+  D.oct=oct; D.rect=[rr,rc]; D.loopLen=loopLen; D.slot=full[1];
+  paintLiveAll();
+}
+
+/* ---- 表示: いまの状態から「盤面の意味」を組み立てる ---- */
+const modeOf=()=>D.test?'test':D.fx?'fx':D.interior?(D.fn?'interiorFn':'interior'):D.fn?(D.sub===SUB.NONE?'fn':D.sub):'normal';
+const MODE_LABEL={normal:'通常（演奏・打ち込み）',fn:'Fn を押している',fx:'エフェクトモード（P5+P6+P7）',
+  interior:'インテリアモード',interiorFn:'インテリア + Fn（曲選び）',test:'テストモード（開発用）',
+  [SUB.SLOT]:'Fn×P1 スロット / 再生・停止',[SUB.BPM]:'Fn×P2 BPM',[SUB.LOOP]:'Fn×P3 ループの長さ',
+  [SUB.OCT]:'Fn×P4 ① オクターブ',[SUB.KEY]:'Fn×P4 ② キー',[SUB.SCALE]:'Fn×P4 ③ スケール',[SUB.GROOVE]:'Fn×P4 ④ グルーブ',
+  [SUB.MASTER]:'Fn×P5 マスター音量',[SUB.PVOL]:'Fn×P6 パート音量',[SUB.VOICE]:'Fn×P7 音色',
+  [SUB.SCALE_SETUP]:'Fn＋グリッド SCALE 設定',[SUB.PATTERN]:'SCALE パターン'};
+const FN_P_ROLES=['スロット','BPM','ループ長','音高','マスター','パート音量','音色','Fn'];
+const NUM=i=>String(i+1);
+function roles(mode){
+  const g=[],pk=new Array(8).fill(''),tp=target(),ts=targetSynth();
+  const set=(i,n,s,on,dim)=>{g[i]={n:n??'',s:s??'',on:!!on,dim:!!dim};};
+  for(let i=0;i<16;i++) set(i,NUM(i),'',false,false);
+  for(let u=0;u<7;u++) pk[u]=PARTS[u].s; pk[7]='機能';
+  switch(mode){
+    case 'normal': for(let i=0;i<16;i++) set(i,NUM(i),D.sel<4?'':'',false,false); break;
+    case 'fn': FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      if(D.prev<3) return roles(SUB.SCALE_SETUP);           // P1-P3 選択中は Fn＋G がそのまま SCALE 設定
+      for(let i=0;i<16;i++) set(i,NUM(i),'',false,true); break;
+    case SUB.SLOT: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      for(let i=0;i<16;i++) set(i,NUM(i),(D.slotHas>>i)&1?'中身あり':'',D.slot===i,false); break;
+    case SUB.BPM: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      BPM_PRESETS.forEach((b,i)=>set(i,String(b),D.bpm===b?(D.click===null?'クリック?':(D.click?'クリックON':'クリックOFF')):'',D.bpm===b,false)); break;
+    case SUB.LOOP: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      for(let i=0;i<16;i++){const r=(i>>2)+1,c=(i&3)+1; set(i,r+'×'+c,String(r*c)+'ステップ',D.rect[0]===r&&D.rect[1]===c,false);} break;
+    case SUB.OCT: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      OCT_GRID_MAP.forEach((k,p)=>{const v=p-4; set(k,(v>0?'+':'')+v,v===0?'基準':'',D.oct[ts]===v,false);}); break;
+    case SUB.KEY: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      for(let i=0;i<16;i++) i<12?set(i,NOTE_ABC[i],NOTE_KANA[i],D.root===i,false):set(i,'','',false,true); break;
+    case SUB.SCALE: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      for(let i=0;i<16;i++) i<8?set(i,NUM(i),SCALE_SHORT[i],D.scale===i,false):set(i,'','',false,true); break;
+    case SUB.GROOVE: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      for(let i=0;i<8;i++) set(i,SWING_NAMES[i],'スイング',D.swing===i,false);
+      for(let i=0;i<8;i++) set(8+i,ACCENT_SHORT[i],'アクセント',D.accent===i,false); break;
+    case SUB.MASTER: case SUB.PVOL: FN_P_ROLES.forEach((r,u)=>pk[u]=r); {
+      const curL=mode===SUB.MASTER?D.master:D.pvol[tp];
+      for(let i=0;i<16;i++){const l=VOL_LEVEL_OF_KEY[i];
+        if(l<0) set(i,'','',false,true);
+        else set(i,String(l),l===0?'ミュート':l===9?'最大':'',curL===l,false);}
+      if(mode===SUB.PVOL) g[0]={n:'静音',s:'600ms長押し',on:D.quiet,dim:false};
+      break; }
+    case SUB.VOICE: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
+      for(let i=0;i<16;i++) set(i,NUM(i),VOICE_NAMES[tp][i],D.voice[tp]===i,false); break;
+    case SUB.SCALE_SETUP: FN_P_ROLES.forEach((r,u)=>pk[u]=r); {
+      const p=Math.min(D.prev,2);
+      for(let i=0;i<16;i++) set(i,'','',false,true);
+      set(0,D.scaleEn[p]?'SCALE':'DRUM','G1で切替',D.scaleEn[p],false);
+      set(3,'ﾊﾟﾀｰﾝ','ページへ',false,false);
+      for(let i=0;i<8;i++) set(4+i,NUM(i),SCALE_SHORT[i],D.scaleIdx[p]===i,!D.scaleEn[p]);
+      break; }
+    case SUB.PATTERN: FN_P_ROLES.forEach((r,u)=>pk[u]=r); {
+      const p=Math.min(D.prev,2);
+      for(let i=0;i<16;i++) set(i,i<8?'動き':'リフ',PATTERN_NAMES[i],D.pattern[p]===i,false); break; }
+    case 'fx':
+      pk[4]=pk[5]=pk[6]='押したまま';
+      for(let i=0;i<4;i++) set(i,FX_NAMES[i],'深さ '+D.fxLv[i],D.fxSel===i,false);
+      for(let i=4;i<16;i++) set(i,String(i-3),'深さ',D.fxLv[D.fxSel]===i-3,false); break;
+    case 'interior': case 'interiorFn':
+      ['A 標準','B 1oct上','C ｶﾗｵｹ','リバーブ','コーラス','ﾋﾞﾌﾞﾗｰﾄ','静音','曲選び'].forEach((r,u)=>pk[u]=r);
+      if(mode==='interiorFn'){ pk[0]='終了'; pk[4]='マスター'; pk[5]='パート音量'; }
+      for(let i=0;i<16;i++) set(i,NUM(i),SONG_NAMES[i],D.song===i,mode==='interior');
+      break;
+    case 'test':
+      ['ﾌﾟﾘｾｯﾄ','ﾌﾟﾘｾｯﾄ','ﾌﾟﾘｾｯﾄ','ﾌﾟﾘｾｯﾄ','保持40%','保持50%','保持60%','スイープ'].forEach((r,u)=>pk[u]=r);
+      ['ﾋﾞﾌﾞﾗｰﾄ','トレモロ','コーラス','エコー'].forEach((n,i)=>set(i,n,'バーFX',false,false));
+      for(let i=4;i<16;i++) set(i,NUM(i),'鍵盤',false,false); break;
+  }
+  return {g,pk};
+}
+/* 実機がそのモードに居なければ、いまのステップのモードを薄く「予習」で見せる */
+function liveView(){
+  const st=cur(),m=modeOf();
+  const preview=(m==='normal'||m==='fn')&&st.mode!==undefined&&st.mode!=='normal'&&st.mode!==m;
+  const mode=preview?st.mode:m;
+  return {mode,preview,real:m,r:roles(mode)};
+}
+function paintLiveParts(){
+  const v=liveView(),held=D.held;
+  pkeys.forEach((p,i)=>{
+    const sel=!fnMode()&&!D.fx&&!D.interior&&D.sel===i, on=held.has(i)||(i===7&&fnMode());
+    p.classList.toggle('sel',sel||on); p.classList.toggle('hold',false); p.classList.toggle('push',false);
+    plabels[i].classList.toggle('sel',sel||on); plabels[i].classList.toggle('push',false);
+    const note=pnotes[i],lead=pleads[i],arrow=parrows[i];
+    note.textContent=v.r.pk[i]; note.setAttribute('class','pnote role');
+    const y=i%2?note.dataset.yLo:note.dataset.yHi; note.setAttribute('y',y);
+    lead.setAttribute('d',`M${note.dataset.kx} ${note.dataset.ky}L${note.dataset.nx} ${(+y)-6}`);
+    lead.setAttribute('class','plead'); lead.style.display='';
+    arrow.style.display='none';
+  });
+  const L=LED[D.sel<7?D.sel:7],root=document.documentElement.style;
+  root.setProperty('--led',L.hex); root.setProperty('--led-tint',L.tint);
+  root.setProperty('--led-line',L.line); root.setProperty('--led-ink',L.ink);
+  el('selName').innerHTML='<i></i>いま <b>'+(MODE_LABEL[v.real]||'')+'</b>';
+  el('pv').innerHTML=v.preview?'薄い表示は <b>'+(MODE_LABEL[v.mode]||'')+'</b> に入ったときの役割（予習）':'&nbsp;';
+}
+function paintLiveGrid(){
+  const v=liveView();
+  for(let i=0;i<16;i++){
+    const r=v.r.g[i];
+    cyls[i].classList.toggle('on',r.on&&!v.preview);
+    cyls[i].classList.toggle('want',r.on&&v.preview);
+    cyls[i].classList.toggle('dim',r.dim||(v.preview&&!r.on));
+    cyls[i].classList.toggle('outside',false);
+    sockets[i].classList.toggle('want',false); sockets[i].classList.toggle('outside',false); sockets[i].classList.toggle('now',false);
+    nums[i].textContent=r.n; subs[i].textContent=r.s;
+    subs[i].classList.toggle('long',r.s.length>=6);
+    nums[i].style.fontSize=r.n.length>=4?'8.5px':'';
+  }
+  if(lockVeil){ lockVeil.style.display='none'; lockText.style.display='none'; }
+  paintHud();
+}
+const fmt=(v,est)=>v===null||v===undefined?'<span class="unk">未取得</span>':(est?'<span class="est">'+v+'</span>':String(v));
+function paintHud(){
+  const tp=target(),ts=targetSynth(),known=S.connected;
+  const W=(k,v)=>'<div class="wide"><span>'+k+'</span><span>'+v+'</span></div>';
+  const H=(k,v)=>'<div><span>'+k+'</span><span>'+v+'</span></div>';
+  const octs=['P5','P6','P7'].map((n,i)=>n+' '+fmt(D.oct[i]===null?null:(D.oct[i]>0?'+':'')+D.oct[i],!known)).join(' · ');
+  const other=[D.quiet?'静音':'',D.interior?'インテリア '+(D.song===null?'':SONG_NAMES[D.song]):'',D.test?'テスト':''].filter(Boolean).join(' · ');
+  el('hud').innerHTML=
+    '<div class="wide mode"><span>モード</span><span>'+(MODE_LABEL[modeOf()]||'')+' · 選択中 '+PARTS[D.sel].n+(fnMode()?'（対象 '+PARTS[tp].n+'）':'')+'</span></div>'+
+    H('再生',fmt(D.playing===null?null:(D.playing?'再生中':'停止'),!known))+
+    H('BPM',fmt(D.bpm,!known)+(D.click===null?'':' · ｸﾘｯｸ'+(D.click?'ON':'OFF')))+
+    H('ループ',D.rect[0]+'×'+D.rect[1]+' = '+(D.rect[0]*D.rect[1]))+
+    H('スロット',fmt(D.slot+1,!known))+
+    W('オクターブ',octs)+
+    H('キー',fmt(D.root===null?null:NOTE_ABC[D.root]+' '+NOTE_KANA[D.root],!known))+
+    H('スケール',fmt(D.scale===null?null:SCALE_SHORT[D.scale],!known))+
+    W('グルーブ',fmt(D.swing===null?null:'スイング '+SWING_NAMES[D.swing]+' · アクセント '+ACCENT_NAMES[D.accent??0],!known))+
+    W('音色 '+PARTS[tp].n,fmt(D.voice[tp]===null?null:(D.voice[tp]+1)+' '+VOICE_NAMES[tp][D.voice[tp]],!known))+
+    W('音量',PARTS[tp].n+' '+fmt(D.pvol[tp]===null?null:'L'+D.pvol[tp],true)+' · マスター '+fmt(D.master===null?null:'L'+D.master,true))+
+    W('エフェクト',fmt(FX_NAMES.map((n,i)=>n+' '+D.fxLv[i]).join(' · '),true))+
+    W('SCALE',['P1','P2','P3'].map((n,i)=>n+' '+(D.scaleEn[i]?'♪'+SCALE_SHORT[D.scaleIdx[i]]:'ドラム')).join(' · '))+
+    (other?W('そのほか',other):'');
+}
+function paintLiveStatus(){
+  const st=cur(),box=el('status');
+  const done=!!D.seen[st.key];
+  S.done[S.idx]=done;
+  box.className='status jp'+(done?' done':'');
+  box.innerHTML=(done?ICON.check:ICON.next)+'<span>'+(done?(st.doneTxt||'できました'):(st.todo||''))+'</span>';
+}
+function paintLiveAll(){ if(S.lesson!==2) return; paintLiveParts(); paintLiveGrid(); paintLiveStatus(); }
+
+/* =====================================================================
    8. 実機との接続
    ===================================================================== */
 const UUID_MIDI='03b80e5a-ede8-4b33-a751-6ce34ec4c700';
@@ -893,7 +1332,9 @@ function onPacket(ev){
   if(d.length<11||d[0]!==0xA5) return;
   const cat=d[8],id=d[9],p=d.subarray(11,11+d[10]);
   if(cat===0x03){ if(id===0x01) popCyl(p[0]); else if(id===0x02) dropCyl(p[0]); return; }
+  if(cat===0x09){ if(id===0x0A) onMeta(p); else if(id===0x09) onSlotDump(p); return; }
   if(cat!==0x02||S.lesson===null) return;
+  D.fromDev=true;
   if(id===0x01) gridDown(p[0]);
   else if(id===0x02) gridUp(p[0]);
   else if(id===0x03) partDown(p[0]);
@@ -925,6 +1366,7 @@ async function connect(){
     try{
       const ms=await server.getPrimaryService(UUID_MIDI);
       S.midiChar=await ms.getCharacteristic(UUID_MIDI_CHAR);
+      try{ S.midiChar.addEventListener('characteristicvaluechanged',onMidiNotify); await S.midiChar.startNotifications(); }catch(_){ }
       await sendCC(CC_RESET,0);
       S.song=[[],[],[],[],[],[],[]];
       showErr('本体のパターンを消して、空の状態から合わせました。');
@@ -932,8 +1374,32 @@ async function connect(){
     S.connected=true;
     el('connLabel').textContent='接続中'; el('btnConn').classList.add('on');
     setSync(true);
+    D.sticky=false; queueMeta();
     if(S.lesson!==null) paintStep();
   }catch(e){ showErr('接続できませんでした: '+(e.message||e)); }
+}
+/* 本体→アプリの BLE MIDI 通知。接続時の State Sync と、Fn 操作のたびに届く変更通知を状態に反映する */
+function onMidiNotify(ev){
+  const b=new Uint8Array(ev.target.value.buffer);
+  for(let i=1;i<b.length;){
+    if(b[i]&0x80&&i+1<b.length&&(b[i+1]&0xF0)===0xB0){ i++; }
+    if((b[i]&0xF0)!==0xB0){ i++; continue; }
+    const cc=b[i+1],v=b[i+2]; i+=3;
+    if(cc<=6&&v===127) D.sel=cc;
+    else if(cc===0x40) D.playing=v===127;
+    else if(cc===0x41) D.bpm=v+60;
+    else if(cc===0x30) D.voice[v>>4]=v&15;
+    else if(cc===0x31) queueMeta();                              // 形は SLOT_DUMP から
+    else if(cc===0x32){ const p=(v>>4)-4; if(p>=0&&p<3) D.oct[p]=(v&15)-4; }
+    else if(cc===0x33){ const p=v>>4,vol=(v&15)<<3; let best=0;
+      VOL_VALUES.forEach((x,l)=>{ if(Math.abs(x-vol)<Math.abs(VOL_VALUES[best]-vol)) best=l; }); if(p<7) D.pvol[p]=best; }
+    else if(cc===0x20) D.slot=v;
+    else if(cc===0x35) D.swing=v&7;
+    else if(cc===0x36) D.accent=v&7;
+    else if(cc===0x38) D.root=v%12;
+    else continue;
+    paintLiveAll();
+  }
 }
 function onDisc(){
   S.connected=false; S.midiChar=null;
@@ -965,6 +1431,8 @@ function openLesson(n){
   S.sel=0; S.scale=0; S.loopLen=16; S.bpm=100;
   if(S.playing) stopSeq();
   document.body.classList.remove('home');
+  document.body.classList.toggle('l3',n===2);
+  if(n===2){ devReset(); D.seen.always=true; if(S.connected) queueMeta(); }
   el('wmSub').textContent='レッスン'+(n+1);
   paintStep(); scrollTo(0,0);
   if(!S.sync&&cur().part!==undefined) startSeq();
@@ -974,7 +1442,7 @@ function goHome(){
   if(S.playing) stopSeq();
   finishLesson();
   S.lesson=null; S.clearing=false;
-  document.body.classList.add('home');
+  document.body.classList.add('home'); document.body.classList.remove('l3');
   el('wmSub').textContent='レッスン';
   el('clearBox').classList.remove('on');
   window.speechSynthesis&&speechSynthesis.cancel();
@@ -992,6 +1460,7 @@ buildPanel();
 el('playIcon').innerHTML=ICON.play;
 el('l0').onclick=()=>openLesson(0);
 el('l1').onclick=()=>openLesson(1);
+el('l2').onclick=()=>openLesson(2);
 el('btnNext').onclick=()=>go(1);
 el('btnPrev').onclick=()=>go(-1);
 el('btnPlay').onclick=()=>{ if(S.sync) return; S.playing?stopSeq():startSeq(); };
