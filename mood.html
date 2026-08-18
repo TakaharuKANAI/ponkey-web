@@ -113,6 +113,8 @@
   .pcard.off .pn{color:var(--dim);text-decoration:line-through}
   .pcard .prow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .pcard button{padding:4px 10px;font-size:11.5px}
+  .pcard .oclab{font-size:11px;color:var(--dim)}
+  .pcard .ocsel{font-size:11.5px;padding:3px 6px}
   .pcard .sol{font-size:11px;color:var(--dim);display:inline-flex;gap:5px;align-items:center;cursor:pointer}
   .pcard .sol input{accent-color:var(--red)}
   .pcard.solact .sol{color:var(--red)}
@@ -201,6 +203,8 @@
       <div class="row">
         <label class="ck"><input type="checkbox" id="ckPreview">アプリでも鳴らす（試聴）</label>
       </div>
+      <div class="hint">試聴で鳴るのは<b>ソレノイドが叩く生の鍵盤の音</b>。内蔵シンセの音ではないので、
+        上の「高さ」を変えても試聴の音は変わらない。</div>
     </div>
   </div>
 
@@ -208,6 +212,11 @@
   <div class="panel">
     <h2>フレーズ</h2>
     <div class="parts" id="parts"></div>
+    <div class="row" style="margin:0 0 8px">
+      <span class="hint">内蔵シンセの高さ</span>
+      <button id="btnFit">生の鍵盤に合わせる</button>
+      <span class="hint" id="fitInfo"></span>
+    </div>
     <div class="hint" style="margin:-2px 0 12px">
       <b>ソレノイドが動くのは1パートだけ</b>。内蔵シンセは3パートとも鳴るが、鍵を叩くのは
       本体でいま選ばれているパートの音だけ、というのが本体の仕様。電源を入れた直後の選択は KICK なので、
@@ -260,6 +269,12 @@ const PARTS=['BASS','LEAD','PAD'];     // synthSteps のレイヤー 0/1/2
 // **そのパートだけがソレノイドを動かす** (ファーム: solenoidPartMode == p+4 の判定)。
 // ミュート/ソロのビットも同じ並びなので、シンセパート p のビットは p+4。
 const PART_BIT=[4,5,6];
+// 内蔵シンセ(SAM2695)の音高はファームの音階テーブル固定。LEAD/PAD は NOTE_TABLE_NORMAL、
+// BASS は NOTE_TABLE_BASS で、両者はちょうど 24 半音(2オクターブ)違うだけなので音名は同じ。
+// そこに slot の octaveOffset が加算される (applyOctaveOffset)。名前はオクターブだが単位は半音。
+// 本体の Fn×P4 が扱う範囲は -4〜+11 (FN_OCTAVE_MIN/MAX)。同じ範囲に揃える。
+const OCT_MIN=-4, OCT_MAX=11;
+function firmPitchOfRank(r){ return 48 + Math.floor(r/7)*12 + WHITE_STEPS[r%7]; }
 
 // ════════════════════════════════════════════════ 鍵の並び
 // グリッドキー index は 4x4 で 0=左上・15=右下。音が低いのは左下なので、
@@ -321,6 +336,7 @@ const store={
   gate:[4,2,8],                                   // パートごとの音の長さ (ステップ数)
   pat:[mkPat(),mkPat(),mkPat()],                  // pat[part][step] = key の配列
   on:[true,true,true],                            // パートの音の ON/OFF (本体は SET_MUTE)
+  oct:[0,0,0],                                    // 内蔵シンセの高さ (半音, パート別)
   solPart:1,                                      // ソレノイドを動かすパート (既定 LEAD)
   snap:true, hide:false, sam:false, preview:false,
 };
@@ -330,6 +346,8 @@ function load(){ try{const o=JSON.parse(localStorage.getItem(LS)); if(o) Object.
   if(!Array.isArray(store.pat)||store.pat.length!==3) store.pat=[mkPat(),mkPat(),mkPat()];
   store.pat=store.pat.map(p=>Array.isArray(p)&&p.length===STEPS?p.map(c=>Array.isArray(c)?c:[]):mkPat());
   if(!Array.isArray(store.on)||store.on.length!==3) store.on=[true,true,true];
+  if(!Array.isArray(store.oct)||store.oct.length!==3) store.oct=[0,0,0];
+  store.oct=store.oct.map(v=>Math.max(OCT_MIN,Math.min(OCT_MAX,(v|0))));
   if(!(store.solPart>=0&&store.solPart<3)) store.solPart=1;
   if(!SCALE_BY_ID[store.scale]) store.scale='majpenta';
 }
@@ -405,7 +423,7 @@ function noteDurSteps(p,s){
   return store.gate[p];
 }
 function encodeSlot(){
-  const b=[LOOP_SUBSTEPS,0,0,0, 0];               // ドラムは使わない (count=0)
+  const b=[LOOP_SUBSTEPS, store.oct[0]&0xff, store.oct[1]&0xff, store.oct[2]&0xff, 0];  // 末尾0=ドラム無し
   const notes=[];
   for(let p=0;p<3;p++){
     for(let s=0;s<STEPS;s++){
@@ -459,6 +477,32 @@ function previewStep(s){
     const secs=(60/store.bpm/4)*noteDurSteps(p,s);
     previewNote(pitchOfKey(k)-(p===0?12:0), Math.min(2,secs), WAVE[p], GAIN[p]);
   } }
+}
+
+// ════════════════════════════════════════════════ 内蔵シンセの高さ合わせ
+// 生の鍵盤(ソレノイドが叩く音 = pitchOfRank)と内蔵シンセ(firmPitchOfRank + offset)の差を
+// 1つの定数で埋める。白鍵配置なら差は全鍵で一定なのでぴったり合う。
+// 半音階配置は「16半音」と「白鍵16本(約26半音)」で音程の幅そのものが違うため、
+// 定数の平行移動では合わせきれない。どれだけ残るかは fitError で出して隠さない。
+function fitOffset(){
+  const d=[]; for(let r=0;r<16;r++) d.push(pitchOfRank(r)-firmPitchOfRank(r));
+  d.sort((a,b)=>a-b);
+  let o=Math.round((d[7]+d[8])/2);
+  while(o<OCT_MIN)o+=12; while(o>OCT_MAX)o-=12;   // 12 ずらしても音名は変わらない
+  return o;
+}
+// 音名のずれの最大値(半音)。0 ならぴったり。
+function fitError(o){
+  let mx=0;
+  for(let r=0;r<16;r++){ let e=((pitchOfRank(r)-(firmPitchOfRank(r)+o))%12+12)%12; if(e>6)e-=12;
+    mx=Math.max(mx,Math.abs(e)); }
+  return mx;
+}
+function fitLabel(){
+  const errs=[...new Set(store.oct)].map(o=>fitError(o));
+  const mx=Math.max(...errs);
+  return mx===0 ? 'いまの配置とぴったり合っている'
+                : `いまの配置とは最大 ${mx} 半音ずれる（配置の音程の幅が違うため、平行移動では合わせきれない）`;
 }
 
 // ════════════════════════════════════════════════ フレーズ生成
@@ -554,7 +598,14 @@ function renderParts(){
       <div class="prow">
         <button class="ptog${store.on[i]?' on':''}">${store.on[i]?'音 ON':'音 OFF'}</button>
         <label class="sol"><input type="radio" name="solpart"${store.solPart===i?' checked':''}>ソレノイド</label>
-      </div>`;
+      </div>
+      <div class="prow"><span class="oclab">高さ</span><select class="ocsel"></select></div>`;
+    const os=c.querySelector('.ocsel');
+    for(let v=OCT_MIN;v<=OCT_MAX;v++){ const o=document.createElement('option');
+      o.value=v; o.textContent=(v>0?'+':'')+v+' 半音'; os.appendChild(o); }
+    os.value=store.oct[i];
+    os.onchange=e=>{ store.oct[i]=+e.target.value; save(); scheduleSync(); renderParts();
+      log(`${n} 内蔵シンセの高さ: ${store.oct[i]>0?'+':''}${store.oct[i]} 半音`); };
     c.querySelector('.ptog').onclick=()=>{
       store.on[i]=!store.on[i]; save(); sendMute(); renderParts(); renderRoll();
       log(`${n}: ${store.on[i]?'音 ON':'音 OFF'}`+(!store.on[i]&&store.solPart===i?'（ソレノイドも止まります）':''));
@@ -565,6 +616,7 @@ function renderParts(){
     };
     el.appendChild(c);
   });
+  document.getElementById('fitInfo').textContent=fitLabel();
 }
 function renderTabs(){
   const el=document.getElementById('tabs'); el.innerHTML='';
@@ -650,6 +702,11 @@ document.getElementById('ckHide').onchange=e=>{ store.hide=e.target.checked; sav
 document.getElementById('ckSam').onchange=e=>{ store.sam=e.target.checked; save(); sendSam();
   log('本体の内蔵シンセ: '+(store.sam?'消音':'鳴らす')); };
 document.getElementById('ckPreview').onchange=e=>{ store.preview=e.target.checked; save(); if(store.preview)actx(); };
+document.getElementById('btnFit').onclick=()=>{
+  const o=fitOffset(); store.oct=[o,o,o]; save(); scheduleSync(); renderParts();
+  const e=fitError(o);
+  log(`内蔵シンセの高さ: ${o>0?'+':''}${o} 半音`+(e===0?'（生の鍵盤とぴったり）':`（最大 ${e} 半音のずれが残る）`));
+};
 document.getElementById('btnGen').onclick=()=>{ generate(tab); renderAll(); scheduleSync(); log(PARTS[tab]+' を作りなおしました'); };
 document.getElementById('btnGenAll').onclick=()=>{ for(let p=0;p<3;p++)generate(p); renderAll(); scheduleSync(); log('3パートを作りました'); };
 document.getElementById('btnClear').onclick=()=>{ store.pat[tab]=mkPat(); renderAll(); scheduleSync(); log(PARTS[tab]+' を消しました'); };
