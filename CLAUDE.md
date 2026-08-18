@@ -11,7 +11,8 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 - `dialogue.html` — DIALOGUE
 - `sequence.html` — SEQUENCE（＋グルーブパネル）
 - `loops.html` — LOOPS（ループ長。ライトテーマ）
-- `invaders.html` — STEP INVADERS（4×4 リズムゲーム）
+- `invaders.html` — STEP INVADERS（4×4 リズムゲーム。倒す＝演奏。16セルは常にスケール上の音で、
+  敵はコード進行のコードトーン上に湧く。スケール/キーは TRANCE と同じ写像方式）
 - `groove.html` — GROOVE（ワンボタンでスイング/アクセント。ライトカラー）
 - `groove-engine.js` — 解析・提案エンジン（純粋関数、SEQUENCE と GROOVE が共有）。設計は `PONKEY_GROOVE_CONCEPT.md`
 - `sync.html` — SYNC

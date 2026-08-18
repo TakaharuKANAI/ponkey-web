@@ -48,6 +48,10 @@
   button.primary{border-color:var(--teal);color:var(--teal)}
   button.primary:hover{background:var(--teal);color:var(--bg)}
   button.on{background:var(--teal);border-color:var(--teal);color:var(--bg)}
+  select{font-family:inherit;font-size:9px;color:var(--txt);background:#0b0e12;border:2px solid var(--line);
+    padding:5px 4px;box-shadow:2px 2px 0 #000;cursor:pointer;max-width:118px}
+  select:hover{border-color:var(--teal);color:var(--teal)}
+  select option{background:#0b0e12;color:var(--txt)}
   .pbadge{display:inline-block;border:2px solid var(--green);color:var(--green);
     font-size:9px;padding:6px 8px;user-select:none;margin-right:5px;box-shadow:0 0 10px rgba(127,209,90,.28)}
   .pbadge .x{cursor:pointer;color:var(--dim);margin-left:6px}
@@ -74,6 +78,9 @@
   .cell svg.bonus{filter:drop-shadow(0 0 5px #00cc44)}           /* AI モンキーは光る */
   .cell.flash{background:var(--teal);box-shadow:0 0 16px var(--teal)}
   .cell.bad{background:#3a1512;box-shadow:inset 0 0 12px var(--red)}
+  /* いまのコードのコードトーン。ここを撃つと進行に乗る */
+  .cell.ct{background:#151d21;box-shadow:inset 0 0 0 1px rgba(90,214,200,.16)}
+  .cell.ct .kn{color:var(--teal);opacity:.75}
   #board.pulse{box-shadow:inset 0 0 0 2px rgba(90,214,200,.55)}
   /* 得点ポップ */
   .pop{position:absolute;left:50%;top:34%;transform:translateX(-50%);font-size:8px;color:var(--yellow);
@@ -174,9 +181,15 @@
         <span class="stat"><span class="k">MONKEYS</span><span class="v sm" id="lives"></span></span>
       </div>
       <div class="cwrap"><span id="combo"></span><span id="cmeter"><i></i></span></div>
-      <div id="msg">逃げ出した PONKEY MONKEY を、同じ位置の鍵で捕まえる。<br>拍ピッタリなら GROOVE ×2。まれに緑の AI モンキーがボーナス。</div>
+      <div class="hrow">
+        <span class="stat"><span class="k">CHORD</span><span class="v sm" id="chordv">-</span></span>
+        <span class="stat"><span class="k">KEY</span><select id="rootSel"></select></span>
+        <span class="stat"><span class="k">SCALE</span><select id="scaleSel"></select></span>
+      </div>
+      <div id="msg">逃げ出した PONKEY MONKEY を、同じ位置の鍵で捕まえる。<br>捕まえた音がそのまま演奏になる。外れる音はない。</div>
       <div class="ctrl">
         <button class="primary" id="btnStart">▶ START</button>
+        <button id="btnBand" class="on">♪ BAND</button>
         <button id="btnMetro">♩ CLICK</button>
       </div>
     </div>
@@ -201,6 +214,53 @@ function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
   if(rev.has(note))return rev.get(note);
   for(let d=1;d<=12;d++){if(rev.has(note-d))return rev.get(note-d);if(rev.has(note+d))return rev.get(note+d);}
   return null;}
+
+// ============================================================ 音楽 (「倒す＝演奏」の土台)
+// 撃った音がそのまま曲になるよう、16 セルを常にスケール上の音へ写像する。
+// 外れる音が存在しないので、どこを撃っても演奏として成立する。
+// (TRANCE の synthMappedNote と同じ考え方 — 左下=低音、右上=高音)
+const SCALES=[
+  {id:'minpenta',name:'マイナーペンタ',iv:[0,3,5,7,10],   minor:true },
+  {id:'majpenta',name:'メジャーペンタ',iv:[0,2,4,7,9],    minor:false},
+  {id:'minor',   name:'マイナー',      iv:[0,2,3,5,7,8,10],minor:true },
+  {id:'major',   name:'メジャー',      iv:[0,2,4,5,7,9,11],minor:false},
+  {id:'dorian',  name:'ドリアン',      iv:[0,2,3,5,7,9,10],minor:true },
+  {id:'okinawa', name:'琉球',          iv:[0,4,5,7,11],    minor:false},
+  {id:'blues',   name:'ブルース',      iv:[0,3,5,6,7,10],  minor:true },
+  {id:'firm',    name:'ファーム既定',  iv:null,            minor:false},  // 本体のテーブルそのまま
+];
+const SCALE_BY_ID=Object.fromEntries(SCALES.map(s=>[s.id,s]));
+const KEY_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const LEAD_BASE=60;                                  // 撃つ音の最低音 (C4)
+let scaleId='minpenta', root=0;
+try{scaleId=localStorage.getItem('ponkey_inv_scale')||scaleId;
+    root=+localStorage.getItem('ponkey_inv_root')||0;}catch(e){}
+if(!SCALE_BY_ID[scaleId])scaleId='minpenta';
+// 鍵番号 (0-15) → MIDI ノート
+function cellNote(k){
+  const sc=SCALE_BY_ID[scaleId];
+  if(!sc.iv)return NOTE_TABLE_NORMAL[k];             // ファーム既定 (C メジャー相当)
+  const idx=(3-Math.floor(k/4))*4+(k%4);             // スケール上の位置 (左下=0)
+  return LEAD_BASE+root+Math.floor(idx/sc.iv.length)*12+sc.iv[idx%sc.iv.length];
+}
+function noteName(n){return KEY_NAMES[((n%12)+12)%12];}
+
+// 1小節1コードで進行する。敵はいまのコードのコードトーン上に湧くので、
+// 出てきた順に倒すだけで進行に沿ったフレーズになる。
+const PROG_MINOR=[{d:0,q:'m'},{d:8,q:''},{d:3,q:''},{d:10,q:''}];   // i - VI - III - VII
+const PROG_MAJOR=[{d:0,q:''},{d:7,q:''},{d:9,q:'m'},{d:5,q:''}];    // I - V - vi - IV
+let barIdx=0;
+function prog(){return SCALE_BY_ID[scaleId].minor?PROG_MINOR:PROG_MAJOR;}
+function chord(){const p=prog();return p[((barIdx%p.length)+p.length)%p.length];}   // start() 直後の -1 も許す
+function chordTones(c){return c.q==='m'?[c.d,c.d+3,c.d+7]:[c.d,c.d+4,c.d+7];}
+function chordName(c){return KEY_NAMES[(root+c.d+12)%12]+c.q;}
+function chordPcs(){return chordTones(chord()).map(x=>(root+x+120)%12);}
+// いまのコードのコードトーンに当たるセル
+function chordCells(){
+  const pcs=chordPcs(), out=[];
+  for(let k=0;k<16;k++)if(pcs.includes(((cellNote(k)%12)+12)%12))out.push(k);
+  return out;
+}
 
 // ============================================================ 状態
 let devices=[];                    // {device,midiCh,name} devices[0]=P1
@@ -251,13 +311,15 @@ function onMidi(entry,ev){
     }
   }
 }
-function setBpmView(){document.getElementById('bpmv').textContent=Math.round(bpm);}
+function setBpmView(){
+  document.getElementById('bpmv').textContent=Math.round(bpm);
+  if(delaySend&&bpm>20)delaySend.delayTime.setTargetAtTime(30/bpm,audioCtx.currentTime,.05); // 8分ディレイ
+}
 function onStep(s){
   const now=performance.now();
-  if(prevStep!=null&&s<prevStep)onBar();
+  const bar=(prevStep!=null&&s<prevStep);
   prevStep=s;
-  setStrip(s);
-  if(s%4===0)onBeat(now);
+  handleStep(s,now,bar);
   if(lastStepAt){const dt=now-lastStepAt;
     if(dt>40&&dt<2000){stepMs=stepMs==null?dt:stepMs*.8+dt*.2;
       if(ccBpm==null){bpm=60000/(stepMs*4);setBpmView();}}}
@@ -266,16 +328,26 @@ function onStep(s){
 
 // ============================================================ ゲームクロック
 // P1 が再生中なら本体のステップに同期。そうでなければ内蔵クロック (BPM) で駆動。
+// どちらも 16分ステップ解像度で、ゲームとバンドが同じ時計の上に乗る。
 const deviceClockActive=()=>performance.now()-lastStepAt<600;
+let intStep=0;
 setInterval(()=>{
   if(deviceClockActive())return;
-  const now=performance.now();
-  if(now>=nextBeat){
-    onBeat(now);nextBeat=now+60000/bpm;
-    setStrip(((beatCount-1)%4)*4);
-    if(beatCount%4===0)onBar();
+  const now=performance.now(), sMs=60000/bpm/4;
+  if(!nextBeat||now-nextBeat>600)nextBeat=now;    // 停止から復帰したときに取り戻さない
+  while(now>=nextBeat){
+    handleStep(intStep,nextBeat,intStep===0);
+    intStep=(intStep+1)%16;
+    nextBeat+=sMs;
   }
-},25);
+},12);
+// 16分ステップ1つぶん (本体クロック / 内蔵クロック 共通の入口)
+function handleStep(s,now,bar){
+  setStrip(s);
+  if(bar)onBar();
+  if(s%4===0)onBeat(now);
+  bandStep(s);
+}
 function onBeat(now){
   lastBeatAt=now;beatCount++;
   if(metroOn)click(beatCount%4===1);
@@ -287,10 +359,18 @@ function onBeat(now){
   if(playing){spawnTick();bonusTick();}
   else if(attract)attractStep();
 }
-function onBar(){ if(!playing)return;
+function onBar(){
+  barIdx++;                                    // 1小節1コード。敵の湧き先もこれに従う
+  updateChordView();
+  if(!playing)return;
   for(let k=0;k<16;k++){const v=invaders[k];if(!v)continue;
     v.age++;
     if(v.age>=4)escape(k);else drawCell(k);}
+}
+function updateChordView(){
+  document.getElementById('chordv').textContent=chordName(chord());
+  const ct=chordCells();
+  cells.forEach((c,k)=>c.classList.toggle('ct',ct.includes(k)));
 }
 
 // ============================================================ ゲーム本体
@@ -302,7 +382,10 @@ function spawnTick(){
   if(Math.random()>p)return;
   const empty=[];for(let k=0;k<16;k++)if(!invaders[k]&&!(bonus&&bonus.k===k))empty.push(k);
   if(!empty.length)return;
-  const k=empty[Math.floor(Math.random()*empty.length)];
+  // 大半はいまのコードのコードトーン上に湧かせる。出た順に倒すだけで進行に乗る。
+  const ct=chordCells(), pool=empty.filter(k=>ct.includes(k));
+  const src=(pool.length&&Math.random()<.82)?pool:empty;
+  const k=src[Math.floor(Math.random()*src.length)];
   invaders[k]={age:0};drawCell(k);
 }
 // AI モンキー (緑): 最上段 (鍵1〜4) を1拍ずつ右へ横断。撃つと大量ボーナス。
@@ -322,7 +405,7 @@ function hit(k){
     const pts=500+250*level;score+=pts;combo++;
     bonus=null;explode(k);
     c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),110);
-    boom();popup(k,'AI +'+pts,'var(--green)');
+    aiFill(k);popup(k,'AI +'+pts,'var(--green)');
     msg('<span class="bonus">AI MONKEY BONUS +'+pts+'</span>');updateHud();return;
   }
   if(invaders[k]){
@@ -335,19 +418,21 @@ function hit(k){
     score+=pts;
     invaders[k]=null;explode(k);
     c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),110);
-    zap(groove);
+    shot(k,groove,combo);
     popup(k,(groove?'GROOVE +':'+')+pts,groove?'var(--yellow)':'var(--teal)');
     msg(groove?`<span class="groove">GROOVE!! +${pts}</span>`:`+${pts}`);
     if(kills%10===0){level++;banner('LEVEL '+level);log('LEVEL '+level);}
     updateHud();
   }else{
-    combo=0;updateHud();
+    // 空撃ちでも音楽は壊さない。同じ音を弱く短く鳴らす (ゴーストノート)
+    combo=0;ghost(k);updateHud();
     c.classList.add('bad');setTimeout(()=>c.classList.remove('bad'),110);
   }
 }
 function escape(k){
+  const n=cellNote(k);
   invaders[k]=null;drawCell(k);
-  lives--;combo=0;buzz();updateHud();shake();
+  lives--;combo=0;drop(n);updateHud();shake();
   msg('<span class="miss">MISSED!</span>');
   if(lives<=0)gameOver();
 }
@@ -358,7 +443,8 @@ function start(){
   document.getElementById('attractMsg').style.display='none';
   document.getElementById('btnStart').classList.remove('blink');
   playing=true;attract=false;nextBeat=performance.now();
-  ensureAudio();updateHud();msg('');banner('START!');
+  barIdx=-1;intStep=0;                                       // 次の小節頭がコード進行の1つ目
+  ensureAudio();updateHud();updateChordView();msg('');banner('START!');
   if(devices[0])writeMIDI(devices[0],0xB0,CC_PLAY_STOP,1);   // 本体のクロックを回す (P1)
   log('GAME START');
 }
@@ -441,10 +527,10 @@ function drawCell(k){
   if(bonus&&bonus.k===k)svg=sprite(BONUS_ROWS,PAL_GREEN,'bonus');
   else if(invaders[k]){const a=Math.min(invaders[k].age,3);
     svg=sprite(monkeyRows(a>=2?EYE_PANIC:EYE_CALM,frame?LEG_WIDE:LEG_STAND),palOrange(a),a>=3?'urgent':'');}
-  cells[k].innerHTML=svg+`<span class="kn">${k+1}</span>`;
+  cells[k].innerHTML=svg+`<span class="kn">${noteName(cellNote(k))}</span>`;
 }
 function explode(k){                                    // 撃破: 破裂スプライトを一瞬出す
-  cells[k].innerHTML=sprite(BOOM_ROWS,{O:'#f2d43c'})+`<span class="kn">${k+1}</span>`;
+  cells[k].innerHTML=sprite(BOOM_ROWS,{O:'#f2d43c'})+`<span class="kn">${noteName(cellNote(k))}</span>`;
   setTimeout(()=>drawCell(k),150);
 }
 // 残機アイコン: モンキーの頭だけ (脚なし)
@@ -480,26 +566,121 @@ function starBurst(){boost=2.4;}
 })();
 
 // ============================================================ サウンド (WebAudio)
-let audioCtx=null, metroOn=false;
-function ensureAudio(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  if(audioCtx.state==='suspended')audioCtx.resume();}
-function tone(f0,f1,dur,vol,type){if(!audioCtx)return;const t=audioCtx.currentTime;
+// 撃破音・バンド・効果音がすべて同じスケール/コードの上に乗るので、
+// プレイした結果がそのまま 1 曲として成立する。
+let audioCtx=null, master=null, delaySend=null, noiseBuf=null;
+let metroOn=false, bandOn=true;
+function ensureAudio(){
+  if(!audioCtx){
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    master=audioCtx.createGain();master.gain.value=.85;master.connect(audioCtx.destination);
+    const d=audioCtx.createDelay(1.2),fb=audioCtx.createGain(),wet=audioCtx.createGain();
+    d.delayTime.value=30/bpm;fb.gain.value=.30;wet.gain.value=.20;   // 8分ディレイ (BPM 追従)
+    d.connect(fb);fb.connect(d);d.connect(wet);wet.connect(master);
+    delaySend=d;
+  }
+  if(audioCtx.state==='suspended')audioCtx.resume();
+}
+function midiToFreq(n){return 440*Math.pow(2,(n-69)/12);}
+// 8bit らしく整数倍音を重ねる。重ねる数はコンボで増える = 上手いほど音が太る
+function voice(note,dur,vol,type,layers,send){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime,f=midiToFreq(note);
+  const g=audioCtx.createGain();
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(vol,t+.006);
+  g.gain.exponentialRampToValueAtTime(.0008,t+dur);
+  g.connect(master);if(send&&delaySend)g.connect(delaySend);
+  for(let i=0;i<layers;i++){
+    const o=audioCtx.createOscillator(),lg=audioCtx.createGain();
+    o.type=i?'triangle':type;o.frequency.value=f*(i+1);
+    lg.gain.value=i?.30/i:1;
+    o.connect(lg);lg.connect(g);o.start(t);o.stop(t+dur+.04);
+  }
+}
+function noise(dur,vol,type,freq,q){
+  if(!audioCtx)return;
+  if(!noiseBuf){const len=(audioCtx.sampleRate*.4)|0;
+    noiseBuf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+    const d=noiseBuf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;}
+  const t=audioCtx.currentTime,s=audioCtx.createBufferSource(),
+        f=audioCtx.createBiquadFilter(),g=audioCtx.createGain();
+  s.buffer=noiseBuf;f.type=type;f.frequency.value=freq;if(q)f.Q.value=q;
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  s.connect(f);f.connect(g);g.connect(master);s.start(t);s.stop(t+dur+.02);
+}
+function kick(v){if(!audioCtx)return;const t=audioCtx.currentTime;
   const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-  o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(f1,t+dur);
-  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+dur);
-  o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+dur+.02);}
-function zap(groove){tone(groove?1600:1100,180,.12,.4,'square');}
-function boom(){tone(900,120,.28,.45,'square');}
-function buzz(){tone(140,60,.3,.4,'sawtooth');}
-function bonusSound(){tone(700,900,.07,.22,'square');}
-function click(accent){tone(accent?1760:1320,accent?1760:1320,.05,accent?.4:.28,'square');}
+  o.type='sine';o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(45,t+.10);
+  g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.20);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+.24);}
+function snare(){noise(.13,.30,'bandpass',1900,1.0);}
+function hat(open){noise(open?.10:.032,open?.14:.10,'highpass',7600);}
+
+// ── バッキング: 撃った音が「曲の中」に収まるための土台 (16分ステップ駆動) ──
+function bandStep(s){
+  if(!bandOn||!audioCtx)return;
+  if(s===0||s===6||s===10)kick(s===0?.7:.5);
+  if(s===4||s===12)snare();
+  if(s%2===0)hat(s===14);
+  const bass=36+root+chord().d;                     // ルートは 1 小節保つ
+  if(s===0){voice(bass,.34,.30,'triangle',1,false);pad();}
+  else if(s===6) voice(bass,   .22,.20,'triangle',1,false);
+  else if(s===10)voice(bass+7, .22,.20,'triangle',1,false);
+  else if(s===14)voice(bass+12,.16,.16,'triangle',1,false);
+}
+function pad(){                                     // コードを薄く 1 小節ぶん
+  const dur=Math.min(3.2,60/bpm*3.4);
+  chordTones(chord()).forEach(x=>voice(48+root+x,dur,.055,'triangle',1,false));
+}
+
+// ── プレイヤーの音 ──
+// 撃破音 = そのセルに割り当てられた音そのもの。これが演奏の実体。
+function shot(k,groove,cmb){
+  const n=cellNote(k),lay=Math.min(1+Math.floor(cmb/8),3);
+  voice(n,groove?.52:.38,groove?.30:.24,'square',lay,true);
+  if(groove)voice(n+12,.26,.11,'square',1,true);     // 拍ピッタリはオクターブが重なる
+}
+function ghost(k){voice(cellNote(k),.11,.045,'triangle',1,false);}   // 空撃ち = ゴーストノート
+function drop(n){                                    // 逃げられた = 音がしぼんで抜ける
+  if(!audioCtx)return;const t=audioCtx.currentTime,f=midiToFreq(n);
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type='triangle';o.frequency.setValueAtTime(f,t);o.frequency.exponentialRampToValueAtTime(f/3,t+.34);
+  g.gain.setValueAtTime(.16,t);g.gain.exponentialRampToValueAtTime(.001,t+.36);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+.40);
+  noise(.20,.16,'lowpass',600);
+}
+function aiFill(k){                                  // AI モンキー撃破: コード上を駆け上がる
+  const tn=chordTones(chord()),base=60+root;
+  for(let i=0;i<4;i++)setTimeout(()=>voice(base+tn[i%3]+(i>=3?12:0),.24,.22,'square',2,true),i*62);
+}
+function bonusSound(){voice(72+root+chordTones(chord())[0],.09,.13,'square',1,true);}
+function click(accent){voice(accent?93:88,.045,accent?.26:.16,'square',1,false);}
+
 document.getElementById('btnMetro').onclick=function(){
   metroOn=!metroOn;ensureAudio();this.classList.toggle('on',metroOn);};
+document.getElementById('btnBand').onclick=function(){
+  bandOn=!bandOn;ensureAudio();this.classList.toggle('on',bandOn);};
 document.getElementById('btnStart').onclick=start;
 document.getElementById('btnRetry').onclick=start;
 
+// ============================================================ スケール / キーの選択
+(function(){
+  const rs=document.getElementById('rootSel'),ss=document.getElementById('scaleSel');
+  KEY_NAMES.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent=n;rs.appendChild(o);});
+  SCALES.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;ss.appendChild(o);});
+  rs.value=root;ss.value=scaleId;
+  const apply=()=>{
+    root=+rs.value;scaleId=ss.value;
+    try{localStorage.setItem('ponkey_inv_root',root);localStorage.setItem('ponkey_inv_scale',scaleId);}catch(e){}
+    for(let k=0;k<16;k++)drawCell(k);
+    updateChordView();
+  };
+  rs.onchange=apply;ss.onchange=apply;
+})();
+
 // ============================================================
-setBpmView();updateHud();renderPlayers();
+setBpmView();updateHud();renderPlayers();updateChordView();
 document.getElementById('btnStart').classList.add('blink');
 log('READY. CONNECT して P5-P7 の鍵で撃つ');
 </script>
