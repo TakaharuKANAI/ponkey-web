@@ -77,10 +77,11 @@
   <span class="sep"></span>
   <span class="hint">太さ <input type="range" id="size" min="3" max="48" value="14"></span>
   <button id="btnRepeat" class="on" title="同じマスの中でなぞり続けても叩き続ける">連打</button>
+  <button id="btnSound" class="on" title="PONKEY の内蔵音源でアンビエントな音を鳴らす (要ファーム v4.5.65+。古いファームだと鍵が余計に動くので OFF に)">音</button>
   <button id="btnFade" title="描いた線が少しずつ消えていく">消えていく</button>
   <button id="btnClear">クリア</button>
   <button id="btnSave">PNG</button>
-  <span class="hint how">なぞる=叩く ・ マス=16鍵 ・ 色=P1〜P7 (キー1〜7)</span>
+  <span class="hint how">なぞる=叩く+鳴る ・ マス=16鍵 ・ 色=P1〜P7 (キー1〜7) = 音色</span>
 </header>
 <div id="stage">
   <canvas id="paint"></canvas>
@@ -94,14 +95,15 @@
 // CC 0-6 → パート選択 (P1〜P7 を押すのと同じ)。LED の色相がそのパートの色になる。
 const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
 // パート色。色相はファームの PART_BASE_HUE と同じ (KICK 11 / SNARE 108 / HAT 220 / TOM 300 / BASS 176 / LEAD 58 / PAD 265)
+// voice = その色でなぞったときに鳴る内蔵音源 (SAM2695, GM プログラム番号 0 始まり)。どれもアンビエント寄りのパッド/FX
 const PARTS=[
-  {cc:0,name:'KICK', hue:11 },
-  {cc:1,name:'SNARE',hue:108},
-  {cc:2,name:'HAT',  hue:220},
-  {cc:3,name:'TOM',  hue:300},
-  {cc:4,name:'BASS', hue:176},
-  {cc:5,name:'LEAD', hue:58 },
-  {cc:6,name:'PAD',  hue:265},
+  {cc:0,name:'KICK', hue:11,  voice:89, vname:'Warm Pad'   },
+  {cc:1,name:'SNARE',hue:108, voice:88, vname:'New Age Pad'},
+  {cc:2,name:'HAT',  hue:220, voice:92, vname:'Bowed Glass'},
+  {cc:3,name:'TOM',  hue:300, voice:94, vname:'Halo Pad'   },
+  {cc:4,name:'BASS', hue:176, voice:95, vname:'Sweep Pad'  },
+  {cc:5,name:'LEAD', hue:58,  voice:91, vname:'Choir Pad'  },
+  {cc:6,name:'PAD',  hue:265, voice:100,vname:'Brightness' },
 ];
 PARTS.forEach(p=>{p.color=`hsl(${p.hue} 95% 62%)`;p.glow=`hsl(${p.hue} 100% 70% / .6)`;});
 // 本体 → アプリ: 物理キーを押すと NoteOn が来る。音高 → 鍵番号 の逆引き (INVADERS と同じ表)
@@ -117,10 +119,19 @@ function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
 const REPEAT_MS=140;     // 連打の最短間隔 (ソレノイドのパルス幅 ≒ 60000/BPM/4 より少し長め)
 const FLASH_MS=260;      // マスの光り
 
+// ── 音 (ファーム v4.5.65+): BLE の ch16 (0x?F) に送ったものは本体がそのまま内蔵音源 SAM2695 の ch16 へ通す。
+//    本体のシーケンサ・録音・ソレノイド・LED には触らない (叩くのは従来どおり ch1 の NoteOn を別送)。
+//    音色・リバーブ・リリースは全部こちらで決める。マス → 音高はメジャーペンタ (C3 起点、左下=低音・右上=高音)。
+const LIVE_CH=15;
+const PENTA=[0,2,4,7,9], NOTE_BASE=48;
+function cellNote(k){const idx=(3-Math.floor(k/4))*4+(k%4);return NOTE_BASE+Math.floor(idx/PENTA.length)*12+PENTA[idx%PENTA.length];}
+const RELEASE_MS=650;    // マスを離れてから NoteOff するまで (隣どうしが重なって和音になる)
+
 // ============================================================ 状態
 let midiCh=null, device=null;
 let part=5;              // 現在の色 (index into PARTS)。既定 LEAD=黄
-let brush=14, repeat=true, fade=false;
+let brush=14, repeat=true, fade=false, sound=true;
+const holdCount=new Uint8Array(16), releaseTimer=new Array(16).fill(null);   // cell → 押えているポインタ数 / 離す予約
 const pointers=new Map();          // pointerId → {x,y,cell,lastFire}
 const flash=new Float64Array(16);  // cell → 光り始めた時刻
 let drawn=false;
@@ -142,6 +153,7 @@ document.getElementById('btnConnect').onclick=async()=>{
     ch.addEventListener('characteristicvaluechanged',onMidi);
     device=dev; midiCh=ch; setConn(true);
     writeMIDI(0xB0,PARTS[part].cc,127);      // 本体の色を今のパレットに揃える
+    setupSound();
   }catch(e){console.warn(e);}
 };
 function onMidi(ev){
@@ -166,6 +178,34 @@ function selectPart(i){
   part=(i+7)%7;
   document.querySelectorAll('#pal .sw').forEach((e,j)=>e.classList.toggle('on',j===part));
   writeMIDI(0xB0,PARTS[part].cc,127);      // 本体の LED 色も切り替わる (P1〜P7 を押したのと同じ)
+  if(sound)writeMIDI(0xC0|LIVE_CH,PARTS[part].voice,0);   // 音色も色に追従
+}
+
+// ============================================================ 出口: 鳴らす (ch16 パススルー)
+function setupSound(){
+  if(!sound)return;
+  writeMIDI(0xC0|LIVE_CH,PARTS[part].voice,0);   // Program Change
+  writeMIDI(0xB0|LIVE_CH,7,100);                 // 音量
+  writeMIDI(0xB0|LIVE_CH,91,127);                // リバーブ send 最大 (種別は本体既定の Hall2)
+  writeMIDI(0xB0|LIVE_CH,93,40);                 // コーラス少し
+  writeMIDI(0xB0|LIVE_CH,72,110);                // リリース長め (尾を引く)
+  writeMIDI(0xB0|LIVE_CH,10,64);                 // パン中央
+}
+function noteOnCell(k,vel){
+  if(!sound||!(k>=0&&k<=15))return;
+  if(releaseTimer[k]){clearTimeout(releaseTimer[k]);releaseTimer[k]=null;}
+  if(holdCount[k]===0)writeMIDI(0x90|LIVE_CH,cellNote(k),vel);
+  holdCount[k]++;
+}
+function releaseCell(k,delay=RELEASE_MS){
+  if(!(k>=0&&k<=15)||holdCount[k]===0)return;
+  holdCount[k]--;
+  if(holdCount[k]>0)return;
+  releaseTimer[k]=setTimeout(()=>{releaseTimer[k]=null;writeMIDI(0x80|LIVE_CH,cellNote(k),0);},delay);
+}
+function allSoundOff(){
+  for(let k=0;k<16;k++){holdCount[k]=0;if(releaseTimer[k]){clearTimeout(releaseTimer[k]);releaseTimer[k]=null;}}
+  writeMIDI(0xB0|LIVE_CH,123,0);   // All Notes Off
 }
 
 // ============================================================ キャンバス
@@ -241,29 +281,34 @@ stage.addEventListener('pointerdown',e=>{
   if(e.button!==undefined&&e.button!==0)return;
   try{stage.setPointerCapture(e.pointerId);}catch(_){}
   const {x,y}=pos(e); const k=cellAt(x,y);
-  pointers.set(e.pointerId,{x,y,cell:k,lastFire:performance.now()});
-  dot(x,y); fire(k);
+  pointers.set(e.pointerId,{x,y,cell:k,lastFire:performance.now(),t:performance.now()});
+  dot(x,y); fire(k); noteOnCell(k,70);
 });
 stage.addEventListener('pointermove',e=>{
   const s=pointers.get(e.pointerId); if(!s)return;
   const {x,y}=pos(e); const now=performance.now();
   stroke(s.x,s.y,x,y);
   const k=cellAt(x,y);
-  if(k!==s.cell){ s.cell=k; s.lastFire=now; fire(k); }                        // 隣のマスへ入った
+  if(k!==s.cell){                                                             // 隣のマスへ入った
+    const speed=Math.hypot(x-s.x,y-s.y)/Math.max(1,now-s.t);                 // px/ms → 速いほど強く
+    const vel=Math.round(Math.min(100,Math.max(45,45+speed*22)));
+    releaseCell(s.cell); s.cell=k; s.lastFire=now; fire(k); noteOnCell(k,vel);
+  }
   else if(repeat&&now-s.lastFire>=REPEAT_MS&&(x!==s.x||y!==s.y)){ s.lastFire=now; fire(k); }  // 同じマスをなぞり続けている
-  s.x=x; s.y=y;
+  s.x=x; s.y=y; s.t=now;
 });
-const up=e=>{pointers.delete(e.pointerId);};
+const up=e=>{const s=pointers.get(e.pointerId);if(!s)return;releaseCell(s.cell,300);pointers.delete(e.pointerId);};
 stage.addEventListener('pointerup',up); stage.addEventListener('pointercancel',up); stage.addEventListener('pointerleave',up);
 
 // ── UI
 const pal=document.getElementById('pal');
 PARTS.forEach((p,i)=>{const d=document.createElement('div');d.className='sw'+(i===part?' on':'');
-  d.style.background=p.color; d.style.setProperty('--c',p.glow); d.textContent='P'+(i+1); d.dataset.k=i+1; d.title=p.name+' (キー '+(i+1)+')';
+  d.style.background=p.color; d.style.setProperty('--c',p.glow); d.textContent='P'+(i+1); d.dataset.k=i+1; d.title=p.name+' (キー '+(i+1)+') ・ 音色 '+p.vname;
   d.onclick=()=>selectPart(i); pal.appendChild(d);});
 document.getElementById('size').oninput=e=>brush=+e.target.value;
 document.getElementById('btnRepeat').onclick=e=>{repeat=!repeat;e.target.classList.toggle('on',repeat);};
 document.getElementById('btnFade').onclick=e=>{fade=!fade;e.target.classList.toggle('on',fade);};
+document.getElementById('btnSound').onclick=e=>{sound=!sound;e.target.classList.toggle('on',sound);if(sound)setupSound();else allSoundOff();};
 function clearAll(){pctx.clearRect(0,0,W,H);drawn=false;document.getElementById('empty').classList.remove('hide');}
 document.getElementById('btnClear').onclick=clearAll;
 document.getElementById('btnSave').onclick=()=>{
