@@ -75,6 +75,29 @@
   .piano svg{display:block;width:100%;height:78px}
   .piano text{font-family:Inter,sans-serif;font-size:9px}
   .status{flex:0 0 auto;font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:14px}
+
+  /* ── 鼻歌シート ── */
+  .veil{position:fixed;inset:0;background:rgba(42,44,48,.32);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
+  .veil.on{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--panel);border-top:1px solid var(--line);
+         max-width:480px;margin:0 auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));
+         transform:translateY(105%);transition:transform .22s;display:flex;flex-direction:column;gap:12px}
+  .sheet.on{transform:none}
+  .sheet h2{text-align:center}
+  .sheet .desc{font-size:11.5px;color:var(--dim);line-height:1.7;text-align:center}
+  .recbtn{align-self:center;width:76px;height:76px;border-radius:50%;border:1px solid var(--red);background:#fff;
+          color:var(--red);font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .recbtn.rec{background:var(--red);color:#fff;animation:pulse 1.1s ease-in-out infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 10px rgba(184,87,75,.18)}}
+  .live{text-align:center;font-size:12px;color:var(--dim);min-height:34px;line-height:1.5}
+  .live b{font-size:19px;color:var(--txt);letter-spacing:.04em}
+  .sug{border:1px solid var(--line);background:var(--panel2);padding:10px 12px;cursor:pointer;
+       display:flex;align-items:center;gap:10px}
+  .sug:hover{border-color:var(--teal)}
+  .sug .sn{flex:1;font-size:14px}
+  .sug .sk{font-size:15px;font-weight:500;color:var(--teal);min-width:34px;text-align:center}
+  .sug .sp{font-size:11px;color:var(--dim)}
+  .sheet .closer{align-self:center;color:var(--dim);background:none;border:none;font-size:12px;cursor:pointer;padding:6px 12px}
 </style>
 </head>
 <body>
@@ -82,6 +105,7 @@
   <header>
     <a href="index.html" title="アプリ一覧へ">‹</a>
     <h1>SCALE</h1>
+    <button id="micBtn" title="Find by humming" style="padding:6px 9px">🎤</button>
     <button id="langBtn" title="Language" style="padding:6px 8px;color:var(--dim)">EN</button>
     <span id="conn" class="pill ng">未接続</span>
     <button class="primary" id="btnConnect">接続</button>
@@ -111,6 +135,17 @@
   <div class="piano"><svg id="piano"></svg></div>
 
   <div class="status" id="status"></div>
+</div>
+
+<!-- ══ 鼻歌で探す ══ -->
+<div class="veil" id="veil"></div>
+<div class="sheet" id="sheet">
+  <h2 id="humTitle"></h2>
+  <div class="desc" id="humDesc"></div>
+  <button class="recbtn" id="recBtn">🎤</button>
+  <div class="live" id="humLive"></div>
+  <div id="humResults" style="display:flex;flex-direction:column;gap:8px"></div>
+  <button class="closer" id="humClose"></button>
 </div>
 
 <script>
@@ -291,7 +326,124 @@ function onMidi(e){
     else if(cc===CC_KEY && v<12){ store.key=v; save(); render(); status(t().fromDev(t().keyName(PC[v]))); gotSync=true; i+=2; }
   }
 }
-document.getElementById('langBtn').onclick=()=>{ store.lang=store.lang==='en'?'ja':'en'; save(); render(); status(t().hint); };
+document.getElementById('langBtn').onclick=()=>{ store.lang=store.lang==='en'?'ja':'en'; save(); render(); renderHumIdle(); status(t().hint); };
+
+// ════════════════════════════════════════════════ 鼻歌で探す
+// マイク → 自己相関ピッチ検出 → 音高クラスのヒストグラム → 8スケール×12キーを総当たりで採点。
+// 音感がなくてもいい理由: ハミングは元の曲とキーがズレるが「音と音の間隔」は保たれるので、
+// スケールの形は当てられる。キーは歌った高さから推定する (ひとりで弾くなら元のキーである必要はない)。
+const HUM={
+  ja:{title:'鼻歌で探す', desc:'弾きたい曲のメロディを 8〜15 秒ハミングしてください（「ラララ」でOK）。<br>音程が多少ズレても大丈夫。終わったらもう一度ボタンを押す',
+      rec:'録音中… もう一度押すと解析', analyzing:'解析中…', tooShort:'うまく拾えませんでした。もう少し長く、はっきりハミングしてみて',
+      resultHead:'合いそうな順:', close:'閉じる', retry:'もう一度', mic:'マイクを使えませんでした: ', applied:'鼻歌から設定: ',
+      chromaHint:'どのスケールにもあまり合いません。半音階が確実です'},
+  en:{title:'Find by humming', desc:'Hum the melody for 8–15 seconds ("la la la" is fine).<br>Being off-pitch is OK. Press again when done',
+      rec:'Listening… press again to analyze', analyzing:'Analyzing…', tooShort:'Could not hear enough. Try humming longer and clearer',
+      resultHead:'Best matches:', close:'Close', retry:'Try again', mic:'Microphone unavailable: ', applied:'Set from humming: ',
+      chromaHint:'No scale fits well — Chromatic is the safe choice'},
+};
+const hu=()=>HUM[store.lang==='en'?'en':'ja'];
+let humStream=null, humRAF=0, humRecording=false, humSamples=[];
+
+function openHum(){ renderHumIdle(); document.getElementById('veil').classList.add('on'); document.getElementById('sheet').classList.add('on'); }
+function closeHum(){ stopHum(false); document.getElementById('veil').classList.remove('on'); document.getElementById('sheet').classList.remove('on'); }
+document.getElementById('micBtn').onclick=openHum;
+document.getElementById('veil').onclick=closeHum;
+document.getElementById('humClose').onclick=closeHum;
+function renderHumIdle(){
+  document.getElementById('humTitle').textContent=hu().title;
+  document.getElementById('humDesc').innerHTML=hu().desc;
+  document.getElementById('humLive').textContent='';
+  document.getElementById('humResults').innerHTML='';
+  document.getElementById('humClose').textContent=hu().close;
+  const b=document.getElementById('recBtn'); b.classList.remove('rec'); b.textContent='🎤';
+}
+document.getElementById('recBtn').onclick=async()=>{
+  if(humRecording){ stopHum(true); return; }
+  try{
+    humStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});
+  }catch(e){ document.getElementById('humLive').textContent=hu().mic+e.name; return; }
+  const c=actx(), src=c.createMediaStreamSource(humStream), an=c.createAnalyser();
+  an.fftSize=2048; src.connect(an);
+  const buf=new Float32Array(an.fftSize);
+  humSamples=[]; humRecording=true;
+  const b=document.getElementById('recBtn'); b.classList.add('rec'); b.textContent='■';
+  document.getElementById('humResults').innerHTML='';
+  const t0=performance.now();
+  (function loop(){
+    if(!humRecording) return;
+    an.getFloatTimeDomainData(buf);
+    const f=autoCorrelate(buf,c.sampleRate);
+    let liveNote='—';
+    if(f>0){ const m=69+12*Math.log2(f/440);
+      if(m>=40&&m<=88){ humSamples.push(m); liveNote=PC[((Math.round(m)%12)+12)%12]+octOf(Math.round(m)); } }
+    const sec=((performance.now()-t0)/1000).toFixed(0);
+    document.getElementById('humLive').innerHTML=`<b>${liveNote}</b><br>${hu().rec} · ${sec}s`;
+    if(performance.now()-t0>20000){ stopHum(true); return; }
+    humRAF=requestAnimationFrame(loop);
+  })();
+};
+function stopHum(analyze){
+  humRecording=false; cancelAnimationFrame(humRAF);
+  if(humStream){ humStream.getTracks().forEach(t=>t.stop()); humStream=null; }
+  const b=document.getElementById('recBtn'); b.classList.remove('rec'); b.textContent='🎤';
+  if(!analyze) return;
+  document.getElementById('humLive').textContent=hu().analyzing;
+  setTimeout(()=>{
+    const res=analyzeHum(humSamples);
+    if(!res){ document.getElementById('humLive').textContent=hu().tooShort; return; }
+    document.getElementById('humLive').textContent=hu().resultHead+(res.weak?'  ('+hu().chromaHint+')':'');
+    const box=document.getElementById('humResults'); box.innerHTML='';
+    res.top.forEach(r=>{
+      const d=document.createElement('div'); d.className='sug';
+      const sc=SCALES.find(x=>x.id===r.scale);
+      d.innerHTML=`<span class="sk">${PC[r.key]}</span><span class="sn">${sName(sc)}</span><span class="sp">${Math.round(r.cov*100)}%</span>`;
+      d.onclick=async()=>{ store.scale=r.scale; store.key=r.key; save(); render();
+        await sendKey(); await sendScale(); status(hu().applied+PC[r.key]+' '+sName(sc)); closeHum(); arpeggio(); };
+      box.appendChild(d);
+    });
+  },30);
+}
+// 自己相関ピッチ検出 (単旋律のハミング向け。閾値以下=無声は -1)
+function autoCorrelate(buf,sr){
+  const SIZE=buf.length; let rms=0;
+  for(let i=0;i<SIZE;i++) rms+=buf[i]*buf[i];
+  if(Math.sqrt(rms/SIZE)<0.012) return -1;
+  const c=new Float32Array(SIZE/2);
+  for(let lag=0;lag<SIZE/2;lag++){ let sum=0; for(let j=0;j<SIZE/2;j++) sum+=buf[j]*buf[j+lag]; c[lag]=sum; }
+  let d=1; while(d<SIZE/2-1 && c[d]>c[d+1]) d++;              // 最初の谷を越える
+  let maxv=-1,maxp=-1;
+  for(let i=d;i<SIZE/2;i++) if(c[i]>maxv){ maxv=c[i]; maxp=i; }
+  if(maxp<=0 || maxv<0.3*c[0]) return -1;                     // 周期性が弱い=無声
+  let T=maxp;                                                 // 放物線補間
+  const x1=c[T-1],x2=c[T],x3=c[T+1],a=(x1+x3-2*x2)/2,b2=(x3-x1)/2;
+  if(a) T=T-b2/(2*a);
+  return sr/T;
+}
+// 採点: 全体のチューニングずれを推定 → 音高クラスのヒストグラム → 8スケール×12キー総当たり。
+// score = カバー率 + 主音ボーナス(そのキーの音をよく歌っている) - 音数ペナルティ(多い音階ほど当たりやすいので)
+function analyzeHum(samples){
+  if(samples.length<45) return null;                          // 約1.5秒ぶん未満は不足
+  let best=0,bestOff=0;
+  for(let off=-0.5;off<0.5;off+=0.05){                        // ハミング全体の半音未満のズレを補正
+    let sc=0; for(const m of samples) sc+=Math.cos(2*Math.PI*(m-off));
+    if(sc>best){ best=sc; bestOff=off; }
+  }
+  const hist=new Array(12).fill(0);
+  for(const m of samples) hist[((Math.round(m-bestOff)%12)+12)%12]++;
+  const tot=samples.length, cands=[];
+  for(const sc of SCALES){
+    if(!sc.iv || sc.iv.length===12) continue;                 // 白鍵(=Cメジャー相当)と半音階は候補から外す
+    for(let k=0;k<12;k++){
+      let inw=0; for(const v of sc.iv) inw+=hist[(k+v)%12];
+      const cov=inw/tot;
+      const score=cov + 0.5*(hist[k]/tot) - 0.012*sc.iv.length;
+      cands.push({scale:sc.id,key:k,cov,score});
+    }
+  }
+  cands.sort((a,b)=>b.score-a.score);
+  return {top:cands.slice(0,3), weak:cands[0].cov<0.7};
+}
 fitGrid(); render(); status(t().hint);
 </script>
 </body>
