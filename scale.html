@@ -82,6 +82,7 @@
   <header>
     <a href="index.html" title="アプリ一覧へ">‹</a>
     <h1>SCALE</h1>
+    <button id="langBtn" title="Language" style="padding:6px 8px;color:var(--dim)">EN</button>
     <span id="conn" class="pill ng">未接続</span>
     <button class="primary" id="btnConnect">接続</button>
   </header>
@@ -124,23 +125,36 @@ const IS_BLACK=[0,1,0,1,0,0,1,0,1,0,1,0];
 const WHITE=[0,2,4,5,7,9,11];
 // 表示順: 白鍵 → ファーム SCALE_DEFS 0-7。id はファームに送る値
 const SCALES=[
-  {id:SCALE_WHITE, n:'白鍵',            d:'いつもの PONKEY。C3 から白鍵 16 本'},
-  {id:0, n:'メジャーペンタ',  iv:[0,2,4,7,9],       d:'素朴であかるい。外れる音がない'},
-  {id:1, n:'マイナーペンタ',  iv:[0,3,5,7,10],      d:'かげりのある、外さない'},
-  {id:2, n:'琉球',            iv:[0,4,5,7,11],      d:'南の島。ゆったり'},
-  {id:3, n:'都節',            iv:[0,1,5,7,8],       d:'和の陰旋法。しっとり'},
-  {id:4, n:'メジャー',        iv:[0,2,4,5,7,9,11],  d:'ふつうの長調。7 音'},
-  {id:5, n:'ドリアン',        iv:[0,2,3,5,7,9,10],  d:'短調だけど少し明るい'},
-  {id:6, n:'ブルース',        iv:[0,3,5,6,7,10],    d:'にごりのある 6 音'},
-  {id:7, n:'ホールトーン',    iv:[0,2,4,6,8,10],    d:'全音だけ。浮遊感'},
+  {id:SCALE_WHITE, n:'白鍵',           en:'White Keys',       d:'いつもの PONKEY。C3 から白鍵 16 本',   de:'The default PONKEY. 16 white keys from C3'},
+  {id:0, n:'メジャーペンタ', en:'Major Pentatonic', iv:[0,2,4,7,9],      d:'素朴であかるい。外れる音がない', de:'Simple and bright. No wrong notes'},
+  {id:1, n:'マイナーペンタ', en:'Minor Pentatonic', iv:[0,3,5,7,10],     d:'かげりのある、外さない',         de:'Moody, still no wrong notes'},
+  {id:2, n:'琉球',           en:'Ryukyu',           iv:[0,4,5,7,11],     d:'南の島。ゆったり',               de:'Okinawan island air. Relaxed'},
+  {id:3, n:'都節',           en:'Miyako-bushi',     iv:[0,1,5,7,8],      d:'和の陰旋法。しっとり',           de:'Japanese in-scale. Quiet and dark'},
+  {id:4, n:'メジャー',       en:'Major',            iv:[0,2,4,5,7,9,11], d:'ふつうの長調。7 音',             de:'The regular major scale. 7 notes'},
+  {id:5, n:'ドリアン',       en:'Dorian',           iv:[0,2,3,5,7,9,10], d:'短調だけど少し明るい',           de:'Minor with a brighter edge'},
+  {id:6, n:'ブルース',       en:'Blues',            iv:[0,3,5,6,7,10],   d:'にごりのある 6 音',              de:'6 notes with a little grit'},
+  {id:7, n:'ホールトーン',   en:'Whole Tone',       iv:[0,2,4,6,8,10],   d:'全音だけ。浮遊感',               de:'Whole steps only. Floating'},
 ];
+const sName=s=>store.lang==='en'?s.en:s.n, sDesc=s=>store.lang==='en'?s.de:s.d;
+// UI 文言 (ステータス行など)
+const T={
+  ja:{disc:'未接続',conn:'接続済み',connect:'接続',toDev:v=>'本体へ: '+v,keyName:v=>'キー '+v,offline:v=>v+'（未接続）',
+      picking:'デバイス選択…',cut:'切断',waiting:'接続。本体の設定を待っています…',
+      old:'⚠ 本体から音階の設定が届きません（ファーム v4.5.64 以降が必要）',err:'接続エラー: ',fromDev:v=>'本体: '+v,
+      hint:'← → で切り替え。タップで試聴'},
+  en:{disc:'Offline',conn:'Connected',connect:'Connect',toDev:v=>'Sent: '+v,keyName:v=>'Key '+v,offline:v=>v+' (offline)',
+      picking:'Choosing device…',cut:'Disconnected',waiting:'Connected. Waiting for device settings…',
+      old:'⚠ No scale settings from device (firmware v4.5.64+ required)',err:'Connection error: ',fromDev:v=>'Device: '+v,
+      hint:'← → to switch. Tap to preview'},
+};
+const t=()=>T[store.lang==='en'?'en':'ja'];
 const idxOfId=id=>Math.max(0,SCALES.findIndex(s=>s.id===id));
 
 // ════════════════════════════════════════════════ 状態
 const LS='ponkey_scale_v01';
-let store={scale:SCALE_WHITE,key:0};
+let store={scale:SCALE_WHITE,key:0,lang:'ja'};
 try{ Object.assign(store,JSON.parse(localStorage.getItem(LS)||'{}')); }catch(_){}
-function save(){ localStorage.setItem(LS,JSON.stringify({scale:store.scale,key:store.key})); }
+function save(){ localStorage.setItem(LS,JSON.stringify({scale:store.scale,key:store.key,lang:store.lang})); }
 let dev,gatt,midiCh,connected=false,gotSync=false;
 
 function keyOfRank(r){ return (3-Math.floor(r/4))*4 + (r%4); }   // 対合
@@ -160,9 +174,12 @@ function render(){
   const s=curScale(), white=s.id===SCALE_WHITE;
   document.getElementById('keyBig').textContent=PC[store.key];
   document.getElementById('keySel').classList.toggle('dim',white);
-  document.getElementById('scaleBig').textContent=s.n;
-  document.getElementById('scaleSub').textContent= white ? s.d
-    : s.iv.map(v=>PC[(store.key+v)%12]).join(' ')+'  ·  '+s.d;
+  document.getElementById('scaleBig').textContent=sName(s);
+  document.getElementById('scaleSub').textContent= white ? sDesc(s)
+    : s.iv.map(v=>PC[(store.key+v)%12]).join(' ')+'  ·  '+sDesc(s);
+  document.getElementById('langBtn').textContent = store.lang==='en' ? 'JPN' : 'ENG';
+  document.getElementById('btnConnect').textContent=t().connect;
+  const cp=document.getElementById('conn'); cp.textContent=connected?t().conn:t().disc;
   const dots=document.getElementById('dots');
   if(!dots.children.length) SCALES.forEach(()=>dots.appendChild(document.createElement('i')));
   [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===idxOfId(store.scale)));
@@ -189,11 +206,11 @@ function renderPiano(){
   const W=Wpx/whites.length, out=[];
   svg.setAttribute('viewBox',`0 0 ${Wpx} ${H}`);
   whites.forEach((n,i)=>{ const on=set.has(n), rt=on&&(n%12)===rootPc();
-    out.push(`<rect x="${(i*W).toFixed(2)}" y="0" width="${W.toFixed(2)}" height="${H}" fill="${rt?'#3f8f98':on?'#bfe0e3':'#fbfaf6'}" stroke="#c9c4b7" stroke-width="1" data-n="${n}"/>`);
-    if(n%12===0) out.push(`<text x="${(i*W+W/2).toFixed(2)}" y="${H-4}" text-anchor="middle" fill="${rt?'#fff':'#8a8d93'}">C${octOf(n)}</text>`);
+    out.push(`<rect x="${(i*W).toFixed(2)}" y="0" width="${W.toFixed(2)}" height="${H}" fill="${rt?'#2e7e88':on?'#6ab5be':'#f6f4ec'}" stroke="${on?'#3f8f98':'#ddd8cc'}" stroke-width="1" data-n="${n}"/>`);
+    if(n%12===0) out.push(`<text x="${(i*W+W/2).toFixed(2)}" y="${H-4}" text-anchor="middle" fill="${on?'#fff':'#b3b0a6'}">C${octOf(n)}</text>`);
   });
   whites.forEach((n,i)=>{ const b=n+1; if(b>hi||!isBlack(b)) return; const on=set.has(b), rt=on&&(b%12)===rootPc();
-    out.push(`<rect x="${(i*W+W*0.66).toFixed(2)}" y="0" width="${(W*0.68).toFixed(2)}" height="${(H*0.6).toFixed(1)}" fill="${rt?'#3f8f98':on?'#4c8f96':'#2a2c30'}" data-n="${b}"/>`);
+    out.push(`<rect x="${(i*W+W*0.66).toFixed(2)}" y="0" width="${(W*0.68).toFixed(2)}" height="${(H*0.6).toFixed(1)}" fill="${rt?'#1f6a74':on?'#3fa6b2':'#41454c'}" data-n="${b}"/>`);
   });
   svg.innerHTML=out.join('');
   svg.onclick=e=>{ const n=+e.target.getAttribute('data-n'); if(!isNaN(n)&&set.has(n)){ previewNote(n,.45,.25); flash(keyOfRank(pitches.indexOf(n))); } };
@@ -209,7 +226,7 @@ function status(s){ document.getElementById('status').textContent=s; }
 
 // ════════════════════════════════════════════════ 操作 (左右送り / スワイプ / 矢印キー)
 function step(kind,d){
-  if(kind==='key'){ store.key=(store.key+d+12)%12; save(); render(); sendKey(); if(curScale().id!==SCALE_WHITE) arpeggio(); }
+  if(kind==='key'){ store.key=(store.key+d+12)%12; save(); render(); sendKey(); arpeggio(); }
   else { const i=(idxOfId(store.scale)+d+SCALES.length)%SCALES.length; store.scale=SCALES[i].id; save(); render(); sendScale(); arpeggio(); }
 }
 document.querySelectorAll('.sel').forEach(el=>{
@@ -246,21 +263,21 @@ function previewNote(midi,dur,gain,at){
 }
 
 // ════════════════════════════════════════════════ BLE
-async function sendScale(){ if(connected){ await writeMIDI(0xB0,CC_SYNTH_SCALE,store.scale); status(`本体へ: ${curScale().n}`); } else status(curScale().n+'（未接続）'); }
-async function sendKey(){ if(connected){ await writeMIDI(0xB0,CC_KEY,store.key); status(`本体へ: キー ${PC[store.key]}`); } else status('キー '+PC[store.key]+'（未接続）'); }
+async function sendScale(){ if(connected){ await writeMIDI(0xB0,CC_SYNTH_SCALE,store.scale); status(t().toDev(sName(curScale()))); } else status(t().offline(sName(curScale()))); }
+async function sendKey(){ if(connected){ await writeMIDI(0xB0,CC_KEY,store.key); status(t().toDev(t().keyName(PC[store.key]))); } else status(t().offline(t().keyName(PC[store.key]))); }
 document.getElementById('btnConnect').onclick=async()=>{ try{
-  status('デバイス選択…');
+  status(t().picking);
   dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
-  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);status('切断');});
+  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);status(t().cut);});
   gatt=await dev.gatt.connect();
   midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
   await midiCh.startNotifications();
   midiCh.addEventListener('characteristicvaluechanged',onMidi);
-  setConn(true); status('接続。本体の設定を待っています…');
+  setConn(true); status(t().waiting);
   // 本体が正 (電源を切っても残る設定なので、アプリ側の記憶で上書きしない)。State Sync が来なければ古いファーム
-  gotSync=false; setTimeout(()=>{ if(connected&&!gotSync) status('⚠ 本体から音階の設定が届きません（ファーム v4.5.64 以降が必要）'); },4000);
-}catch(e){ status('接続エラー: '+e); } };
-function setConn(c){ connected=c; const el=document.getElementById('conn'); el.textContent=c?'接続済み':'未接続'; el.className='pill '+(c?'ok':'ng'); }
+  gotSync=false; setTimeout(()=>{ if(connected&&!gotSync) status(t().old); },4000);
+}catch(e){ status(t().err+e); } };
+function setConn(c){ connected=c; const el=document.getElementById('conn'); el.textContent=c?t().conn:t().disc; el.className='pill '+(c?'ok':'ng'); }
 async function writeMIDI(s,d1,d2){ if(!midiCh)return; const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
   try{ await midiCh.writeValueWithoutResponse(u); }catch(e){ try{ await midiCh.writeValue(u); }catch(_){ } } }
 function onMidi(e){
@@ -268,11 +285,12 @@ function onMidi(e){
   for(let i=0;i+2<b.length;i++){
     if(b[i]!==0xB0) continue;
     const cc=b[i+1], v=b[i+2];
-    if(cc===CC_SYNTH_SCALE){ store.scale=(v<=7)?v:SCALE_WHITE; save(); render(); status('本体: '+curScale().n); gotSync=true; i+=2; }
-    else if(cc===CC_KEY && v<12){ store.key=v; save(); render(); status('本体: キー '+PC[v]); gotSync=true; i+=2; }
+    if(cc===CC_SYNTH_SCALE){ store.scale=(v<=7)?v:SCALE_WHITE; save(); render(); status(t().fromDev(sName(curScale()))); gotSync=true; i+=2; }
+    else if(cc===CC_KEY && v<12){ store.key=v; save(); render(); status(t().fromDev(t().keyName(PC[v]))); gotSync=true; i+=2; }
   }
 }
-fitGrid(); render(); status('← → で切り替え。タップで試聴');
+document.getElementById('langBtn').onclick=()=>{ store.lang=store.lang==='en'?'ja':'en'; save(); render(); status(t().hint); };
+fitGrid(); render(); status(t().hint);
 </script>
 </body>
 </html>
