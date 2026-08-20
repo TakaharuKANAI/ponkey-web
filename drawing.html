@@ -56,9 +56,12 @@
   #pal .sw::after{content:attr(data-k);position:absolute;bottom:-14px;left:0;right:0;text-align:center;
                   font-size:9px;color:var(--dim)}
 
-  /* キャンバス。下=描画レイヤ(残る) / 上=マス目とフラッシュ(毎フレーム描き直し) */
-  #stage{flex:1;position:relative;min-height:0;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none}
-  #stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* キャンバス。下=描画レイヤ(残る) / 上=マス目とフラッシュ(毎フレーム描き直し)。
+     マスが本体と同じ正方形になるよう、#board はウィンドウに収まる最大の正方形 */
+  #stage{flex:1;position:relative;min-height:0;display:flex;align-items:center;justify-content:center}
+  #board{position:relative;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;
+         border:1px solid var(--line)}
+  #board canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   #paint{background:#0a0b0e}
   #grid{pointer-events:none}
   #empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;
@@ -78,15 +81,17 @@
   <span class="hint">太さ <input type="range" id="size" min="3" max="48" value="14"></span>
   <button id="btnRepeat" class="on" title="同じマスの中でなぞり続けても叩き続ける">連打</button>
   <button id="btnSound" class="on" title="PONKEY の内蔵音源でアンビエントな音を鳴らす (要ファーム v4.5.65+。古いファームだと鍵が余計に動くので OFF に)">音</button>
-  <button id="btnFade" title="描いた線が少しずつ消えていく">消えていく</button>
+  <button id="btnFade" title="描いた線が少しずつ消えていく (本体の LED の絵も一緒に消えていく)">消えていく</button>
   <button id="btnClear">クリア</button>
   <button id="btnSave">PNG</button>
   <span class="hint how">なぞる=叩く+鳴る ・ マス=16鍵 ・ 色=P1〜P7 (キー1〜7) = 音色</span>
 </header>
 <div id="stage">
+<div id="board">
   <canvas id="paint"></canvas>
   <canvas id="grid"></canvas>
   <div id="empty">なぞると PONKEY が動いて光る<br><span style="font-size:10px;letter-spacing:.08em">DRAG TO PLAY</span></div>
+</div>
 </div>
 
 <script>
@@ -119,6 +124,12 @@ function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
 const REPEAT_MS=140;     // 連打の最短間隔 (ソレノイドのパルス幅 ≒ 60000/BPM/4 より少し長め)
 const FLASH_MS=260;      // マスの光り
 
+// ── 本体 LED お絵かきオーバーレイ (要ファーム v4.5.66+): CC_LED_PAINT 0x39, val = key<<3 | level(0-7)。
+//    描いたマスは level 7 で光り続け、「消えていく」ON なら段階的に下げて送る = 本体の絵も一緒に消えていく。
+//    旧ファームは未知 CC を無視するだけなので送っても無害。
+const CC_LED_PAINT=0x39;
+const PAINT_FADE_STEP_MS=420;   // 1 level 下がる間隔 (7→0 で約 3 秒 ≒ アプリ側のフェード感覚)
+
 // ── 音 (ファーム v4.5.65+): BLE の ch16 (0x?F) に送ったものは本体がそのまま内蔵音源 SAM2695 の ch16 へ通す。
 //    本体のシーケンサ・録音・ソレノイド・LED には触らない (叩くのは従来どおり ch1 の NoteOn を別送)。
 //    音色・リバーブ・リリースは全部こちらで決める。マス → 音高はメジャーペンタ (C3 起点、左下=低音・右上=高音)。
@@ -131,6 +142,7 @@ const RELEASE_MS=650;    // マスを離れてから NoteOff するまで (隣�
 let midiCh=null, device=null;
 let part=5;              // 現在の色 (index into PARTS)。既定 LEAD=黄
 let brush=14, repeat=true, fade=false, sound=true;
+const paintLevel=new Uint8Array(16);   // cell → 本体 LED の明るさ 0-7 (こちらが正、本体へ差分送信)
 const holdCount=new Uint8Array(16), releaseTimer=new Array(16).fill(null);   // cell → 押えているポインタ数 / 離す予約
 const pointers=new Map();          // pointerId → {x,y,cell,lastFire}
 const flash=new Float64Array(16);  // cell → 光り始めた時刻
@@ -153,6 +165,7 @@ document.getElementById('btnConnect').onclick=async()=>{
     ch.addEventListener('characteristicvaluechanged',onMidi);
     device=dev; midiCh=ch; setConn(true);
     writeMIDI(0xB0,PARTS[part].cc,127);      // 本体の色を今のパレットに揃える
+    for(let k=0;k<16;k++)if(paintLevel[k])writeMIDI(0xB0,CC_LED_PAINT,(k<<3)|paintLevel[k]);   // 再接続: いまの絵を送り直す
     setupSound();
   }catch(e){console.warn(e);}
 };
@@ -162,7 +175,7 @@ function onMidi(ev){
     const st=b[i];
     if((st&0xF0)===0x90&&b[i+1]<0x80&&b[i+2]>0){       // 本体の鍵が押された → そのマスに今の色で点を打つ
       const k=lookupKey(st&0x0F,b[i+1]);
-      if(k!=null){splash(k);flash[k]=performance.now();}
+      if(k!=null){splash(k);flash[k]=performance.now();setPaint(k,7);}
       i+=2;
     }
   }
@@ -173,7 +186,16 @@ function fire(k){
   if(!(k>=0&&k<=15))return;
   flash[k]=performance.now();
   writeMIDI(0x90,k,100);
+  setPaint(k,7);                       // 描いたマスは本体 LED も光り続ける
 }
+function setPaint(k,lv){
+  if(paintLevel[k]===lv)return;
+  paintLevel[k]=lv;
+  writeMIDI(0xB0,CC_LED_PAINT,(k<<3)|lv);
+}
+function clearPaint(){for(let k=0;k<16;k++)setPaint(k,0);}
+// 「消えていく」ON の間、本体の絵も段階的に暗くする (アプリ側キャンバスのフェードと並走)
+setInterval(()=>{if(!fade)return;for(let k=0;k<16;k++)if(paintLevel[k])setPaint(k,paintLevel[k]-1);},PAINT_FADE_STEP_MS);
 function selectPart(i){
   part=(i+7)%7;
   document.querySelectorAll('#pal .sw').forEach((e,j)=>e.classList.toggle('on',j===part));
@@ -210,14 +232,17 @@ function allSoundOff(){
 
 // ============================================================ キャンバス
 const stage=document.getElementById('stage');
+const board=document.getElementById('board');
 const paint=document.getElementById('paint'), pctx=paint.getContext('2d');
 const grid=document.getElementById('grid'),  gctx=grid.getContext('2d');
 let W=0,H=0,DPR=1;
 function resize(){
   const r=stage.getBoundingClientRect(); DPR=Math.min(2,devicePixelRatio||1);
-  const w=Math.round(r.width), h=Math.round(r.height);
-  if(w<8||h<8)return;                 // 非表示タブ等でサイズ 0 のときは触らない (描いた線を潰さない)
+  const side=Math.round(Math.min(r.width,r.height))-8;   // 収まる最大の正方形
+  if(side<8)return;                   // 非表示タブ等でサイズ 0 のときは触らない (描いた線を潰さない)
+  const w=side, h=side;
   if(w===W&&h===H)return;
+  board.style.width=w+'px'; board.style.height=h+'px';
   // 描いた線をリサイズで失わないよう退避 → 貼り直し
   let keep=null; if(W&&H){keep=document.createElement('canvas');keep.width=paint.width;keep.height=paint.height;keep.getContext('2d').drawImage(paint,0,0);}
   W=w;H=h;
@@ -276,15 +301,15 @@ function frame(now){
 requestAnimationFrame(frame);
 
 // ── 入力 (マウス / タッチ / ペン、複数同時OK)
-function pos(e){const r=stage.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
-stage.addEventListener('pointerdown',e=>{
+function pos(e){const r=board.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+board.addEventListener('pointerdown',e=>{
   if(e.button!==undefined&&e.button!==0)return;
-  try{stage.setPointerCapture(e.pointerId);}catch(_){}
+  try{board.setPointerCapture(e.pointerId);}catch(_){}
   const {x,y}=pos(e); const k=cellAt(x,y);
   pointers.set(e.pointerId,{x,y,cell:k,lastFire:performance.now(),t:performance.now()});
   dot(x,y); fire(k); noteOnCell(k,70);
 });
-stage.addEventListener('pointermove',e=>{
+board.addEventListener('pointermove',e=>{
   const s=pointers.get(e.pointerId); if(!s)return;
   const {x,y}=pos(e); const now=performance.now();
   stroke(s.x,s.y,x,y);
@@ -298,7 +323,7 @@ stage.addEventListener('pointermove',e=>{
   s.x=x; s.y=y; s.t=now;
 });
 const up=e=>{const s=pointers.get(e.pointerId);if(!s)return;releaseCell(s.cell,300);pointers.delete(e.pointerId);};
-stage.addEventListener('pointerup',up); stage.addEventListener('pointercancel',up); stage.addEventListener('pointerleave',up);
+board.addEventListener('pointerup',up); board.addEventListener('pointercancel',up); board.addEventListener('pointerleave',up);
 
 // ── UI
 const pal=document.getElementById('pal');
@@ -309,7 +334,7 @@ document.getElementById('size').oninput=e=>brush=+e.target.value;
 document.getElementById('btnRepeat').onclick=e=>{repeat=!repeat;e.target.classList.toggle('on',repeat);};
 document.getElementById('btnFade').onclick=e=>{fade=!fade;e.target.classList.toggle('on',fade);};
 document.getElementById('btnSound').onclick=e=>{sound=!sound;e.target.classList.toggle('on',sound);if(sound)setupSound();else allSoundOff();};
-function clearAll(){pctx.clearRect(0,0,W,H);drawn=false;document.getElementById('empty').classList.remove('hide');}
+function clearAll(){pctx.clearRect(0,0,W,H);drawn=false;document.getElementById('empty').classList.remove('hide');clearPaint();}
 document.getElementById('btnClear').onclick=clearAll;
 document.getElementById('btnSave').onclick=()=>{
   const c=document.createElement('canvas');c.width=paint.width;c.height=paint.height;const x=c.getContext('2d');
