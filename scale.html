@@ -126,6 +126,7 @@ const WHITE=[0,2,4,5,7,9,11];
 // 表示順: 白鍵 → ファーム SCALE_DEFS 0-7。id はファームに送る値
 const SCALES=[
   {id:SCALE_WHITE, n:'白鍵',           en:'White Keys',       d:'いつもの PONKEY。C3 から白鍵 16 本',   de:'The default PONKEY. 16 white keys from C3'},
+  {id:8, n:'半音階',         en:'Chromatic',        iv:[0,1,2,3,4,5,6,7,8,9,10,11], d:'白も黒も全部順番に。16半音ぶん', de:'Every note in order. 16 semitones'},
   {id:0, n:'メジャーペンタ', en:'Major Pentatonic', iv:[0,2,4,7,9],      d:'素朴であかるい。外れる音がない', de:'Simple and bright. No wrong notes'},
   {id:1, n:'マイナーペンタ', en:'Minor Pentatonic', iv:[0,3,5,7,10],     d:'かげりのある、外さない',         de:'Moody, still no wrong notes'},
   {id:2, n:'琉球',           en:'Ryukyu',           iv:[0,4,5,7,11],     d:'南の島。ゆったり',               de:'Okinawan island air. Relaxed'},
@@ -176,6 +177,7 @@ function render(){
   document.getElementById('keySel').classList.toggle('dim',white);
   document.getElementById('scaleBig').textContent=sName(s);
   document.getElementById('scaleSub').textContent= white ? sDesc(s)
+    : s.iv.length===12 ? `${noteName(pitchOfRank(0))}${octOf(pitchOfRank(0))} – ${noteName(pitchOfRank(15))}${octOf(pitchOfRank(15))}  ·  ${sDesc(s)}`
     : s.iv.map(v=>PC[(store.key+v)%12]).join(' ')+'  ·  '+sDesc(s);
   document.getElementById('langBtn').textContent = store.lang==='en' ? 'JPN' : 'ENG';
   document.getElementById('btnConnect').textContent=t().connect;
@@ -285,7 +287,7 @@ function onMidi(e){
   for(let i=0;i+2<b.length;i++){
     if(b[i]!==0xB0) continue;
     const cc=b[i+1], v=b[i+2];
-    if(cc===CC_SYNTH_SCALE){ store.scale=(v<=7)?v:SCALE_WHITE; save(); render(); status(t().fromDev(sName(curScale()))); gotSync=true; i+=2; }
+    if(cc===CC_SYNTH_SCALE){ store.scale=(v<=8)?v:SCALE_WHITE; save(); render(); status(t().fromDev(sName(curScale()))); gotSync=true; i+=2; }
     else if(cc===CC_KEY && v<12){ store.key=v; save(); render(); status(t().fromDev(t().keyName(PC[v]))); gotSync=true; i+=2; }
   }
 }
