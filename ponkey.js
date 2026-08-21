@@ -256,6 +256,11 @@ class Ponkey {
 
   // ---- 高レベル API -------------------------------------------------------
   subscribeKeys() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [DBG_CAT.KEY]); }   // 聞き耳 (Phase 2-④)
+  // ソレノイド発火イベント (cat=0x03 FIRE/DEACTIVATE)。本体の物理の動きを画面に映すアプリ用 (lesson 等)
+  subscribeSolenoid() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [0x03]); }
+  // 任意カテゴリの購読 ON/OFF (DBG_CAT の値を渡す)
+  subscribeCat(cat)   { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [cat & 0xff]); }
+  unsubscribeCat(cat) { return this._dbgCmd(DBG_CMD.LOG_DISABLE_CAT, [cat & 0xff]); }
 
   // 光 (Phase 2-①): frame = 16要素の [r,g,b] 配列
   ledFrame(frame) {
