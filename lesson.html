@@ -1171,6 +1171,26 @@ function devKey(t,i){
   paintLiveAll();
 }
 
+/* v4.5.72+: 本体のモード UI 通知 (DBG_EV_MODE_UI)。これが来る本体では推定をやめ、この値を正とする */
+function onModeUi(p){
+  D.fromDev=true;
+  const sub=p[0],mode=p[1],prev=p[2],fl=p[3],song=p[4];
+  D.sub=sub; D.prev=prev<7?prev:0;
+  D.fn=mode===7; D.sticky=false;
+  if(mode<7) D.sel=mode;
+  D.fx=!!(fl&1); D.interior=!!(fl&2); D.test=!!(fl&4); D.quiet=!!(fl&8);
+  D.song=song===0xFF?D.song:song;
+  // 見学済みマーク: 本体の判定で付ける (1秒コンボや600ms長押しの自前判定より確実)
+  if(D.fn) markSeen('fn');
+  if(D.fx) markSeen('fx');
+  if(D.interior) markSeen('interior');
+  if(D.quiet) markSeen('quiet');
+  const SEEN={[SUB.SLOT]:'slot',[SUB.BPM]:'bpm',[SUB.LOOP]:'loop',[SUB.STEPPER]:'stepper',
+    [SUB.MASTER]:'master',[SUB.PVOL]:'pvol',[SUB.VOICE]:'voice',
+    [SUB.SCALE_SETUP]:'scaleSetup',[SUB.PATTERN]:'pattern'};
+  if(SEEN[sub]) markSeen(SEEN[sub]);
+  paintLiveAll();
+}
 /* 本体からの答え合わせ (SONG_CMD_DUMP_SLOT 0xFF = 現在スロット → META + SLOT_DUMP) */
 let metaT=0;
 function queueMeta(){ clearTimeout(metaT); metaT=setTimeout(requestMeta,250); }
@@ -1187,6 +1207,16 @@ function onMeta(d){
   D.voice=[d[10],d[11],d[12],d[13],d[14],d[15],d[16]].map(v=>v&15);
   D.slotHas=d[17]|(d[18]<<8);
   if(d.length>=20) D.scale10=d[19]===0x7F?0:(d[19]>=8?9:d[19]+1);   // 統一10段 (v4.5.67)
+  if(d.length>=36){   // v4.5.72 拡張: 本体しか知らなかった値
+    const lvl=v=>{let b=0;VOL_VALUES.forEach((x,l)=>{if(Math.abs(x-v)<Math.abs(VOL_VALUES[b]-v))b=l;});return b;};
+    for(let p=0;p<7;p++) D.pvol[p]=lvl(d[20+p]);
+    D.master=lvl(d[27]);
+    D.fxLv=[d[28],d[29],d[30],d[31]]; D.fxSel=d[32]&3; D.fxKnown=true;
+    D.click=!!d[33];
+    const fl=d[34];
+    D.fx=!!(fl&1); D.interior=!!(fl&2); D.test=!!(fl&4); D.quiet=!!(fl&8);
+    D.song=d[35]===0xFF?D.song:d[35];
+  }
   paintLiveAll();
 }
 const dumpAsm={};
@@ -1358,8 +1388,8 @@ function paintHud(){
     H('スケール',fmt(D.scale10===null?null:SCALE10[D.scale10],!known))+
     W('グルーブ',fmt(D.swing===null?null:'スイング '+SWING_NAMES[D.swing]+' · アクセント '+ACCENT_NAMES[D.accent??0],!known))+
     W('音色 '+PARTS[tp].n,fmt(D.voice[tp]===null?null:(D.voice[tp]+1)+' '+VOICE_NAMES[tp][D.voice[tp]],!known))+
-    W('音量',PARTS[tp].n+' '+fmt(D.pvol[tp]===null?null:'L'+D.pvol[tp],true)+' · マスター '+fmt(D.master===null?null:'L'+D.master,true))+
-    W('エフェクト',fmt(FX_NAMES.map((n,i)=>n+' '+D.fxLv[i]).join(' · '),true))+
+    W('音量',PARTS[tp].n+' '+fmt(D.pvol[tp]===null?null:'L'+D.pvol[tp],!uiKnown())+' · マスター '+fmt(D.master===null?null:'L'+D.master,!uiKnown()))+
+    W('エフェクト',fmt(FX_NAMES.map((n,i)=>n+' '+D.fxLv[i]).join(' · '),!uiKnown()))+
     W('SCALE',['P1','P2','P3'].map((n,i)=>n+' '+(D.scaleEn[i]?'♪メロディ':'ドラム')).join(' · '))+
     (other?W('そのほか',other):'');
 }
@@ -1381,7 +1411,8 @@ const UUID_DBG='504f4e4b-4559-4442-5047-445342000001';
 const UUID_LOG='504f4e4b-4559-4442-5047-445442000002';
 const UUID_CMD='504f4e4b-4559-4442-5047-445443000003';
 const CC_RESET=0x42;
-const FEAT_SONG_DUMP=1<<5, FEAT2_LED_RGB=1<<0, FEAT2_CLAIM=1<<5;
+const FEAT_SONG_DUMP=1<<5, FEAT2_LED_RGB=1<<0, FEAT2_CLAIM=1<<5, FEAT2_UI=1<<6;
+const uiKnown=()=>S.connected&&!!(D.feat2&FEAT2_UI);
 /* SONG_MAGIC 体系 (デバッグ char): [0x5A][cmd][devId][payload...] */
 async function sendSong(cmd,payload){
   if(!S.cmdChar) return;
@@ -1423,6 +1454,7 @@ function onPacket(ev){
   const cat=d[8],id=d[9],p=d.subarray(11,11+d[10]);
   if(cat===0x03){ if(id===0x01) popCyl(p[0]); else if(id===0x02) dropCyl(p[0]); return; }
   if(cat===0x00){ if(id===0x03&&p.length>=3){ D.proto=p[0]; D.feat=p[1]; D.feat2=p[2]; } return; }
+  if(cat===0x01){ if(id===0x10&&p.length>=5) onModeUi(p); return; }
   if(cat===0x09){ if(id===0x0A) onMeta(p); else if(id===0x09) onSlotDump(p); return; }
   if(cat!==0x02||S.lesson===null) return;
   D.fromDev=true;
@@ -1489,14 +1521,14 @@ function onMidiNotify(ev){
     else if(cc===0x41) D.bpm=v+60;
     else if(cc===0x30) D.voice[v>>4]=v&15;
     else if(cc===0x31) queueMeta();                              // 形は SLOT_DUMP から
-    else if(cc===0x32){ const p=(v>>4)-4; if(p>=0&&p<3) D.oct[p]=(v&15)-4; }
+    else if(cc===0x32){ const p=(v>>4)-4; if(p>=0&&p<3){ D.oct[p]=(v&15)-4; markSeen('oct'); } }
     else if(cc===0x33){ const p=v>>4,vol=(v&15)<<3; let best=0;
       VOL_VALUES.forEach((x,l)=>{ if(Math.abs(x-vol)<Math.abs(VOL_VALUES[best]-vol)) best=l; }); if(p<7) D.pvol[p]=best; }
     else if(cc===0x20) D.slot=v;
-    else if(cc===0x35) D.swing=v&7;
-    else if(cc===0x36) D.accent=v&7;
-    else if(cc===0x38) D.root=v%12;
-    else if(cc===0x37) D.scale10=v===0x7F?0:(v>=8?9:v+1);
+    else if(cc===0x35){ D.swing=v&7; markSeen('groove'); }
+    else if(cc===0x36){ D.accent=v&7; markSeen('groove'); }
+    else if(cc===0x38){ D.root=v%12; markSeen('key'); }
+    else if(cc===0x37){ D.scale10=v===0x7F?0:(v>=8?9:v+1); markSeen('key'); }
     else if(cc===0x3A) D.proto=v;
     else if(cc===0x3B) D.feat=v;
     else if(cc===0x3C) D.feat2=v;

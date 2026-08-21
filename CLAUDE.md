@@ -10,7 +10,8 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   レッスン3「しくみ」は Fn サブモード / エフェクト / インテリアの解説で、**本体の状態を推定して映す**
   （本体はモードを報告しないので、キーイベントをファームと同じ規則で追う `D` モデル。
   BPM/スロット/キー/スケール/グルーブ/音色/オクターブ/ループ矩形は `SONG_CMD_DUMP_SLOT 0xFF` の
-  META+SLOT_DUMP と BLE MIDI の CC 通知で答え合わせ。音量・エフェクト・静音・インテリアは推定のまま = HUD に `?`）。
+  META+SLOT_DUMP と BLE MIDI の CC 通知で答え合わせ。v4.5.72+ なら `DBG_EV_MODE_UI` と拡張 META が届くので
+  推定をやめて本体の申告を正とし、HUD の `?` も消える。旧FWのみ推定フォールバック）。
   Fn×Pn の割当や音色名はファーム `PONKEY_PT2_v4_5_34.ino` / `PONKEY_V2_DATA_STRUCTURES.h` から写しているので、
   ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる（現在 v4.5.71 のステッパページ準拠）。
   v4.5.69+ の窓口を使用: Push!! ロック中はグリッドを `SONG_CMD_CLAIM`、お手本キーは `SONG_CMD_LED_FRAME` で白点滅、
