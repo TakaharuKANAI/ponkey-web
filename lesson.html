@@ -163,6 +163,8 @@ body.l3 .hud{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;row-gap:
 .hud .mode span:last-child{color:var(--accent-ink);font-weight:600}
 .pv{font-size:10.5px;color:var(--ink-3);text-align:center;margin-top:2px}
 .pv b{color:var(--accent-ink);font-weight:600}
+.socket.focus{stroke:var(--accent);stroke-width:2.5;animation:pp 1.15s var(--ease) infinite}
+.cyl.focus .cyl-cap{stroke:var(--accent);stroke-width:2.5;animation:pp 1.15s var(--ease) infinite}
 .cyl.dim{opacity:.5}
 .cyl.dim .tnum,.cyl.dim .tsub{fill:var(--ink-2)}
 /* レッスン3: 役割名は読ませたい文字なので L1/L2 のカナ添えより濃く・太く */
@@ -389,20 +391,21 @@ const L3=[
   { no:'ステップ 5', key:'stepper', mode:SUB.STEPPER, title:'Fn×P4 ステッパページ',
     one:'Fn を押しながら P4。16 キーが 8 組の「−／＋」ペアになります。',
     todo:'Fn×P4 で、どれかのペアを押そう', doneTxt:'ステッパを触りました',
+    focus:[0,1,2,3,4,5,6,7,8,9,10,11,12,13],
     more:'ひとつの画面で<b>キー・スケール・グルーブ・オクターブ</b>を全部調整します。左のキーが「下げる／前へ」、右のキーが「上げる／次へ」。押すと 1 段動いて音で確かめられます。<b>どれかを 600ms 長押しすると、そのペアだけ最初の値に戻ります</b>。本体の LED は「いじってあるほど明るい」——全部標準のときはページ全体が薄暗く点きます。',
     },
   { no:'ステップ 6', key:'key', mode:SUB.STEPPER, title:'キーとスケール（G1〜G4）',
-    one:'G2 でキーを♯へ、G4 でスケールを次へ進めてみましょう。',
+    one:'G2 でキーを♯へ、G4 でスケールを次へ進めてみましょう。', focus:[0,1,2,3],
     todo:'G1〜G4 を押してみよう', doneTxt:'キーかスケールを変えました',
     more:'G1／G2 が<b>曲のキー</b>（C→C#→…→B の 12 循環）。G3／G4 が<b>スケール 10 段階</b>——0=白鍵（ふだんの PONKEY）→ 1〜8=メジャーペンタ／マイナーペンタ／琉球／都節／メジャー／ドリアン／ブルース／ホールトーン → 9=半音階。<b>P1〜P3 の SCALE モードと P5〜P7 の 16 キー、両方に同時にかかります</b>。押すと下から 8 音駆け上がって音階を聴かせてくれます。',
     },
   { no:'ステップ 7', key:'groove', mode:SUB.STEPPER, title:'グルーブ（G5〜G8）',
-    one:'G6 でスイングを 1 段上げて、再生の跳ね方を聴いてみましょう。',
+    one:'G6 でスイングを 1 段上げて、再生の跳ね方を聴いてみましょう。', focus:[4,5,6,7],
     todo:'G5〜G8 を押してみよう', doneTxt:'グルーブを変えました',
     more:'G5／G6 が<b>スイング量</b>（OFF→53〜75%。8 分の裏だけ遅らせて跳ねさせる）。G7／G8 が<b>アクセント型</b>（OFF／拍頭／裏拍押し／バックビート／ゴースト16／うねり／ゆらぎ）。どちらも<b>パターンは書き換えず、再生のときにかけるだけ</b>。OFF に戻せば元どおりです。LED は強くかけるほど明るく色濃くなります。',
     },
   { no:'ステップ 8', key:'oct', mode:SUB.STEPPER, title:'オクターブ（G9〜G14）',
-    one:'G9／G10 で LEAD の高さを変えてみましょう。',
+    one:'G9／G10 で LEAD の高さを変えてみましょう。', focus:[8,9,10,11,12,13],
     todo:'G9〜G14 を押してみよう', doneTxt:'高さを変えました',
     more:'パートごとの±ペアです。G9／G10=<b>LEAD</b>、G11／G12=<b>PAD</b>、いちばん下の G13／G14=<b>BASS</b>（下の段が低音の担当、という並び）。名前はオクターブですが<b>単位は半音</b>で、−4〜＋11。<b>スロットごとに別々に保存</b>されます。G15／G16 は空きです。',
     },
@@ -411,7 +414,7 @@ const L3=[
     todo:'Fn×P5 で音量を選ぼう', doneTxt:'全体の音量を変えました',
     more:'左下 G13（0＝ミュート）から右上 G4（9＝最大）へ<b>階段状の 10 段</b>。階段の形がそのまま音量ゲージです。使うのはその 10 個だけで、ほかのキーは反応しません。本体はこの値をアプリに送らないので、画面の値は推定（?）です。' },
   { no:'ステップ 10', key:'pvol', mode:SUB.PVOL, title:'Fn×P6 パートの音量',
-    one:'Fn を押しながら P6。階段で、選んでいるパートの音量。',
+    one:'Fn を押しながら P6。階段で、選んでいるパートの音量。', focus:[0],
     todo:'Fn×P6 で音量を選ぼう', doneTxt:'パートの音量を変えました',
     more:'階段は P5 と同じ。<b>対象は Fn を押す直前のパート</b>（ドラムも可）。ドラムは叩く強さ、シンセは CC7 で変わります。<b>G1 を 600ms 長押しすると静音モード</b>——ソレノイドの通電だけ止めます（音・LED・録音はそのまま）。' },
   { no:'ステップ 11', key:'voice', mode:SUB.VOICE, title:'Fn×P7 音色',
@@ -1330,75 +1333,124 @@ function roles(mode){
   }
   return {g,pk};
 }
-/* 実機 LED の再現。ファームの updateLEDs_FnIndicator / voicePicker / ステッパ配色を
-   ライトテーマ向けに写像する (LED が明るい = キャップの色が濃い)。
-   色相はファームと同じ値、明度だけ紙の上で読めるように反転している。 */
+/* 実機 LED の再現 — ファーム updateLEDs_FnIndicator / updateLEDs_FxMode / drawVolumeGauge の忠実移植。
+   本体の RGB (黒地に光る) をそのまま計算し、ledCss() で紙の上の色へ変換する:
+   色相・彩度は保ち、「明るさ」だけを「濃さ」に読み替える (明るい LED = 濃い色)。消灯 = 白いキー。
+   点滅は静止画で近似 (点滅の明るい側を出す)。 */
 const PART_HUE=[11,108,220,300,176,58,265];   // KICK/SNARE/HAT/TOM/BASS/LEAD/PAD (v4.5.62+)
-const tint=(h,sat,l)=>`hsl(${(h+360)%360} ${sat}% ${l}%)`;
+const ADV=[255,48,0];                          // ADVERTISE_COLOR 0xFF3000 (設定モードのオレンジ)
+function hsv255(h,s,v){                        // ファーム hsvToRgb と同じ引数系 (h0-359, s/v 0-255)
+  const S=s/255,V=v/255,C=V*S,X=C*(1-Math.abs((h/60)%2-1)),m=V-C;
+  let r,g,b;
+  if(h<60)[r,g,b]=[C,X,0];else if(h<120)[r,g,b]=[X,C,0];else if(h<180)[r,g,b]=[0,C,X];
+  else if(h<240)[r,g,b]=[0,X,C];else if(h<300)[r,g,b]=[X,0,C];else [r,g,b]=[C,0,X];
+  return [(r+m)*255,(g+m)*255,(b+m)*255];
+}
+function ledCss(r,g,b){
+  const mx=Math.max(r,g,b);
+  if(mx<18) return null;                       // ほぼ消灯 → 白いキーのまま
+  const mn=Math.min(r,g,b),d=mx-mn;
+  let h=0;
+  if(d){ if(mx===r)h=((g-b)/d)%6; else if(mx===g)h=(b-r)/d+2; else h=(r-g)/d+4; h*=60; }
+  const sat=d===0?0:Math.round(d/mx*100);
+  const l=Math.round(93-(mx/255)*57);          // 輝度 → 濃さ (255→36%, 60→80%)
+  return {c:`hsl(${Math.round((h+360)%360)} ${sat}% ${l}%)`,dark:l<58};
+}
 function applyLeds(mode,g){
   const tp=target();
-  const put=(i,c,dark)=>{ if(g[i]){ g[i].led=c; if(dark) g[i].ink='#fff'; } };
+  const put=(i,r,gr,b)=>{const c=ledCss(r,gr,b); if(g[i]&&c){g[i].led=c.c; if(c.dark)g[i].ink='#fff';}};
   switch(mode){
-    case SUB.STEPPER:{
-      // ペア色相はファームどおり: キー=白 / スケール=緑145 / スイング=琥珀40 / アクセント=ピンク330。
-      // oct 3ペアはパート色。輝度=デフォルトからの逸脱度 (全部標準ならページ全体が薄い)
-      const dev=[D.root?1:0, D.scale10?1:0, (D.swing??0)/7, (D.accent??0)/7,
-                 Math.abs(D.oct[1]??0)/11, Math.abs(D.oct[2]??0)/11, Math.abs(D.oct[0]??0)/11, 0];
-      const hue=[null,145,40,330, PART_HUE[5],PART_HUE[6],PART_HUE[4], null];
-      for(let pr=0;pr<7;pr++){
-        const t=Math.min(1,dev[pr]);
-        const c=hue[pr]===null ? tint(0,0,88-t*55) : tint(hue[pr], pr>=4?60:45, 88-t*42);
-        put(pr*2,c,t>.6); put(pr*2+1,c,t>.6);
+    case SUB.BPM:{
+      // 全キーが現在の BPM で橙 30% 点滅、端 (60/210) はフル橙、選択中 = クリックON なら白 / OFF なら赤
+      const cur=D.bpm===null?6:BPM_PRESETS.indexOf(D.bpm);
+      for(let k=0;k<16;k++){
+        if(k===cur) D.click===false?put(k,255,0,0):put(k,255,255,255);
+        else if(k===0||k===15) put(k,...ADV);
+        else put(k,ADV[0]*.3,ADV[1]*.3,ADV[2]*.3);
       }
       break; }
-    case SUB.BPM:
-      for(let i=0;i<16;i++) put(i, g[i].on?tint(0,0,30):tint(0,0,92), g[i].on);
-      break;
+    case SUB.LOOP:{
+      // 右下角 = 白 / 矩形の外周 = 橙 / 内側と範囲外 = 消灯
+      const rr=D.rect[0]||4, rc=D.rect[1]||4, tg=(rr-1)*4+(rc-1);
+      for(let k=0;k<16;k++){
+        const row=k>>2,col=k&3;
+        if(row<rr&&col<rc){
+          if(k===tg) put(k,255,255,255);
+          else if(row===0||row===rr-1||col===0||col===rc-1) put(k,...ADV);
+        }
+      }
+      break; }
+    case SUB.STEPPER:{
+      // 色相=パラメータ / 彩度=スコープ / 輝度=デフォルトからの逸脱度 (DIM36..BRIGHT210)
+      const DIM=36,BRIGHT=210,ramp=t=>DIM+(BRIGHT-DIM)*t;
+      const w=(D.root??0)?BRIGHT:DIM; put(0,w,w,w); put(1,w,w,w);
+      let c=hsv255(145,120,(D.scale10??0)?BRIGHT:DIM); put(2,...c); put(3,...c);
+      const sw=D.swing??0;  c=hsv255(40,100+14*sw,ramp(sw/7));  put(4,...c); put(5,...c);
+      const ac=D.accent??0; c=hsv255(330,100+14*ac,ramp(ac/7)); put(6,...c); put(7,...c);
+      [[4,1],[5,2],[6,0]].forEach(([pr,sy])=>{                 // G9/10=LEAD G11/12=PAD G13/14=BASS
+        const oct=D.oct[sy]??0, hue=PART_HUE[4+sy];
+        put(pr*2,  ...hsv255(hue,255,oct<0?ramp(-oct/4):DIM));
+        put(pr*2+1,...hsv255(hue,255,oct>0?ramp(oct/11):DIM));
+      });
+      break; }
     case SUB.SLOT:
       for(let i=0;i<16;i++){
-        if(g[i].on) put(i,tint(0,0,28),true);
-        else if((D.slotHas>>i)&1) put(i,tint(0,0,86),false);
+        if(g[i].on) put(i,220,220,220);
+        else if((D.slotHas>>i)&1) put(i,45,45,45);
       }
       break;
     case SUB.VOICE:{
-      // 音色ピッカー: 色相 ±21°(列) × 彩度4段(行)。ファーム computeVoicePickerColor と同じ振り
-      const OFF=[-21,-7,7,21], SAT=[85,65,48,32];
+      // ピッカー色: 色相 ±21°(列)・彩度4段(行)。非選択は 70% (選択中は本来白点滅 → フル色で近似)
+      const OFF=[-21,-7,7,21],SAT=[255,200,145,90];
       for(let i=0;i<16;i++){
-        const row=i>>2,col=i&3;
-        put(i, tint(PART_HUE[tp]+OFF[col], SAT[row], g[i].on?42:78), g[i].on);
+        let c=hsv255((PART_HUE[tp]+OFF[i&3]+360)%360,SAT[i>>2],255);
+        if(!g[i].on) c=c.map(v=>v*178/255);
+        put(i,...c);
       }
       break; }
     case SUB.PVOL: case SUB.MASTER:{
+      // 階段ゲージ: 通過済み=薄白60 / 現在=白220。
+      // 識別インジケータ: パート音量は G1 が橙 (静音中は青)、マスターは G1,G2,G5,G6 が橙
       const curL=mode===SUB.MASTER?D.master:D.pvol[tp];
       for(let i=0;i<16;i++){
         const l=VOL_LEVEL_OF_KEY[i]; if(l<0) continue;
-        // 階段ゲージ: 現在レベル以下が点灯 (低いほど薄い)
-        const lit=curL!==null&&l<=curL;
-        put(i, lit?tint(PART_HUE[tp],62,80-l*4):tint(0,0,93), lit&&l===curL);
-        if(g[i].on) put(i, tint(PART_HUE[tp],68,44), true);
+        if(curL!==null&&l<curL) put(i,60,60,60);
+        else if(curL!==null&&l===curL) put(i,220,220,220);
       }
+      if(mode===SUB.PVOL){ D.quiet?put(0,0,80,255):put(0,...ADV); }
+      else [0,1,4,5].forEach(k=>put(k,...ADV));
       break; }
     case SUB.SCALE_SETUP:{
-      const pp=Math.min(D.prev,2);
-      put(0, D.scaleEn[pp]?tint(PART_HUE[pp],62,44):tint(0,0,88), D.scaleEn[pp]);
-      put(3, tint(0,0,80), false);
+      const pp=Math.min(D.prev,2), on=D.scaleEn[pp];
+      on?put(0,0,200,0):put(0,200,40,0);                       // G1: SCALE=緑 / DRUM=赤
+      const pbr=on?200:50; put(3,pbr,pbr*100/255,0);           // G4: パターン入口 (橙)
       break; }
     case SUB.PATTERN:{
+      // 上半分=動き(白系) / 下半分=リフ(橙系)。選んだものはフル輝度
       const pp=Math.min(D.prev,2);
-      for(let i=0;i<16;i++) put(i, g[i].on?tint(PART_HUE[pp],62,44):tint(PART_HUE[pp],40,i<8?88:84), g[i].on);
+      for(let k=0;k<16;k++){
+        const br=g[k].on?255:46;
+        k<8?put(k,br,br,br):put(k,br,br*100/255,0);
+      }
       break; }
     case 'fx':{
-      // G1-G4=効果 (選択中が濃い)、G5-G16=深さ (現在値まで点灯)
-      const FXH=[200,280,50,10];
-      for(let i=0;i<4;i++) put(i, tint(FXH[i], 55, D.fxSel===i?45:82), D.fxSel===i);
-      for(let i=4;i<16;i++){
-        const lit=(i-3)<=(D.fxLv[D.fxSel]??0);
-        put(i, lit?tint(FXH[D.fxSel],55,82-(i-4)*3):tint(0,0,93), false);
-        if(g[i].on) put(i, tint(FXH[D.fxSel],60,45), true);
+      // 盤面全体が選択中エフェクトの色に染まる: 青/紫/琥珀/緑。
+      // G1-G4 = 選択中フル・他は薄く。深さは現在値=フル・通過=35%。ホーム位置(リバ8/コー2)=薄白
+      const FXC=[[40,120,255],[170,60,255],[255,160,20],[40,220,120]];
+      const c=FXC[D.fxSel&3], lv=D.fxLv[D.fxSel]??0, home=[8,2,0,0][D.fxSel&3];
+      for(let k=0;k<4;k++){const sc=k===D.fxSel?255:60; put(k,c[0]*sc/255,c[1]*sc/255,c[2]*sc/255);}
+      for(let k=4;k<16;k++){
+        const st=k-3; let sc=0;
+        if(st<lv)sc=90; else if(st===lv)sc=255;
+        if(sc)put(k,c[0]*sc/255,c[1]*sc/255,c[2]*sc/255);
+        else if(home&&st===home)put(k,60,60,60);
       }
       break; }
     case 'interior': case 'interiorFn':
-      for(let i=0;i<16;i++) put(i, g[i].on?tint(0,0,28):tint((i*97)%360,30,88), g[i].on);
+      for(let i=0;i<16;i++){
+        if(g[i].on) put(i,220,220,220);
+        else put(i,...hsv255((i*97)%360,90,70));               // 曲一覧 (近似: 実機は曲別テーマ色)
+      }
       break;
   }
 }
@@ -1416,7 +1468,12 @@ function setCylLed(i,led,ink){
   g.querySelectorAll('.cyl-cap,.cyl-side,.cyl-base').forEach(el=>{ el.style.fill=led||''; });
   nums[i].style.fill=ink||''; subs[i].style.fill=ink||'';
 }
-function clearCylLeds(){ for(let i=0;i<16;i++) setCylLed(i,null,null); }
+function clearCylLeds(){
+  for(let i=0;i<16;i++){
+    setCylLed(i,null,null);
+    cyls[i].classList.remove('focus'); sockets[i].classList.remove('focus');
+  }
+}
 
 function paintLiveParts(){
   const v=liveView(),held=D.held;
@@ -1439,11 +1496,16 @@ function paintLiveParts(){
 }
 function paintLiveGrid(){
   const v=liveView();
+  const st3=cur();
+  const focus=(st3.focus&&v.mode===st3.mode)?st3.focus:[];
   for(let i=0;i<16;i++){
     const r=v.r.g[i];
+    const fc=focus.includes(i);
     cyls[i].classList.toggle('on',r.on&&!v.preview);
-    cyls[i].classList.toggle('want',r.on&&v.preview);
-    cyls[i].classList.toggle('dim',r.dim||(v.preview&&!r.on));
+    cyls[i].classList.toggle('want',(r.on&&v.preview)||fc);
+    cyls[i].classList.toggle('focus',fc);
+    sockets[i].classList.toggle('focus',fc);
+    cyls[i].classList.toggle('dim',(r.dim||(v.preview&&!r.on))&&!fc);
     cyls[i].classList.toggle('outside',false);
     sockets[i].classList.toggle('want',false); sockets[i].classList.toggle('outside',false); sockets[i].classList.toggle('now',false);
     nums[i].textContent=r.n; subs[i].textContent=r.s;
