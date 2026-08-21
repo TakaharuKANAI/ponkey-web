@@ -163,8 +163,11 @@ body.l3 .hud{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;row-gap:
 .hud .mode span:last-child{color:var(--accent-ink);font-weight:600}
 .pv{font-size:10.5px;color:var(--ink-3);text-align:center;margin-top:2px}
 .pv b{color:var(--accent-ink);font-weight:600}
-.cyl.dim{opacity:.32}
-.cyl.dim .tnum,.cyl.dim .tsub{fill:var(--ink-3)}
+.cyl.dim{opacity:.5}
+.cyl.dim .tnum,.cyl.dim .tsub{fill:var(--ink-2)}
+/* レッスン3: 役割名は読ませたい文字なので L1/L2 のカナ添えより濃く・太く */
+body.l3 .tnum{font-weight:600}
+body.l3 .tsub{font-size:8px;font-weight:500;fill:var(--ink-2)}
 .tsub.long{font-size:7px}
 .pnote.role{fill:var(--ink-2)}
 
@@ -1327,13 +1330,94 @@ function roles(mode){
   }
   return {g,pk};
 }
+/* 実機 LED の再現。ファームの updateLEDs_FnIndicator / voicePicker / ステッパ配色を
+   ライトテーマ向けに写像する (LED が明るい = キャップの色が濃い)。
+   色相はファームと同じ値、明度だけ紙の上で読めるように反転している。 */
+const PART_HUE=[11,108,220,300,176,58,265];   // KICK/SNARE/HAT/TOM/BASS/LEAD/PAD (v4.5.62+)
+const tint=(h,sat,l)=>`hsl(${(h+360)%360} ${sat}% ${l}%)`;
+function applyLeds(mode,g){
+  const tp=target();
+  const put=(i,c,dark)=>{ if(g[i]){ g[i].led=c; if(dark) g[i].ink='#fff'; } };
+  switch(mode){
+    case SUB.STEPPER:{
+      // ペア色相はファームどおり: キー=白 / スケール=緑145 / スイング=琥珀40 / アクセント=ピンク330。
+      // oct 3ペアはパート色。輝度=デフォルトからの逸脱度 (全部標準ならページ全体が薄い)
+      const dev=[D.root?1:0, D.scale10?1:0, (D.swing??0)/7, (D.accent??0)/7,
+                 Math.abs(D.oct[1]??0)/11, Math.abs(D.oct[2]??0)/11, Math.abs(D.oct[0]??0)/11, 0];
+      const hue=[null,145,40,330, PART_HUE[5],PART_HUE[6],PART_HUE[4], null];
+      for(let pr=0;pr<7;pr++){
+        const t=Math.min(1,dev[pr]);
+        const c=hue[pr]===null ? tint(0,0,88-t*55) : tint(hue[pr], pr>=4?60:45, 88-t*42);
+        put(pr*2,c,t>.6); put(pr*2+1,c,t>.6);
+      }
+      break; }
+    case SUB.BPM:
+      for(let i=0;i<16;i++) put(i, g[i].on?tint(0,0,30):tint(0,0,92), g[i].on);
+      break;
+    case SUB.SLOT:
+      for(let i=0;i<16;i++){
+        if(g[i].on) put(i,tint(0,0,28),true);
+        else if((D.slotHas>>i)&1) put(i,tint(0,0,86),false);
+      }
+      break;
+    case SUB.VOICE:{
+      // 音色ピッカー: 色相 ±21°(列) × 彩度4段(行)。ファーム computeVoicePickerColor と同じ振り
+      const OFF=[-21,-7,7,21], SAT=[85,65,48,32];
+      for(let i=0;i<16;i++){
+        const row=i>>2,col=i&3;
+        put(i, tint(PART_HUE[tp]+OFF[col], SAT[row], g[i].on?42:78), g[i].on);
+      }
+      break; }
+    case SUB.PVOL: case SUB.MASTER:{
+      const curL=mode===SUB.MASTER?D.master:D.pvol[tp];
+      for(let i=0;i<16;i++){
+        const l=VOL_LEVEL_OF_KEY[i]; if(l<0) continue;
+        // 階段ゲージ: 現在レベル以下が点灯 (低いほど薄い)
+        const lit=curL!==null&&l<=curL;
+        put(i, lit?tint(PART_HUE[tp],62,80-l*4):tint(0,0,93), lit&&l===curL);
+        if(g[i].on) put(i, tint(PART_HUE[tp],68,44), true);
+      }
+      break; }
+    case SUB.SCALE_SETUP:{
+      const pp=Math.min(D.prev,2);
+      put(0, D.scaleEn[pp]?tint(PART_HUE[pp],62,44):tint(0,0,88), D.scaleEn[pp]);
+      put(3, tint(0,0,80), false);
+      break; }
+    case SUB.PATTERN:{
+      const pp=Math.min(D.prev,2);
+      for(let i=0;i<16;i++) put(i, g[i].on?tint(PART_HUE[pp],62,44):tint(PART_HUE[pp],40,i<8?88:84), g[i].on);
+      break; }
+    case 'fx':{
+      // G1-G4=効果 (選択中が濃い)、G5-G16=深さ (現在値まで点灯)
+      const FXH=[200,280,50,10];
+      for(let i=0;i<4;i++) put(i, tint(FXH[i], 55, D.fxSel===i?45:82), D.fxSel===i);
+      for(let i=4;i<16;i++){
+        const lit=(i-3)<=(D.fxLv[D.fxSel]??0);
+        put(i, lit?tint(FXH[D.fxSel],55,82-(i-4)*3):tint(0,0,93), false);
+        if(g[i].on) put(i, tint(FXH[D.fxSel],60,45), true);
+      }
+      break; }
+    case 'interior': case 'interiorFn':
+      for(let i=0;i<16;i++) put(i, g[i].on?tint(0,0,28):tint((i*97)%360,30,88), g[i].on);
+      break;
+  }
+}
+
 /* 実機がそのモードに居なければ、いまのステップのモードを薄く「予習」で見せる */
 function liveView(){
   const st=cur(),m=modeOf();
   const preview=(m==='normal'||m==='fn')&&st.mode!==undefined&&st.mode!=='normal'&&st.mode!==m;
   const mode=preview?st.mode:m;
-  return {mode,preview,real:m,r:roles(mode)};
+  const r=roles(mode); applyLeds(mode,r.g);
+  return {mode,preview,real:m,r};
 }
+function setCylLed(i,led,ink){
+  const g=cyls[i]; if(!g) return;
+  g.querySelectorAll('.cyl-cap,.cyl-side,.cyl-base').forEach(el=>{ el.style.fill=led||''; });
+  nums[i].style.fill=ink||''; subs[i].style.fill=ink||'';
+}
+function clearCylLeds(){ for(let i=0;i<16;i++) setCylLed(i,null,null); }
+
 function paintLiveParts(){
   const v=liveView(),held=D.held;
   pkeys.forEach((p,i)=>{
@@ -1365,6 +1449,7 @@ function paintLiveGrid(){
     nums[i].textContent=r.n; subs[i].textContent=r.s;
     subs[i].classList.toggle('long',r.s.length>=6);
     nums[i].style.fontSize=r.n.length>=4?'8.5px':'';
+    setCylLed(i, r.led, r.ink);
   }
   if(lockVeil){ lockVeil.style.display='none'; lockText.style.display='none'; }
   setClaim(false); ledSetTargets([]);
@@ -1548,10 +1633,39 @@ function showErr(m){const b=el('err');b.style.display=m?'block':'none';b.textCon
 /* =====================================================================
    9. 読み上げ
    ===================================================================== */
+/* 読み上げ用の正規化。画面の表記(×, 〜, ⇔ …)は TTS が読めない/変に読むので言葉に開く。
+   Fn は「ファンクションキー」と読ませる(「エフエヌ」とは読ませない)。 */
+function speakable(t){
+  return String(t)
+    .replace(/<[^>]+>/g,'')
+    .replace(/Fn ?キー/g,'ファンクションキー')
+    .replace(/P(\d)〜P(\d)/g,'ピー$1からピー$2')
+    .replace(/G(\d+)〜G(\d+)/g,'ジー$1からジー$2')
+    .replace(/Fn×/g,'ファンクションキーを押しながら')
+    .replace(/Fn/g,'ファンクションキー')
+    .replace(/(\d)×(\d)/g,'$1かける$2')
+    .replace(/×/g,'かける')
+    .replace(/−/g,'マイナス')
+    .replace(/＋/g,'プラス')
+    .replace(/〜/g,'から')
+    .replace(/⇔/g,'と')
+    .replace(/→/g,'、')
+    .replace(/±/g,'プラスマイナス')
+    .replace(/(\d)=(\d)/g,'$1は$2')
+    .replace(/=/g,'は、')
+    .replace(/♭/g,'フラット')
+    .replace(/[♯#]/g,'シャープ')
+    .replace(/——/g,'、')
+    .replace(/\bOFF\b/g,'オフ')
+    .replace(/\bON\b/g,'オン')
+    .replace(/\bBPM\b/g,'ビーピーエム')
+    .replace(/\bLED\b/g,'エルイーディー')
+    .replace(/\boct\b/g,'オクターブ');
+}
 function say(text){
   if(!window.speechSynthesis) return;
   speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(String(text).replace(/<[^>]+>/g,''));
+  const u=new SpeechSynthesisUtterance(speakable(text));
   u.lang='ja-JP'; u.rate=1.0;
   speechSynthesis.speak(u);
 }
@@ -1569,6 +1683,7 @@ function openLesson(n){
   if(S.playing) stopSeq();
   document.body.classList.remove('home');
   document.body.classList.toggle('l3',n===2);
+  clearCylLeds();
   if(n===2){ const f=D.feat,f2=D.feat2,pr=D.proto; devReset(); D.feat=f; D.feat2=f2; D.proto=pr;
     D.seen.always=true; if(S.connected) queueMeta(); }
   else if(S.connected&&(D.feat&FEAT_SONG_DUMP)) sendSong(0x07,[0xFF]);
@@ -1582,6 +1697,7 @@ function goHome(){
   finishLesson();
   S.lesson=null; S.clearing=false;
   document.body.classList.add('home'); document.body.classList.remove('l3');
+  clearCylLeds();
   el('wmSub').textContent='レッスン';
   el('clearBox').classList.remove('on');
   window.speechSynthesis&&speechSynthesis.cancel();
