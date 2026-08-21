@@ -118,19 +118,15 @@
 <footer>Edge / Chrome で開いてください(Safari・Firefox 非対応)<br>ファーム v4.5.63 以降 (Fn×P4 を4回押すと本体でも同じ設定が見えます)</footer>
 
 <script src="groove-engine.js"></script>
+<script src="./ponkey.js"></script>
 <script>
 // ============================================================ 定数 (ファーム一致: ../ponkey-midi/ponkey-firmware が正)
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
-const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
-const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
-const DBG_CMD_MAGIC=0xA6, DBG_LOG_ENABLE_ALL=0x01, DBG_PKT_MAGIC=0xA5, CAT_SONG=0x09;
-const EV_SLOT_DUMP=0x09, EV_META=0x0A;
-const SONG_MAGIC=0x5A, S_DUMP_SLOT=0x07;
+// BLE 層は ponkey.js (v4.5.73 プロトコル) 経由
 const CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;
 const LS='ponkey_groove_v01';
 
 // ============================================================ 状態
-let dev,gatt,midiCh,cmdCh,logCh, connected=false;
+let pk=null, connected=false;
 let meta=null, score=null, feat=null, props=null, applied=null;   // applied = 現在かけている提案 or {swing,accent}
 const chunkAsm={};
 let dumpWaiter=null;
@@ -142,32 +138,21 @@ const $=id=>document.getElementById(id);
 // ============================================================ BLE
 async function connect(){
   log('デバイス選択…');
-  dev=await navigator.bluetooth.requestDevice({filters:[{name:'PONKEY_PT2'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
-  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断');});
-  gatt=await dev.gatt.connect();
-  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-  const ds=await gatt.getPrimaryService(DBG_SERVICE);
-  cmdCh=await ds.getCharacteristic(DBG_CMD); logCh=await ds.getCharacteristic(DBG_LOG);
-  await logCh.startNotifications(); logCh.addEventListener('characteristicvaluechanged',onLog);
-  await writeCmd([DBG_CMD_MAGIC,DBG_LOG_ENABLE_ALL,0x00]);
+  pk=new Ponkey();
+  pk.on('disconnect',()=>{setConn(false);log('切断');});
+  pk.on('songmeta',onMeta);
+  pk.on('slotdump',onDump);
+  await pk.connect({namePrefix:'PONKEY_PT2',debug:true});
   setConn(true); log('接続完了');
 }
 function setConn(c){connected=c;$('conn').textContent=c?'接続済み':'未接続';$('conn').className='pill '+(c?'ok':'ng');$('btnConnect').textContent=c?'切断':'接続';}
-async function writeCmd(b){if(!cmdCh)return;const u=Uint8Array.from(b);
-  try{cmdCh.writeValueWithoutResponse?await cmdCh.writeValueWithoutResponse(u):await cmdCh.writeValue(u);}
-  catch(e){try{await cmdCh.writeValue(u);}catch(_){}}}
-async function writeMIDI(s,d1,d2){if(!midiCh)return;const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
-  try{await midiCh.writeValueWithoutResponse(u);}catch(e){try{await midiCh.writeValue(u);}catch(_){}}}
-$('btnConnect').onclick=async()=>{ if(connected){try{gatt.disconnect();}catch(e){} return;}
+$('btnConnect').onclick=async()=>{ if(connected){try{pk.disconnect();}catch(e){} return;}
   try{await connect();}catch(e){log('接続エラー: '+e);} };
 
 // 受信: META と SLOT_DUMP (分割再構成)
-function onLog(e){const b=new Uint8Array(e.target.value.buffer);
-  if(b.length<11||b[0]!==DBG_PKT_MAGIC||b[8]!==CAT_SONG)return;
-  const ev=b[9],dl=b[10],data=b.slice(11,11+dl);
-  if(ev===EV_META){ meta=GrooveEngine.decodeMeta(data); log(`META: ${meta.bpm}BPM slot${meta.currentSlot+1} ${meta.playing?'再生中':'停止'} swing=${meta.swing} accent=${meta.accent}`); return; }
-  if(ev!==EV_SLOT_DUMP)return;
-  if(dl<3){log('⚠ スロットが大きすぎて読めませんでした');if(dumpWaiter)dumpWaiter.reject(new Error('too big'));return;}
+function onMeta(data){ meta=GrooveEngine.decodeMeta(data); log(`META: ${meta.bpm}BPM slot${meta.currentSlot+1} ${meta.playing?'再生中':'停止'} swing=${meta.swing} accent=${meta.accent}`); }
+function onDump(data){
+  if(data.length<3){log('⚠ スロットが大きすぎて読めませんでした');if(dumpWaiter)dumpWaiter.reject(new Error('too big'));return;}
   const gen=data[0],idx=data[1],cnt=data[2],part=data.slice(3);
   let a=chunkAsm[gen]; if(!a||a.cnt!==cnt){a={cnt,parts:{}};chunkAsm[gen]=a;} a.parts[idx]=part;
   if(Object.keys(a.parts).length<cnt)return;
@@ -182,13 +167,13 @@ function onLog(e){const b=new Uint8Array(e.target.value.buffer);
 function readCurrentSlot(){return new Promise(async(resolve,reject)=>{
   const to=setTimeout(()=>{if(dumpWaiter){dumpWaiter=null;reject(new Error('タイムアウト (本体のファームが v4.5.63 以降か確認してください)'));}},5000);
   dumpWaiter={resolve:v=>{clearTimeout(to);dumpWaiter=null;resolve(v);},reject:e=>{clearTimeout(to);dumpWaiter=null;reject(e);}};
-  await writeCmd([SONG_MAGIC,S_DUMP_SLOT,0x00,0xFF]);
+  try{await pk.dumpSlot(0xFF);}catch(_){}
 });}
 
 // ============================================================ 本体へ「かける」
 async function apply(swing,accent,label){
   applied={swing,accent,label};
-  if(connected){await writeMIDI(0xB0,CC_GROOVE_SWING,swing);await writeMIDI(0xB0,CC_GROOVE_ACCENT,accent);}
+  if(connected){await pk.sendCC(CC_GROOVE_SWING,swing).catch(()=>{});await pk.sendCC(CC_GROOVE_ACCENT,accent).catch(()=>{});}
   const on=(swing||accent);
   $('big').classList.toggle('on',!!on);
   $('bigLabel').textContent=on?'ノリ ON':'アレンジ';

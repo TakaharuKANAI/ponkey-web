@@ -148,12 +148,13 @@
   <button class="closer" id="humClose"></button>
 </div>
 
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <script>
 // ════════════════════════════════════════════════ ファーム側の契約 (PT2 v4.5.64+)
 //   CC_SYNTH_SCALE 0x37: 0-7 = 音階 (SCALES の順 = ファーム SCALE_DEFS) / 0x7F = 白鍵 (従来)
 //   CC_KEY         0x38: 0-11 = C..B (曲のキー。本体 Fn×P4 のキーページと同じ値)
 //   どちらも双方向。接続直後の State Sync に含まれるので本体を正として画面を合わせる。
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
 const CC_SYNTH_SCALE=0x37, CC_KEY=0x38, SCALE_WHITE=0x7F, ROOT_BASE=48;
 const PC=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const IS_BLACK=[0,1,0,1,0,0,1,0,1,0,1,0];
@@ -191,7 +192,7 @@ const LS='ponkey_scale_v01';
 let store={scale:SCALE_WHITE,key:0,lang:'ja'};
 try{ Object.assign(store,JSON.parse(localStorage.getItem(LS)||'{}')); }catch(_){}
 function save(){ localStorage.setItem(LS,JSON.stringify({scale:store.scale,key:store.key,lang:store.lang})); }
-let dev,gatt,midiCh,connected=false,gotSync=false;
+let pk=null,connected=false,gotSync=false;
 
 function keyOfRank(r){ return (3-Math.floor(r/4))*4 + (r%4); }   // 対合
 function curScale(){ return SCALES[idxOfId(store.scale)]; }
@@ -299,32 +300,24 @@ function previewNote(midi,dur,gain,at){
   o.connect(g).connect(c.destination); o.start(t); o.stop(t+dur+.02);
 }
 
-// ════════════════════════════════════════════════ BLE
-async function sendScale(){ if(connected){ await writeMIDI(0xB0,CC_SYNTH_SCALE,store.scale); status(t().toDev(sName(curScale()))); } else status(t().offline(sName(curScale()))); }
-async function sendKey(){ if(connected){ await writeMIDI(0xB0,CC_KEY,store.key); status(t().toDev(t().keyName(PC[store.key]))); } else status(t().offline(t().keyName(PC[store.key]))); }
+// ════════════════════════════════════════════════ BLE (ponkey.js 経由)
+async function sendScale(){ if(connected){ await pk.sendCC(CC_SYNTH_SCALE,store.scale).catch(()=>{}); status(t().toDev(sName(curScale()))); } else status(t().offline(sName(curScale()))); }
+async function sendKey(){ if(connected){ await pk.sendCC(CC_KEY,store.key).catch(()=>{}); status(t().toDev(t().keyName(PC[store.key]))); } else status(t().offline(t().keyName(PC[store.key]))); }
 document.getElementById('btnConnect').onclick=async()=>{ try{
   status(t().picking);
-  dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
-  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);status(t().cut);});
-  gatt=await dev.gatt.connect();
-  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-  await midiCh.startNotifications();
-  midiCh.addEventListener('characteristicvaluechanged',onMidi);
+  pk=new Ponkey();
+  pk.on('disconnect',()=>{setConn(false);status(t().cut);});
+  pk.on('cc',onCC);
+  await pk.connect({debug:false});
   setConn(true); status(t().waiting);
   // 本体が正 (電源を切っても残る設定なので、アプリ側の記憶で上書きしない)。State Sync が来なければ古いファーム
   gotSync=false; setTimeout(()=>{ if(connected&&!gotSync) status(t().old); },4000);
 }catch(e){ status(t().err+e); } };
 function setConn(c){ connected=c; const el=document.getElementById('conn'); el.textContent=c?t().conn:t().disc; el.className='pill '+(c?'ok':'ng'); }
-async function writeMIDI(s,d1,d2){ if(!midiCh)return; const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
-  try{ await midiCh.writeValueWithoutResponse(u); }catch(e){ try{ await midiCh.writeValue(u); }catch(_){ } } }
-function onMidi(e){
-  const b=new Uint8Array(e.target.value.buffer);
-  for(let i=0;i+2<b.length;i++){
-    if(b[i]!==0xB0) continue;
-    const cc=b[i+1], v=b[i+2];
-    if(cc===CC_SYNTH_SCALE){ store.scale=(v<=8)?v:SCALE_WHITE; save(); render(); status(t().fromDev(sName(curScale()))); gotSync=true; i+=2; }
-    else if(cc===CC_KEY && v<12){ store.key=v; save(); render(); status(t().fromDev(t().keyName(PC[v]))); gotSync=true; i+=2; }
-  }
+function onCC({cc,val,ch}){
+  if(ch!==0) return;
+  if(cc===CC_SYNTH_SCALE){ store.scale=(val<=8)?val:SCALE_WHITE; save(); render(); status(t().fromDev(sName(curScale()))); gotSync=true; }
+  else if(cc===CC_KEY && val<12){ store.key=val; save(); render(); status(t().fromDev(t().keyName(PC[val]))); gotSync=true; }
 }
 document.getElementById('langBtn').onclick=()=>{ store.lang=store.lang==='en'?'ja':'en'; save(); render(); renderHumIdle(); status(t().hint); };
 

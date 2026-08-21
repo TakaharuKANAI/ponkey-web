@@ -916,6 +916,8 @@
   </footer>
 </div>
 
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <script>
 // ════════════════════════════════════════════════════════
 // PONKEY Bridge  v1.7
@@ -955,8 +957,6 @@
 //         PONKEY デバイスを縦コンパクト化、英字ラベル化、IAC 案内を i ツールチップに
 // ════════════════════════════════════════════════════════
 
-const SERVICE_UUID = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
-const CHAR_UUID    = "7772e5db-3868-4112-a1a9-f2669d106bf3";
 const KEY_COUNT    = 16;
 const SLOT_COUNT   = 4;
 
@@ -1201,11 +1201,9 @@ function padClickToMIDI(slot, padIdx) {
   return null;
 }
 
-// onMidi を再利用するため、生バイトを fake event で送り込む
+// processMidiEvent を再利用するため、生の status/d1/d2 を直接流し込む (ts13=0 固定)
 function simulateMIDI(slot, status, d1, d2) {
-  const bytes = new Uint8Array([0x80, 0x80, status, d1, d2]);
-  const fakeEvent = { target: { value: { buffer: bytes.buffer } } };
-  onMidi(slot, fakeEvent);
+  processMidiEvent(slot, 0, status, d1, d2);
 }
 
 // v1.15: パッドクリック振る舞い
@@ -1681,20 +1679,12 @@ const CLOCK_PULSES_PER_QUARTER = 24;  // MIDI Clock 標準
 // v1.32: 全接続 PONKEY へ play/stop を送る (CC_PLAY_STOP)。
 // ファームは CC_BPM 受信で自動再生(v4.5.21)するので、ここでは主に「停止」を担う。
 function broadcastPlayStop(on) {
-  const packet = new Uint8Array([0x80, 0x80, 0xB0, CC_PLAY_STOP, on ? 127 : 0]);
   let n = 0;
   slots.forEach(slot => {
-    if (!slot.connected || !slot.characteristic) return;
-    try {
-      if (slot.characteristic.writeValueWithoutResponse) {
-        slot.characteristic.writeValueWithoutResponse(packet);
-      } else {
-        slot.characteristic.writeValue(packet);
-      }
-      n++;
-    } catch (err) {
-      log("warn", `S${slot.id} CC_PLAY_STOP 送信失敗: ${err.message}`);
-    }
+    if (!slot.connected || !slot.pk) return;
+    slot.pk.sendCC(CC_PLAY_STOP, on ? 127 : 0)
+      .catch(err => log("warn", `S${slot.id} CC_PLAY_STOP 送信失敗: ${err.message}`));
+    n++;
   });
   if (n) log("sys", `Transport: 全${n}台へ ${on ? "PLAY" : "STOP"} 送信`);
 }
@@ -1862,7 +1852,7 @@ function getIdealStepTime(stepCount) {
   return clockState.baselineTime + (stepCount - clockState.baselineStep) * getStepDurationMs();
 }
 
-// computeDrumOutput: onMidi の変換ロジックをミラー (sequencer 用)
+// computeDrumOutput: processMidiEvent の変換ロジックをミラー (sequencer 用)
 function computeDrumOutput(slot, drumIdx, step) {
   const vel = slot.stepVelocity[drumIdx][step] || 100;
   let outNote, outCh;
@@ -2007,11 +1997,10 @@ function recordJitter(v) {
   measuredJitterMs = mx;
 }
 
-// 受信パケットのヘッダ2バイトから、Web MIDI 予約送信用の時刻 (performance.now ベース) を返す。
+// ponkey.js が復元した 13bit タイムスタンプ (ts13, 0-8191 ms) から、
+// Web MIDI 予約送信用の時刻 (performance.now ベース) を返す。
 // 戻り値 0 = 即時送信 (デジッタ無効時)。クロック復元と計測は常に実行する。
-function dejitterSendTime(slot, headerByte, tsByte) {
-  const ts13 = ((headerByte & 0x3F) << 7) | (tsByte & 0x7F);  // 0-8191 ms
-
+function dejitterSendTime(slot, ts13) {
   // 13bit (約8.19秒) の wrap を解除して連続 ms に積算
   if (slot.bleLastTs13 === null) {
     slot.bleClockFw = ts13;
@@ -2056,20 +2045,12 @@ function refreshPadStepNow(slot, step) {
 // スタート時に1回だけ送る方針 (A): 揺れを再注入しないので音は安定。drift はごく僅か。
 function broadcastBarSync(step) {
   const v = (((step | 0) % 16) + 16) % 16;
-  const packet = new Uint8Array([0x80, 0x80, 0xB0, CC_BAR_SYNC, v]);
   let n = 0;
   slots.forEach(slot => {
-    if (!slot.connected || !slot.characteristic) return;
-    try {
-      if (slot.characteristic.writeValueWithoutResponse) {
-        slot.characteristic.writeValueWithoutResponse(packet);
-      } else {
-        slot.characteristic.writeValue(packet);
-      }
-      n++;
-    } catch (err) {
-      log("warn", `S${slot.id} CC_BAR_SYNC 送信失敗: ${err.message}`);
-    }
+    if (!slot.connected || !slot.pk) return;
+    slot.pk.sendCC(CC_BAR_SYNC, v)
+      .catch(err => log("warn", `S${slot.id} CC_BAR_SYNC 送信失敗: ${err.message}`));
+    n++;
   });
   if (n) log("sys", `位相同期: 全${n}台を step ${v+1} に整列 (CC_BAR_SYNC)`);
 }
@@ -2080,32 +2061,19 @@ function broadcastBarSync(step) {
 //   大きくズレている時だけ自動でスナップに切替わる。1小節に1回なので BLE 揺れもほぼ乗らない。
 function broadcastPhaseNudge(step) {
   const v = (((step | 0) % 16) + 16) % 16;
-  const packet = new Uint8Array([0x80, 0x80, 0xB0, CC_PHASE_NUDGE, v]);
-  let n = 0;
   slots.forEach(slot => {
-    if (!slot.connected || !slot.characteristic) return;
-    try {
-      if (slot.characteristic.writeValueWithoutResponse) {
-        slot.characteristic.writeValueWithoutResponse(packet);
-      } else {
-        slot.characteristic.writeValue(packet);
-      }
-      n++;
-    } catch (err) {
-      log("warn", `S${slot.id} CC_PHASE_NUDGE 送信失敗: ${err.message}`);
-    }
+    if (!slot.connected || !slot.pk) return;
+    slot.pk.sendCC(CC_PHASE_NUDGE, v)
+      .catch(err => log("warn", `S${slot.id} CC_PHASE_NUDGE 送信失敗: ${err.message}`));
   });
 }
 
 // v1.34: 単一スロットへ CC_BPM を送る (接続時の自動再生キック用)
 function sendBpmToSlot(slot, bpm) {
-  if (!slot.connected || !slot.characteristic) return;
+  if (!slot.connected || !slot.pk) return;
   const clipped = Math.max(60, Math.min(187, bpm || 120));
-  const packet = new Uint8Array([0x80, 0x80, 0xB0, CC_BPM, clipped - 60]);
-  try {
-    if (slot.characteristic.writeValueWithoutResponse) slot.characteristic.writeValueWithoutResponse(packet);
-    else slot.characteristic.writeValue(packet);
-  } catch (err) { log("warn", `S${slot.id} CC_BPM(connect) 送信失敗: ${err.message}`); }
+  slot.pk.sendCC(CC_BPM, clipped - 60)
+    .catch(err => log("warn", `S${slot.id} CC_BPM(connect) 送信失敗: ${err.message}`));
 }
 
 function maybePushBpm(bpm) {
@@ -2121,18 +2089,10 @@ function maybePushBpm(bpm) {
   clockState.lastSentAt = now;
 
   const val = clipped - 60;
-  const packet = new Uint8Array([0x80, 0x80, 0xB0, CC_BPM, val]);
   slots.forEach(slot => {
-    if (!slot.connected || !slot.characteristic) return;
-    try {
-      if (slot.characteristic.writeValueWithoutResponse) {
-        slot.characteristic.writeValueWithoutResponse(packet);
-      } else {
-        slot.characteristic.writeValue(packet);
-      }
-    } catch (err) {
-      log("warn", `S${slot.id} CC_BPM 送信失敗: ${err.message}`);
-    }
+    if (!slot.connected || !slot.pk) return;
+    slot.pk.sendCC(CC_BPM, val)
+      .catch(err => log("warn", `S${slot.id} CC_BPM 送信失敗: ${err.message}`));
   });
   log("sys", `BPM 同期 → ${clipped} (全接続 PONKEY)`);
 }
@@ -2277,9 +2237,7 @@ const slots = [];
 for (let i = 1; i <= SLOT_COUNT; i++) {
   slots.push({
     id: i,
-    device: null,
-    server: null,
-    characteristic: null,
+    pk: null,          // ponkey.js クライアント (接続中のみ)
     outputId: null,
     monitor: false,  // v1.13: デフォルト OFF
     connected: false,
@@ -2775,7 +2733,7 @@ function updateSlotUI(slot) {
   if (slot.connected) {
     el.classList.remove("disconnected");
     el.classList.add("connected");
-    name.textContent = slot.device?.name || `PONKEY ${slot.id}`;
+    name.textContent = slot.pk?.device?.name || `PONKEY ${slot.id}`;
     sub.textContent = slot.lastChannel != null
       ? `connected · ch=${slot.lastChannel}`
       : "connected";
@@ -2795,15 +2753,9 @@ function updateSlotUI(slot) {
 const CC_SAM_MUTE = 0x55;
 
 async function sendSamMute(slot, on) {
-  if (!slot.characteristic) return;
-  // BLE MIDI: [header, timestamp, status, d1, d2]
-  const packet = new Uint8Array([0x80, 0x80, 0xB0, CC_SAM_MUTE, on ? 127 : 0]);
+  if (!slot.pk) return;
   try {
-    if (slot.characteristic.writeValueWithoutResponse) {
-      await slot.characteristic.writeValueWithoutResponse(packet);
-    } else {
-      await slot.characteristic.writeValue(packet);
-    }
+    await slot.pk.sendCC(CC_SAM_MUTE, on ? 127 : 0);
     log("sys", `スロット${slot.id}: CC_SAM_MUTE = ${on ? "ON (本体ミュート)" : "OFF"}`);
   } catch (err) {
     log("warn", `スロット${slot.id}: CC_SAM_MUTE 送信失敗 ${err.message}`);
@@ -2819,31 +2771,24 @@ async function connectSlot(slot) {
   try {
     document.getElementById(`sub${slot.id}`).textContent = "探索中…";
     log("sys", `スロット${slot.id}: BLE 探索開始`);
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [SERVICE_UUID] }]
-    });
-    device.addEventListener("gattserverdisconnected", () => {
+    const pk = new Ponkey();
+    pk.on("disconnect", () => {
       // v1.24: 切断時は必ず全ノート停止 (押さえたまま切れた音が鳴りっぱなしになるのを防ぐ)
       panicSlot(slot);
       slot.connected = false;
-      slot.device = null;
-      slot.server = null;
-      slot.characteristic = null;
+      slot.pk = null;
       slot.lastChannel = null;
       updateSlotUI(slot);
       log("sys", `スロット${slot.id}: 切断されました (全ノート停止を送信)`);
     });
-    const server  = await device.gatt.connect();
-    const service = await server.getPrimaryService(SERVICE_UUID);
-    const char    = await service.getCharacteristic(CHAR_UUID);
-    await char.startNotifications();
-    char.addEventListener("characteristicvaluechanged", (e) => onMidi(slot, e));
-    slot.device = device;
-    slot.server = server;
-    slot.characteristic = char;
+    // 受信は ponkey.js のイベントで受け、既存の変換ロジックへそのまま渡す
+    pk.on("cc",   e => processMidiEvent(slot, e.ts13, 0xB0 | e.ch, e.cc, e.val));
+    pk.on("note", e => processMidiEvent(slot, e.ts13, (e.on ? 0x90 : 0x80) | e.ch, e.note, e.vel));
+    await pk.connect({ debug: false });   // MIDI サービスのみ (デバッグサービス不使用)
+    slot.pk = pk;
     slot.connected = true;
     updateSlotUI(slot);
-    log("sys", `スロット${slot.id}: 接続 ${device.name || "(no name)"}`);
+    log("sys", `スロット${slot.id}: 接続 ${pk.device.name || "(no name)"}`);
 
     // 接続成功直後に SAM をミュート (本体スピーカーが Ableton と二重に鳴らないように)
     await sendSamMute(slot, true);
@@ -2859,8 +2804,8 @@ async function connectSlot(slot) {
 }
 
 function disconnectSlot(slot) {
-  try { slot.server?.disconnect(); } catch {}
-  // gattserverdisconnected ハンドラが残りの後始末をする
+  try { slot.pk?.disconnect(); } catch {}
+  // 'disconnect' イベントハンドラが残りの後始末をする
 }
 
 // ── v1.24: Panic (全ノート停止) — stuck note 対策 ──────────────
@@ -2903,25 +2848,9 @@ function panicAll() {
 // ── BLE MIDI 受信 → 解釈 → 転送 + モニター ────────────
 function hex(b) { return b.toString(16).padStart(2,'0').toUpperCase(); }
 
-// MIN版: まとめ送り(バッチング)対応の入口。
-//   1パケット = [header] [tsLow status d1 d2] [tsLow status d1 d2] ... と複数イベントを含む。
-//   各イベントは 4 バイト(tsLow + 3バイトMIDI)。header は先頭1回。
-//   単発(5バイト)パケットも i=1 の1回だけ回るので、従来ファームとも互換。
-function onMidi(slot, event) {
-  const v = event.target.value;
-  const bytes = new Uint8Array(v.buffer);
-  if (bytes.length < 5) {
-    log("warn", `S${slot.id} 短いパケット (len=${bytes.length}): ${[...bytes].map(hex).join(" ")}`);
-    return;
-  }
-  const headerByte = bytes[0];
-  for (let i = 1; i + 3 < bytes.length; i += 4) {
-    processMidiEvent(slot, headerByte, bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]);
-  }
-}
-
-// 1 MIDI イベントの処理 (従来 onMidi の本体)。バッチ内の各イベントごとに呼ばれる。
-function processMidiEvent(slot, headerByte, tsByte, status, d1, d2in) {
+// 1 MIDI イベントの処理。ponkey.js の 'cc'/'note' イベントごとに呼ばれる
+// (まとめ送り(バッチング)パケットの分解と ts13 復元は ponkey.js 側)。
+function processMidiEvent(slot, ts13, status, d1, d2in) {
   const channel = status & 0x0F;
   const cmd     = status & 0xF0;
   let   d2 = d2in;     // v1.12: drum NoteOn のとき per-step velocity に置換 (下で)
@@ -2930,7 +2859,7 @@ function processMidiEvent(slot, headerByte, tsByte, status, d1, d2in) {
 
   // v1.21 (候補B): ファームのタイムスタンプから理想再生時刻を復元。
   // 全イベントで呼んでクロック追跡を更新する。v1.22: 待合室を効かせるのは「ドラム=ch9」だけ。
-  const dejTime = dejitterSendTime(slot, headerByte, tsByte);
+  const dejTime = dejitterSendTime(slot, ts13);
 
   slot.lastChannel = channel;
 

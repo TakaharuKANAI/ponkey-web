@@ -17,6 +17,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/1.2.8/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1/es6/core.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1/es6/music_rnn.js"></script>
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <style>
 :root {
   --orange: #C4884E;
@@ -322,8 +324,6 @@ input[type=range]::-webkit-slider-thumb {
 
 <script>
 // ── Constants ──────────────────────────────────────────────
-const BLE_MIDI_SERVICE = '03b80e5a-ede8-4b33-a751-6ce34ec4c700';
-const BLE_MIDI_CHAR    = '7772e5db-3868-4112-a1a9-f2669d106bf3';
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
 // Firmware channel mapping — 現行 PONKEY_PT2 v4.5.x 対応版に更新済み
@@ -344,7 +344,7 @@ const DRUM_PARTS  = ['KICK','SNARE','HAT','PERC'];
 const DRUM_COLORS = ['#ff2222','#22cc44','#2266ff','#ff22cc']; // KICK=red, SNARE=green, HAT=blue, CONGA=magenta
 
 // ── State ──────────────────────────────────────────────────
-let devices={A:null,B:null}, chars={A:null,B:null};
+let pk={A:null,B:null};   // slot → Ponkey インスタンス
 let musicRNN=null, isModelReady=false, isThinking=false;
 let inputNotes=[], noteOnTimes={}, lastHumanCh=0;
 let temperature=1.1, genSteps=16, triggerCount=4;
@@ -520,9 +520,10 @@ async function connectDevice(slot) {
   const btn=document.getElementById('btn'+slot);
   btn.disabled=true;
 
-  if(devices[slot]) {
-    try{if(devices[slot].gatt.connected)await devices[slot].gatt.disconnect();}catch(e){}
-    devices[slot]=null; chars[slot]=null;
+  if(pk[slot]) {
+    const p=pk[slot];
+    pk[slot]=null;
+    try{p.disconnect();}catch(e){}
     setBtn(slot,'idle');
     if(window.alienSetConnected) alienSetConnected(slot, false);
     btn.disabled=false;
@@ -532,47 +533,43 @@ async function connectDevice(slot) {
 
   try {
     log(`Scanning ${slot}…`,'info');
-    const device=await navigator.bluetooth.requestDevice({
-      filters:[{services:[BLE_MIDI_SERVICE]}],
-      optionalServices:[BLE_MIDI_SERVICE]
-    });
-    device.addEventListener('gattserverdisconnected',()=>onDisconnect(slot));
-    const server =await device.gatt.connect();
-    const service=await server.getPrimaryService(BLE_MIDI_SERVICE);
-    const char   =await service.getCharacteristic(BLE_MIDI_CHAR);
-    devices[slot]=device; chars[slot]=char;
+    const p=new Ponkey();
+    p.on('disconnect',()=>onDisconnect(slot));
 
     if(slot==='A') {
-      await char.startNotifications();
-      char.addEventListener('characteristicvaluechanged',onMidiFromA);
-      log(`A "${device.name||'PONKEY'}" connected`,'ok');
+      p.on('cc',  e=>onCCFromA(e.cc,e.val));
+      p.on('note',e=>onNoteFromA(e));
+      await p.connect({debug:false});
+      pk.A=p;
+      log(`A "${p.device.name||'PONKEY'}" connected`,'ok');
       setTimeout(async()=>{
         try{
           // CC_STATE_SYNC (0x51) → firmware sets s.connected=true
-          await char.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,0x51,127]));
+          await p.sendCC(0x51,127);
           await new Promise(r=>setTimeout(r,80));
           sendBPM(bpm);
           await new Promise(r=>setTimeout(r,80));
-          await char.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,CC_PLAY,127]));
+          await p.sendCC(CC_PLAY,127);
           log('A STATE_SYNC+BPM+PLAY sent','ok');
         }catch(e){log('A init err: '+e.message,'err');}
       }, 300);
     } else {
-      await char.startNotifications();
-      char.addEventListener('characteristicvaluechanged', onMidiFromB);
+      p.on('cc',e=>onCCFromB(e.cc,e.val));
+      await p.connect({debug:false});
+      pk.B=p;
       setTimeout(async()=>{
         try{
-          await char.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,0x51,127]));
-          await char.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,0x55,0x00]));
+          await p.sendCC(0x51,127);
+          await p.sendCC(0x55,0x00);
           const ccVal = Math.min(127, bpm-60);
-          await char.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,CC_BPM,ccVal]));
+          await p.sendCC(CC_BPM,ccVal);
           await new Promise(r=>setTimeout(r,80));
-          await char.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,CC_PLAY,127]));
+          await p.sendCC(CC_PLAY,127);
           log('B STATE_SYNC+SAM+BPM+PLAY sent','ok');
           setTimeout(()=>syncDrumPatternToDevice('B'), 300);
         }catch(e){log('B init err: '+e.message,'err');}
       },500);
-      log(`B "${device.name||'PONKEY'}" connected`,'ok');
+      log(`B "${p.device.name||'PONKEY'}" connected`,'ok');
     }
     setBtn(slot,'connected');
     if(window.alienSetConnected) alienSetConnected(slot, true);
@@ -584,10 +581,7 @@ async function connectDevice(slot) {
 }
 
 function onDisconnect(slot) {
-  if(slot==='B' && chars.B){
-    try{ chars.B.removeEventListener('characteristicvaluechanged', onMidiFromB); }catch(e){}
-  }
-  devices[slot]=null; chars[slot]=null;
+  pk[slot]=null;
   setBtn(slot,'idle');
   if(window.alienSetConnected) alienSetConnected(slot, false);
   log(`PONKEY ${slot} disconnected`,'err');
@@ -669,100 +663,63 @@ function hexToRgba(hex,a){
   return `rgba(${r},${g},${b},${a})`;
 }
 
-// ── BLE-MIDI parse (v33 port) ──────────────────────────────
-function parseBLEMidi(raw) {
-  const m=[];
-  if(raw.length<3)return m;
-  if(raw.length===5&&(raw[2]&0x80)&&raw[2]<0xF0&&!(raw[3]&0x80)){m.push([raw[2],raw[3],raw[4]]);return m;}
-  let i=1,run=0;
-  while(i<raw.length){
-    if(!(raw[i]&0x80)){i++;continue;}
-    i++;
-    if(i>=raw.length)break;
-    if((raw[i]&0x80)&&raw[i]<0xF0){run=raw[i];i++;}
-    else if(raw[i]>=0xF0){i++;continue;}
-    if(!run)continue;
-    const cmd=run&0xF0,need=(cmd===0xC0||cmd===0xD0)?1:2,dd=[];
-    for(let n=0;n<need&&i<raw.length&&!(raw[i]&0x80);n++)dd.push(raw[i++]);
-    if(dd.length>=1){while(dd.length<2)dd.push(0);m.push([run,dd[0],dd[1]]);}
-  }
-  return m;
-}
-
 const CC_BAR_SYNC = 0x54; // firmware sends this with step value as master clock
 
 // Send full drum pattern to a slot
 function syncDrumPatternToDevice(slot) {
-  if(!chars[slot]) return;
-  const c = chars[slot];
-  const send = pkt => c.writeValueWithoutResponse(new Uint8Array(pkt)).catch(()=>{});
+  if(!pk[slot]) return;
+  const dev = pk[slot];
+  const send = (cc,val) => dev.sendCC(cc,val).catch(()=>{});
   for(let p=0;p<4;p++){
-    send([0x80,0x80, 0xB0, p, 127]);
-    for(let s=0;s<16;s++) send([0x80,0x80, 0xB0, 16+s, drumPat[p][s]?127:0]);
+    send(p, 127);
+    for(let s=0;s<16;s++) send(16+s, drumPat[p][s]?127:0);
   }
-  send([0x80,0x80, 0xB0, drumMode, 127]); // restore current mode
+  send(drumMode, 127); // restore current mode
   log(`Pattern synced → ${slot}`,'ok');
 }
 
-function onMidiFromA(event) {
-  const raw=[];
-  for(let i=0;i<event.target.value.byteLength;i++)raw.push(event.target.value.getUint8(i));
-  const msgs=parseBLEMidi(raw);
-  for(const [status,d1,d2] of msgs){
-    const cmd=status&0xF0,ch=status&0x0F;
-
-    if(cmd===0xB0) {
-      // BAR_SYNC from firmware → drive drums + indicator + forward to B
-      if(d1===CC_BAR_SYNC) { onBarSync(d2 & 0x0F); continue; }
-      // Drum mode select 0-3
-      if(d1<=3 && d2>=64) {
-        drumMode = d1;
-        updateGridDrumPattern();
-        if(chars.B) chars.B.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,d1,d2])).catch(()=>{});
-        continue;
-      }
-      if(d1<=7 && d2>=64) continue; // synth mode, ignore
-      // Pattern step ON/OFF
-      if(d1>=16 && d1<=31) {
-        const step=d1-16;
-        drumPat[drumMode][step] = d2>=64;
-        updateGridDrumPattern();
-        if(chars.B) chars.B.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,d1,d2])).catch(()=>{});
-        continue;
-      }
-      continue;
-    }
-
-    // Synth note from A
-    if(!SYNTH_CHANNELS.has(ch)) continue;
-    if(cmd===0x90&&d2>0)   onNoteOn(d1,d2,ch);
-    else if(cmd===0x80||(cmd===0x90&&d2===0))onNoteOff(d1,ch);
+function onCCFromA(d1,d2) {
+  // BAR_SYNC from firmware → drive drums + indicator + forward to B
+  if(d1===CC_BAR_SYNC) { onBarSync(d2 & 0x0F); return; }
+  // Drum mode select 0-3
+  if(d1<=3 && d2>=64) {
+    drumMode = d1;
+    updateGridDrumPattern();
+    if(pk.B) pk.B.sendCC(d1,d2).catch(()=>{});
+    return;
+  }
+  if(d1<=7 && d2>=64) return; // synth mode, ignore
+  // Pattern step ON/OFF
+  if(d1>=16 && d1<=31) {
+    const step=d1-16;
+    drumPat[drumMode][step] = d2>=64;
+    updateGridDrumPattern();
+    if(pk.B) pk.B.sendCC(d1,d2).catch(()=>{});
   }
 }
 
-function onMidiFromB(event) {
-  const raw=[];
-  for(let i=0;i<event.target.value.byteLength;i++)raw.push(event.target.value.getUint8(i));
-  const msgs=parseBLEMidi(raw);
-  for(const [status,d1,d2] of msgs){
-    const cmd=status&0xF0;
-    if(cmd!==0xB0) continue;
-    if(d1===CC_BAR_SYNC) continue; // ignore echo
-    // Drum mode select
-    if(d1<=3 && d2>=64) {
-      drumMode = d1;
-      updateGridDrumPattern();
-      if(chars.A) chars.A.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,d1,d2])).catch(()=>{});
-      continue;
-    }
-    // Pattern step ON/OFF
-    if(d1>=16 && d1<=31) {
-      const step=d1-16;
-      drumPat[drumMode][step] = d2>=64;
-      updateGridDrumPattern();
-      if(chars.A) chars.A.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,d1,d2])).catch(()=>{});
-      continue;
-    }
+function onNoteFromA(e) {
+  // Synth note from A
+  if(!SYNTH_CHANNELS.has(e.ch)) return;
+  if(e.on) onNoteOn(e.note,e.vel,e.ch);
+  else     onNoteOff(e.note,e.ch);
+}
+
+function onCCFromB(d1,d2) {
+  if(d1===CC_BAR_SYNC) return; // ignore echo
+  // Drum mode select
+  if(d1<=3 && d2>=64) {
+    drumMode = d1;
+    updateGridDrumPattern();
+    if(pk.A) pk.A.sendCC(d1,d2).catch(()=>{});
+    return;
+  }
+  // Pattern step ON/OFF
+  if(d1>=16 && d1<=31) {
+    const step=d1-16;
+    drumPat[drumMode][step] = d2>=64;
+    updateGridDrumPattern();
+    if(pk.A) pk.A.sendCC(d1,d2).catch(()=>{});
   }
 }
 
@@ -792,7 +749,7 @@ function onNoteOff(pitch,ch) {
 
   if(dur>=80){
     inputNotes.push({pitch,duration:dur,quantizedDuration:Math.max(1,Math.round(dur/250))});
-    if(inputNotes.length>=triggerCount&&isModelReady&&!isThinking&&chars.B)triggerAI();
+    if(inputNotes.length>=triggerCount&&isModelReady&&!isThinking&&pk.B)triggerAI();
   }
   if(!Object.keys(noteOnTimes).length)setTimeout(()=>{if(!Object.keys(noteOnTimes).length)setBtn('A','connected');},300);
 }
@@ -860,7 +817,7 @@ async function triggerAI() {
     if(window.alienThink) alienThink(false);
     log('AI error: '+e.message,'err');
   }
-  finally{isThinking=false; setBtn('B', devices.B?'connected':'idle');}
+  finally{isThinking=false; setBtn('B', pk.B?'connected':'idle');}
 }
 
 function buildQNS(notes, analysis){
@@ -882,12 +839,12 @@ async function playAIResponse(seq, analysis){
   const stepMs = analysis ? Math.round(analysis.avgDur * 250) : 250;
 
   // Send mode-select once at start and remember it
-  if(chars.B){
+  if(pk.B){
     const mode=CH_TO_MODE[lastHumanCh]??6;
     // Re-unmute SAM (v33 mutes on connect; may have re-muted)
-    chars.B.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,0x55,0x00])).catch(()=>{});
+    pk.B.sendCC(0x55,0x00).catch(()=>{});
     await sleep(30);
-    chars.B.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,mode,0x7F])).catch(()=>{});
+    pk.B.sendCC(mode,0x7F).catch(()=>{});
     log(`AI→B SAM unmute + mode=${mode} ch=${lastHumanCh}`,'info');
     await sleep(80);
   }
@@ -923,13 +880,11 @@ function sendBLEMidiNote(pitch,durMs){
   // Tone.js audio
   playToneNote(CH_TO_IDX[ch]??2,snapped,durMs);
 
-  if(!chars.B)return;
+  if(!pk.B)return;
   // 現行ファーム: data1<16 を「キー番号直送」として確実にソレノイド発火させる。
   // 実ノートを送ると本体の選択音色/オクターブ次第で取りこぼすため ki(0-15) を送る。
-  const on =new Uint8Array([0x80,0x80,0x90|(ch&0x0F),ki&0x0F,100]);
-  const off=new Uint8Array([0x80,0x80,0x80|(ch&0x0F),ki&0x0F,0]);
-  chars.B.writeValueWithoutResponse(on).catch(e=>log('TX: '+e.message,'err'));
-  setTimeout(()=>chars.B.writeValueWithoutResponse(off).catch(()=>{}),Math.max(80,durMs-20));
+  pk.B.noteOn(ch,ki,100).catch(e=>log('TX: '+e.message,'err'));
+  setTimeout(()=>{if(pk.B)pk.B.noteOff(ch,ki).catch(()=>{});},Math.max(80,durMs-20));
 }
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -958,7 +913,7 @@ function startTempoLoop() {
   const interval = Math.round(60000 / bpm / 4);
   tempoStep = 0;
   tempoTimer = setInterval(() => {
-    if(chars.A || chars.B) return;
+    if(pk.A || pk.B) return;
     const step = tempoStep;
     tempoStep = (tempoStep + 1) % 16;
     for(let p=0;p<4;p++){
@@ -974,10 +929,10 @@ function onBarSync(step) {
     if(drumPat[p][step]){ playDrum(p); flashDrumStep(step,p); }
   }
   // At bar boundary (step=0), resync B by stop→start
-  if(step === 0 && chars.B) {
-    chars.B.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,CC_PLAY,0])).catch(()=>{});
+  if(step === 0 && pk.B) {
+    pk.B.sendCC(CC_PLAY,0).catch(()=>{});
     setTimeout(()=>{
-      if(chars.B) chars.B.writeValueWithoutResponse(new Uint8Array([0x80,0x80,0xB0,CC_PLAY,127])).catch(()=>{});
+      if(pk.B) pk.B.sendCC(CC_PLAY,127).catch(()=>{});
     }, 10);
   }
 }
@@ -1008,9 +963,8 @@ startTempoLoop();
 function sendBPM(val) {
   bpm = Math.max(60, Math.min(187, val));
   const ccVal = Math.min(127, bpm - 60);
-  const pkt = new Uint8Array([0x80, 0x80, 0xB0, CC_BPM, ccVal]);
-  if(chars.A) chars.A.writeValueWithoutResponse(pkt).catch(e=>log('BPM A err: '+e.message,'err'));
-  if(chars.B) chars.B.writeValueWithoutResponse(pkt).catch(e=>log('BPM B err: '+e.message,'err'));
+  if(pk.A) pk.A.sendCC(CC_BPM,ccVal).catch(e=>log('BPM A err: '+e.message,'err'));
+  if(pk.B) pk.B.sendCC(CC_BPM,ccVal).catch(e=>log('BPM B err: '+e.message,'err'));
   log(`BPM → ${bpm}`,'info');
 }
 

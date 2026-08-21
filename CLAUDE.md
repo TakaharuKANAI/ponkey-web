@@ -4,6 +4,10 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 
 ## 構成
 
+- `ponkey.js` — **全アプリ共通の BLE クライアント**（2026-08-22 に全アプリの BLE 層をこれ経由に移行済み。
+  未移行は lesson.html のみ）。**正本は ponkey-midi リポジトリの `web/ponkey.js`** — 修正は必ず正本に
+  入れてからここへコピーで同期する（直接編集しない）。プロトコル仕様は ponkey-midi の
+  `PONKEY_CONTROL_PROTOCOL.md`。
 - `index.html` — アプリハブ（PONKEY Web Apps）。各アプリへの入口
 - `lesson.html` — LESSON（使い方・作り方・しくみの3レッスン。ライトテーマ）。**このファイルが唯一の正**。
   残課題・設計メモは `PONKEY_LESSON_課題.md`。

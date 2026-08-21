@@ -209,15 +209,13 @@
   </div>
 </div>
 
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <script src="groove-engine.js"></script>
 <script>
 // ============================================================ 定数 (ファーム一致)
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
-const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
-const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
-const SONG_MAGIC=0x5A, S_ENTER=0x01, S_EXIT=0x02, S_LOAD_SLOT=0x04, S_SET_SEQ=0x05, S_SET_MUTE=0x06;
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;  // v4.5.63 グルーブ
-const DBG_CMD_MAGIC=0xA6, DBG_LOG_ENABLE_ALL=0x01, DBG_PKT_MAGIC=0xA5, CAT_SONG=0x09, EV_SLOT_EDIT=0x08;
+const CAT_SONG=0x09, EV_SLOT_EDIT=0x08;
 const DEVICE_SLOTS=16, LIB_MAX=160, PAGE_SIZE=16;
 const PARTS=['KICK','SNARE','HAT','TOM','BASS','LEAD','PAD'], SYNTH=['BASS','LEAD','PAD'];
 // ファームのパート色(KICK赤/SNARE緑/HAT青/TOMマゼンタ/BASSシアン/LEAD黄/PADオレンジ)を
@@ -227,7 +225,7 @@ const PART_COLORS=['#c96a5e','#7fa06b','#5f8bbf','#a673a8','#5fb0b0','#c2a85a','
 // ============================================================ 状態
 const store={ loops:[], seq:[], seqCap:8, mute:0, solo:0, bpm:120 };
 let sel=0, page=0, synthTab=0;
-let dev,gatt,midiCh,cmdCh,logCh, connected=false;
+let pk=null, connected=false;
 const chunkAsm={}; let slotMap=[];
 const LS='ponkey_song_v02';
 function emptyLoop(){return{name:'',loopLen:64,oct:[0,0,0],drums:[],synth:[]};}
@@ -241,27 +239,24 @@ function log(m){const e=document.getElementById('log');e.innerHTML+=`[${new Date
 function loopHasData(L){return L&&(L.drums.length||L.synth.length);}
 function curLoop(){if(!store.loops[sel])store.loops[sel]=emptyLoop();return store.loops[sel];}
 
-// ============================================================ BLE
+// ============================================================ BLE (ponkey.js 経由)
 document.getElementById('btnConnect').onclick=async()=>{ try{
   log('デバイス選択…');
-  dev=await navigator.bluetooth.requestDevice({filters:[{name:'PONKEY_PT2'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
-  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断 (本体は自動でソングモードを退場し、切断時のスロットを単体ループ継続)');});
-  gatt=await dev.gatt.connect();
-  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-  const ds=await gatt.getPrimaryService(DBG_SERVICE);
-  cmdCh=await ds.getCharacteristic(DBG_CMD); logCh=await ds.getCharacteristic(DBG_LOG);
-  await logCh.startNotifications(); logCh.addEventListener('characteristicvaluechanged',onLog);
-  await writeCmd([DBG_CMD_MAGIC,DBG_LOG_ENABLE_ALL,0x00]);
+  pk=new Ponkey();
+  pk.on('disconnect',()=>{setConn(false);log('切断 (本体は自動でソングモードを退場し、切断時のスロットを単体ループ継続)');});
+  pk.on('dbg',onDbg);
+  await pk.connect({namePrefix:'PONKEY_PT2',debug:true});
+  if(!pk.dbgCmdChar) throw 'デバッグサービスに接続できません';
   setConn(true); log('接続完了');
   await autoStart();          // 接続したら 自動で 入場→同期→再生
 }catch(e){log('接続エラー: '+e);} };
 // 接続時のシームレス起動: 入場 → スロット/シーケンス送信 → BPM → 再生。
 async function autoStart(){
   try{
-    await writeCmd([SONG_MAGIC,S_ENTER,0x00]); log('自動入場');
+    await pk.songEnter(); log('自動入場');
     await fullSync();
-    await writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,store.bpm-60)));
-    await writeMIDI(0xB0,CC_PLAY_STOP,1); log('自動再生');
+    await pk.sendCC(CC_BPM,Math.max(0,Math.min(127,store.bpm-60)));
+    await pk.sendCC(CC_PLAY_STOP,1); log('自動再生');
   }catch(e){log('自動起動エラー: '+e);}
 }
 function setConn(c){connected=c;
@@ -270,11 +265,6 @@ function setConn(c){connected=c;
   ['btnEnter','btnExit','btnPlay','btnStop'].forEach(id=>document.getElementById(id).disabled=!c);
   setSync(c?'待機':'—');
 }
-async function writeCmd(b){if(!cmdCh)return;const u=Uint8Array.from(b);
-  try{cmdCh.writeValueWithoutResponse?await cmdCh.writeValueWithoutResponse(u):await cmdCh.writeValue(u);}
-  catch(e){try{await cmdCh.writeValue(u);}catch(_){}}}
-async function writeMIDI(s,d1,d2){if(!midiCh)return;const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
-  try{await midiCh.writeValueWithoutResponse(u);}catch(e){try{await midiCh.writeValue(u);}catch(_){}}}
 function setSync(t){document.getElementById('syncPill').textContent='自動同期: '+t;}
 
 // ============================================================ エンコード
@@ -291,31 +281,33 @@ async function fullSync(){
   if(!connected){return;}
   const distinct=[...new Set(store.seq)]; const use=distinct.slice(0,DEVICE_SLOTS);
   slotMap=use.slice(); const l2s=new Map(use.map((li,si)=>[li,si]));
-  for(let si=0;si<use.length;si++) await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,si&0xf,...encodeLoop(store.loops[use[si]])]);
   const seqSlots=store.seq.map(li=>l2s.has(li)?l2s.get(li):0);
-  if(seqSlots.length) await writeCmd([SONG_MAGIC,S_SET_SEQ,0x00,seqSlots.length&0xff,...seqSlots.map(s=>s&0xf)]);
-  await writeCmd([SONG_MAGIC,S_SET_MUTE,0x00,store.mute&0x7f,store.solo&0x7f]);
+  try{
+    for(let si=0;si<use.length;si++) await pk.loadSlot(si,encodeLoop(store.loops[use[si]]));
+    if(seqSlots.length) await pk.setSequence(seqSlots);
+    await pk.setMute(store.mute,store.solo);
+  }catch(e){log('同期エラー: '+e);}
   setSync(`✓ ${use.length}ループ/${seqSlots.length}小節`+(distinct.length>DEVICE_SLOTS?' ⚠16超':''));
 }
 // 1ループだけの軽量プッシュ (編集中ループが本体に乗っていれば)
 function pushLoop(li){ if(!connected)return; const si=slotMap.indexOf(li); if(si<0){ scheduleSync(); return; }
   clearTimeout(loopPushTimer); loopPushTimer=setTimeout(async()=>{ setSync('送信…');
-    await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,si&0xf,...encodeLoop(store.loops[li])]); setSync('✓ ループ更新'); },150); }
-async function sendMute(){ if(connected) await writeCmd([SONG_MAGIC,S_SET_MUTE,0x00,store.mute&0x7f,store.solo&0x7f]); }
+    await pk.loadSlot(si,encodeLoop(store.loops[li])).catch(()=>{}); setSync('✓ ループ更新'); },150); }
+async function sendMute(){ if(connected) await pk.setMute(store.mute,store.solo).catch(()=>{}); }
 
 // ============================================================ トランスポート
-document.getElementById('btnEnter').onclick=async()=>{await writeCmd([SONG_MAGIC,S_ENTER,0x00]);log('入場');await fullSync();};
-document.getElementById('btnExit').onclick=()=>{writeCmd([SONG_MAGIC,S_EXIT,0x00]);log('退場');};
-document.getElementById('btnPlay').onclick=()=>writeMIDI(0xB0,CC_PLAY_STOP,1);
-document.getElementById('btnStop').onclick=()=>writeMIDI(0xB0,CC_PLAY_STOP,0);
+document.getElementById('btnEnter').onclick=async()=>{await pk.songEnter().catch(()=>{});log('入場');await fullSync();};
+document.getElementById('btnExit').onclick=()=>{pk.songExit().catch(()=>{});log('退場');};
+document.getElementById('btnPlay').onclick=()=>pk.sendCC(CC_PLAY_STOP,1).catch(()=>{});
+document.getElementById('btnStop').onclick=()=>pk.sendCC(CC_PLAY_STOP,0).catch(()=>{});
 const bpm=document.getElementById('bpm');
 bpm.oninput=()=>{document.getElementById('bpmv').textContent=bpm.value;store.bpm=+bpm.value;save();};
-bpm.onchange=()=>writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,+bpm.value-60)));
+bpm.onchange=()=>{if(connected)pk.sendCC(CC_BPM,Math.max(0,Math.min(127,+bpm.value-60))).catch(()=>{});};
 
 // ============================================================ 受信 (本体→アプリ 後勝ち)
-function onLog(e){const b=new Uint8Array(e.target.value.buffer);
-  if(b.length<11||b[0]!==DBG_PKT_MAGIC)return; if(b[8]!==CAT_SONG||b[9]!==EV_SLOT_EDIT)return;
-  const dl=b[10],data=b.slice(11,11+dl); if(dl===0){log('⚠ 本体編集を検知も大きすぎて送れず');return;}
+function onDbg({cat,ev,data}){
+  if(cat!==CAT_SONG||ev!==EV_SLOT_EDIT)return;
+  if(data.length===0){log('⚠ 本体編集を検知も大きすぎて送れず');return;}
   const gen=data[0],idx=data[1],cnt=data[2],part=data.slice(3);
   let a=chunkAsm[gen]; if(!a||a.cnt!==cnt){a={cnt,parts:{}};chunkAsm[gen]=a;} a.parts[idx]=part;
   if(Object.keys(a.parts).length<cnt)return;

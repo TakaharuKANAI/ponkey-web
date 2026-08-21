@@ -54,6 +54,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=DotGothic16&display=swap" rel="stylesheet">
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <style>
 :root{
   --bg:#000000;--panel:#191512;--line:#332b24;
@@ -305,8 +307,7 @@ h1 .x{color:var(--human)}
    定数・マッピング
    ════════════════════════════════════════════ */
 const VERSION='3.2.0';
-const BLE_SERVICE='03b80e5a-ede8-4b33-a751-6ce34ec4c700';
-const BLE_CHAR   ='7772e5db-3868-4112-a1a9-f2669d106bf3';
+// BLE は全て ponkey.js 経由 (再接続も pk.reattach())
 const CC_STATE_SYNC=0x51,CC_HEARTBEAT=0x52,CC_BAR_SYNC=0x54,CC_SAM_MUTE=0x55;
 const NOTE_NORMAL=[69,71,72,74,62,64,65,67,55,57,59,60,48,50,52,53];
 const NOTE_BASS  =[45,47,48,50,38,40,41,43,31,33,35,36,24,26,28,29];
@@ -800,7 +801,7 @@ $('sCVoice').onchange=e=>Drummer.voice=e.target.checked;
    BLE (v2.0.1 自動再接続を継承 + SAMミュート制御)
    ════════════════════════════════════════════ */
 const BLE={
-  dev:{A:null,B:null,C:null},char:{A:null,B:null,C:null},
+  pk:{A:null,B:null,C:null},   // slot → Ponkey インスタンス
   q:{A:Promise.resolve(),B:Promise.resolve(),C:Promise.resolve()},
   wanted:{A:false,B:false,C:false},retryN:{A:0,B:0,C:0},retryT:{A:null,B:null,C:null},
 
@@ -809,12 +810,12 @@ const BLE={
     if(this.wanted[slot]){
       this.wanted[slot]=false;
       clearTimeout(this.retryT[slot]);
-      if(slot==='A'&&this.char.A){      // 切る前にSAMミュート解除 (v33作法)
+      if(slot==='A'&&this.pk.A&&this.pk.A.midiChar){  // 切る前にSAMミュート解除 (v33作法)
         this.send('A',[0xB0,CC_SAM_MUTE,0]);
         await new Promise(r=>setTimeout(r,120));
       }
-      try{this.dev[slot]?.gatt.disconnect();}catch(e){}
-      this.dev[slot]=null;this.char[slot]=null;
+      try{this.pk[slot]?.disconnect();}catch(e){}
+      this.pk[slot]=null;
       btn.textContent='つなぐ';btn.classList.remove('on');
       log(`${slot} disconnected (manual)`);
       return;
@@ -823,31 +824,33 @@ const BLE={
     btn.disabled=true;
     try{
       log(`scan ${slot}…`);
-      const device=await navigator.bluetooth.requestDevice({
-        filters:[{services:[BLE_SERVICE]}],optionalServices:[BLE_SERVICE]});
-      device.addEventListener('gattserverdisconnected',()=>this.onDisconnect(slot));
-      this.dev[slot]=device;
+      const p=new Ponkey();
+      p.on('disconnect',()=>this.onDisconnect(slot));
+      if(slot==='A'){
+        p.on('cc',  e=>onCCFromA(e.cc,e.val));
+        p.on('note',e=>onNoteFromA(e));
+      }                                    // B/C は受信読み捨て
+      this.pk[slot]=p;
       this.wanted[slot]=true;
-      await this.attach(slot);
-      log(`${slot} "${device.name||'PONKEY'}" connected`,'ok');
+      await p.connect({debug:false});
+      this.afterAttach(slot);
+      log(`${slot} "${p.device.name||'PONKEY'}" connected`,'ok');
     }catch(e){
       log(`connect ${slot}: ${e.message}`,'err');
-      this.wanted[slot]=false;this.dev[slot]=null;
+      this.wanted[slot]=false;this.pk[slot]=null;
       btn.textContent='つなぐ';btn.classList.remove('on');
     }
     btn.disabled=false;
   },
 
+  // 再接続 (自動リトライ)。チューザーを出さない再バインドは ponkey.js の reattach() が担う
   async attach(slot){
-    const device=this.dev[slot];
-    const server=await device.gatt.connect();
-    const service=await server.getPrimaryService(BLE_SERVICE);
-    const char=await service.getCharacteristic(BLE_CHAR);
-    this.char[slot]=char;
+    await this.pk[slot].reattach();
+    this.afterAttach(slot);
+  },
+
+  afterAttach(slot){
     this.q[slot]=Promise.resolve();
-    await char.startNotifications();
-    char.addEventListener('characteristicvaluechanged',
-      slot==='A'?e=>onMidiFromA(e):()=>{});  // B/C は受信読み捨て
     this.retryN[slot]=0;
     setTimeout(()=>{
       this.send(slot,[0xB0,CC_STATE_SYNC,127]);
@@ -859,10 +862,10 @@ const BLE={
   },
 
   onDisconnect(slot){
-    this.char[slot]=null;
+    if(this.pk[slot])this.pk[slot].midiChar=null;   // 送信を止める (再attachで復活)
     const btn=$('btn'+slot);
     if(!this.wanted[slot]){
-      this.dev[slot]=null;
+      this.pk[slot]=null;
       btn.textContent='つなぐ';btn.classList.remove('on');
       if(window.alienSetConnected)window.alienSetConnected(slot,true);   // デモは続行 → エイリアン
       return;
@@ -884,37 +887,18 @@ const BLE={
   },
 
   send(slot,bytes){
-    const c=this.char[slot];if(!c)return;
-    const pkt=new Uint8Array([0x80,0x80,...bytes]);
+    const p=this.pk[slot];if(!p||!p.midiChar)return;
     this.q[slot]=this.q[slot]
-      .then(()=>c.writeValueWithoutResponse(pkt))
+      .then(()=>p.sendMIDI(bytes[0],bytes[1],bytes[2]))
       .then(()=>new Promise(r=>setTimeout(r,12)))
       .catch(e=>log(`TX ${slot}: ${e.message}`,'err'));
   }
 };
 // モードのじゆうON = AのSAMをミュートし、Aの声もアプリが合成する
 function applyModalMute(){
-  if(!BLE.char.A)return;
+  if(!BLE.pk.A||!BLE.pk.A.midiChar)return;
   BLE.send('A',[0xB0,CC_SAM_MUTE,cfg.modal?127:0]);
   log('A SAM '+(cfg.modal?'muted (modal freedom ON)':'unmuted'),'tx');
-}
-
-function parseBLEMidi(raw){
-  const m=[];
-  if(raw.length<3)return m;
-  if(raw.length===5&&(raw[2]&0x80)&&raw[2]<0xF0&&!(raw[3]&0x80)){m.push([raw[2],raw[3],raw[4]]);return m;}
-  let i=1,run=0;
-  while(i<raw.length){
-    if(!(raw[i]&0x80)){i++;continue;}
-    i++;if(i>=raw.length)break;
-    if((raw[i]&0x80)&&raw[i]<0xF0){run=raw[i];i++;}
-    else if(raw[i]>=0xF0){i++;continue;}
-    if(!run)continue;
-    const cmd=run&0xF0,need=(cmd===0xC0||cmd===0xD0)?1:2,dd=[];
-    for(let n=0;n<need&&i<raw.length&&!(raw[i]&0x80);n++)dd.push(raw[i++]);
-    if(dd.length>=1){while(dd.length<2)dd.push(0);m.push([run,dd[0],dd[1]]);}
-  }
-  return m;
 }
 
 /* ════════════════════════════════════════════
@@ -933,24 +917,23 @@ function resolveDegree(pitch,ch){
   for(let d=0;d<16;d++){const e=Math.abs(lad[d]-p);if(e<bd){bd=e;best=d;}}
   return{deg:best,fam};
 }
-function onMidiFromA(ev){
-  const raw=[];for(let i=0;i<ev.target.value.byteLength;i++)raw.push(ev.target.value.getUint8(i));
-  for(const[st,d1,d2]of parseBLEMidi(raw)){
-    const cmd=st&0xF0,ch=st&0x0F;
-    if(cmd===0xB0){if(d1!==CC_HEARTBEAT&&d1!==CC_BAR_SYNC)log(`A CC ${d1.toString(16)}=${d2}`,'tx');continue;}
-    if(ch===9)continue;
-    if(cmd===0x90&&d2>0){
-      if(!SYNTH_CH.has(ch)&&d1>=16)continue;
-      const{deg,fam}=resolveDegree(d1,ch);
-      lastFamily=fam;noteOnAt[d1]=performance.now();
-      // モードのじゆうON: AのSAMは黙っているのでアプリがAの声を出す
-      if(cfg.modal&&cfg.voice){initAudio();aVoice(modalPitch(deg,currentMode,fam));}
-      Listener.noteOn(deg);
-    }else if(cmd===0x80||(cmd===0x90&&d2===0)){
-      const t0=noteOnAt[d1];
-      if(t0)Listener.noteOff(performance.now()-t0);
-      delete noteOnAt[d1];
-    }
+function onCCFromA(d1,d2){
+  if(d1!==CC_HEARTBEAT&&d1!==CC_BAR_SYNC)log(`A CC ${d1.toString(16)}=${d2}`,'tx');
+}
+function onNoteFromA(e){
+  const{ch,note:d1,vel:d2}=e;
+  if(ch===9)return;
+  if(e.on){
+    if(!SYNTH_CH.has(ch)&&d1>=16)return;
+    const{deg,fam}=resolveDegree(d1,ch);
+    lastFamily=fam;noteOnAt[d1]=performance.now();
+    // モードのじゆうON: AのSAMは黙っているのでアプリがAの声を出す
+    if(cfg.modal&&cfg.voice){initAudio();aVoice(modalPitch(deg,currentMode,fam));}
+    Listener.noteOn(deg);
+  }else{
+    const t0=noteOnAt[d1];
+    if(t0)Listener.noteOff(performance.now()-t0);
+    delete noteOnAt[d1];
   }
 }
 

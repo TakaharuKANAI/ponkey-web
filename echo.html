@@ -164,16 +164,13 @@
   </div>
 </div>
 
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <script>
 // ============================================================ ファーム一致の定数
 // 出典: ponkey-midi/ponkey-firmware/PONKEY_PT2_v4_5_34/(PONKEY_PT2_v4_5_34.ino / PONKEY_V2_DEBUG.h)
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
-const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
-const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
-const DBG_CMD_MAGIC=0xA6, CMD_LOG_DISABLE_ALL=0x02, CMD_LOG_ENABLE_CAT=0x03;
-const DBG_PKT_MAGIC=0xA5, CAT_SONG=0x09;
+const CMD_LOG_DISABLE_CAT=0x04, CAT_SYSTEM=0x00, CAT_MODE=0x01, CAT_SONG=0x09;
 const EV_SLOT_EDIT=0x08, EV_SLOT_DUMP=0x09, EV_SONG_META=0x0A;
-const SONG_MAGIC=0x5A, S_ENTER=0x01, S_EXIT=0x02, S_LOAD_SLOT=0x04, S_SET_SEQ=0x05, S_DUMP=0x07;
 const DUMP_ALL=0xFE;                                    // 0xFE = 中身のある全スロット
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;
 const SLOT_FMT_V2=0xF2;                                 // serializeSlotV2 の形式識別
@@ -183,7 +180,7 @@ const ECHO_MAGIC=0xE1;                                  // 共有リンクの形
 const LS='ponkey_echo_v01';
 
 // ============================================================ 状態
-let dev,gatt,midiCh,cmdCh,logCh,connected=false;
+let pk=null,connected=false;
 // deleted は「消した id → 消した時刻」の墓標。これが無いと、消した記録が次の同期で Gist から蘇る。
 let store={entries:[],lastExport:0,deleted:{}};
 let capture=null;                                       // 取り込み中/取り込み済みの内容
@@ -200,16 +197,14 @@ function load(){try{const o=JSON.parse(localStorage.getItem(LS));
 // ============================================================ BLE
 document.getElementById('btnConnect').onclick=async()=>{ try{
   log('デバイス選択…');
-  dev=await navigator.bluetooth.requestDevice({filters:[{name:'PONKEY_PT2'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
-  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);log('切断');});
-  gatt=await dev.gatt.connect();
-  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-  const ds=await gatt.getPrimaryService(DBG_SERVICE);
-  cmdCh=await ds.getCharacteristic(DBG_CMD); logCh=await ds.getCharacteristic(DBG_LOG);
-  await logCh.startNotifications(); logCh.addEventListener('characteristicvaluechanged',onLog);
+  pk=new Ponkey();
+  pk.on('disconnect',()=>{setConn(false);log('切断');});
+  pk.on('dbg',onLog);
+  await pk.connect({namePrefix:'PONKEY_PT2'});
+  if(!pk.dbgCmdChar)throw new Error('デバッグサービスが見つかりません');
   // SONG カテゴリだけ通す。全カテゴリを開けるとダンプのチャンクが他のログに押し出される。
-  await writeCmd([DBG_CMD_MAGIC,CMD_LOG_DISABLE_ALL,0x00]);
-  await writeCmd([DBG_CMD_MAGIC,CMD_LOG_ENABLE_CAT,0x01,CAT_SONG]);
+  await pk.dbgRaw(CMD_LOG_DISABLE_CAT,[CAT_SYSTEM]).catch(()=>{});
+  await pk.dbgRaw(CMD_LOG_DISABLE_CAT,[CAT_MODE]).catch(()=>{});
   setConn(true); log('接続完了 (SONG ログのみ有効化)');
 }catch(e){log('接続エラー: '+e);} };
 
@@ -221,17 +216,10 @@ function setConn(c){connected=c;
   renderTimeline();                                     // 「本体へ戻す」の可否が変わる
 }
 function setDirty(d){document.getElementById('dirty').style.display=d?'':'none';}
-async function writeCmd(b){if(!cmdCh)return;const u=Uint8Array.from(b);
-  try{cmdCh.writeValueWithoutResponse?await cmdCh.writeValueWithoutResponse(u):await cmdCh.writeValue(u);}
-  catch(e){try{await cmdCh.writeValue(u);}catch(_){}}}
-async function writeMIDI(s,d1,d2){if(!midiCh)return;const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
-  try{await midiCh.writeValueWithoutResponse(u);}catch(e){try{await midiCh.writeValue(u);}catch(_){}}}
 
 // ============================================================ 受信
-function onLog(e){
-  const b=new Uint8Array(e.target.value.buffer);
-  if(b.length<11||b[0]!==DBG_PKT_MAGIC||b[8]!==CAT_SONG)return;
-  const ev=b[9], dl=b[10], data=b.slice(11,11+dl);
+function onLog({cat,ev,data}){
+  if(cat!==CAT_SONG)return;
   if(ev===EV_SLOT_EDIT){ setDirty(true); return; }       // 本体側で編集された合図(中身は見ない)
   if(ev===EV_SONG_META)  return onMeta(data);
   if(ev===EV_SLOT_DUMP)  return onSlotDump(data);
@@ -293,7 +281,7 @@ document.getElementById('btnCapture').onclick=async()=>{
   dumpAsm={}; dumpPending={meta:null,expect:null,slots:[]};
   capture=null; renderSlots(); setCapUI(false);
   log('読み出し要求を送信…');
-  await writeCmd([SONG_MAGIC,S_DUMP,0x00,DUMP_ALL]);
+  await pk.dumpSlot(DUMP_ALL).catch(()=>{});
   clearTimeout(dumpTimer);
   dumpTimer=setTimeout(()=>finishDump('タイムアウト(届いた分だけ取り込みました)'),5000);
 };
@@ -421,7 +409,7 @@ async function sendToDevice(e){
   const slots=e.data.slots;
   if(!confirm(`本体のスロット ${slots.map(s=>s.slot+1).join(',')} を、この記録で上書きします。よろしいですか。`))return;
   let lostDrum=0,lostLayer=0;
-  await writeCmd([SONG_MAGIC,S_ENTER,0x00]);
+  await pk.songEnter().catch(()=>{});
   for(const s of slots){
     const body=[s.loopLen||MAX_SUBSTEPS,s.oct[0]&0xff,s.oct[1]&0xff,s.oct[2]&0xff];
     const dr=[];
@@ -438,17 +426,17 @@ async function sendToDevice(e){
       sy.push([((l&0xf)<<4)|(k&0xf),sub&0x3f,dur]);
     }
     body.push(sy.length&0xff); for(const n of sy) body.push(n[0],n[1],n[2]);
-    await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,s.slot&0xf,...body]);
+    await pk.loadSlot(s.slot,body).catch(()=>{});
   }
   const seq=slots.map(s=>s.slot&0xf);
-  await writeCmd([SONG_MAGIC,S_SET_SEQ,0x00,seq.length&0xff,...seq]);
+  await pk.setSequence(seq).catch(()=>{});
   const m=e.data.meta;
   if(m){
-    await writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,m.bpm-60)));
-    await writeMIDI(0xB0,CC_GROOVE_SWING,m.swing&0x7f);
-    await writeMIDI(0xB0,CC_GROOVE_ACCENT,m.accent&0x7f);
+    await pk.sendCC(CC_BPM,Math.max(0,Math.min(127,m.bpm-60))).catch(()=>{});
+    await pk.sendCC(CC_GROOVE_SWING,m.swing&0x7f).catch(()=>{});
+    await pk.sendCC(CC_GROOVE_ACCENT,m.accent&0x7f).catch(()=>{});
   }
-  await writeMIDI(0xB0,CC_PLAY_STOP,1);
+  await pk.sendCC(CC_PLAY_STOP,1).catch(()=>{});
   let msg=`本体へ戻しました (${slots.length}スロット)`;
   if(lostDrum||lostLayer){
     msg+=' ⚠ ';

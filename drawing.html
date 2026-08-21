@@ -94,11 +94,12 @@
 </div>
 </div>
 
+<script src="./ponkey.js"></script>
 <script>
 // ============================================================ 定数 (ファーム PT2 v4.5.x)
 // BLE NoteOn(0-15) → 本体はその鍵のソレノイドを叩き LED を光らせる (録音も音源も動かない、副作用なし)。
 // CC 0-6 → パート選択 (P1〜P7 を押すのと同じ)。LED の色相がそのパートの色になる。
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+// BLE 層は ponkey.js (v4.5.73 プロトコル) 経由
 // パート色。色相はファームの PART_BASE_HUE と同じ (KICK 11 / SNARE 108 / HAT 220 / TOM 300 / BASS 176 / LEAD 58 / PAD 265)
 // voice = その色でなぞったときに鳴る内蔵音源 (SAM2695, GM プログラム番号 0 始まり)。どれもアンビエント寄りのパッド/FX
 const PARTS=[
@@ -139,7 +140,7 @@ function cellNote(k){const idx=(3-Math.floor(k/4))*4+(k%4);return NOTE_BASE+Math
 const RELEASE_MS=650;    // マスを離れてから NoteOff するまで (隣どうしが重なって和音になる)
 
 // ============================================================ 状態
-let midiCh=null, device=null;
+let pk=null;
 let part=5;              // 現在の色 (index into PARTS)。既定 LEAD=黄
 let brush=14, repeat=true, fade=false, sound=true;
 const paintLevel=new Uint8Array(16);   // cell → 本体 LED の明るさ 0-7 (こちらが正、本体へ差分送信)
@@ -149,37 +150,27 @@ const flash=new Float64Array(16);  // cell → 光り始めた時刻
 let drawn=false;
 
 // ============================================================ BLE
-function writeMIDI(s,d1,d2){ if(!midiCh)return;
-  const b=Uint8Array.from([0x80,0x80,s,d1,d2]);
-  return (midiCh.writeValueWithoutResponse?midiCh.writeValueWithoutResponse(b):midiCh.writeValue(b)).catch(()=>{});}
+function writeMIDI(s,d1,d2){ if(!pk||!pk.midiChar)return;
+  return pk.sendMIDI(s,d1,d2).catch(()=>{});}
 function setConn(ok){const e=document.getElementById('conn');e.className='pill '+(ok?'ok':'ng');e.textContent=ok?'接続中':'未接続';
   document.getElementById('btnConnect').textContent=ok?'切断':'接続';}
 document.getElementById('btnConnect').onclick=async()=>{
-  if(device){try{device.gatt.disconnect();}catch(_){}return;}
+  if(pk){try{pk.disconnect();}catch(_){}return;}
   try{
-    const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
-    const gatt=await dev.gatt.connect();
-    const ch=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-    dev.addEventListener('gattserverdisconnected',()=>{device=null;midiCh=null;setConn(false);});
-    await ch.startNotifications();
-    ch.addEventListener('characteristicvaluechanged',onMidi);
-    device=dev; midiCh=ch; setConn(true);
+    const p=new Ponkey();
+    p.on('disconnect',()=>{pk=null;setConn(false);});
+    p.on('note',({on,ch,note})=>{
+      if(!on)return;                                   // 本体の鍵が押された → そのマスに今の色で点を打つ
+      const k=lookupKey(ch,note);
+      if(k!=null){splash(k);flash[k]=performance.now();setPaint(k,7);}
+    });
+    await p.connect({debug:false});                    // MIDI のみ
+    pk=p; setConn(true);
     writeMIDI(0xB0,PARTS[part].cc,127);      // 本体の色を今のパレットに揃える
     for(let k=0;k<16;k++)if(paintLevel[k])writeMIDI(0xB0,CC_LED_PAINT,(k<<3)|paintLevel[k]);   // 再接続: いまの絵を送り直す
     setupSound();
   }catch(e){console.warn(e);}
 };
-function onMidi(ev){
-  const b=new Uint8Array(ev.target.value.buffer);
-  for(let i=0;i+2<b.length;i++){
-    const st=b[i];
-    if((st&0xF0)===0x90&&b[i+1]<0x80&&b[i+2]>0){       // 本体の鍵が押された → そのマスに今の色で点を打つ
-      const k=lookupKey(st&0x0F,b[i+1]);
-      if(k!=null){splash(k);flash[k]=performance.now();setPaint(k,7);}
-      i+=2;
-    }
-  }
-}
 
 // ============================================================ 出口: 鍵を叩く
 function fire(k){

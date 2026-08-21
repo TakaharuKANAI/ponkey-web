@@ -124,16 +124,15 @@
     <div class="console" id="log"></div>
   </div>
 
+<script src="./ponkey.js"></script>
 <script>
 // ============================================================ 定数 (ファーム PT2 v4.5.34 一致)
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
-const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001", DBG_CMD="504f4e4b-4559-4442-5047-445443000003";
-const SONG_MAGIC=0x5A, S_ENTER=0x01, S_SET_SEQ=0x05;
+// BLE 層は ponkey.js (v4.5.73 プロトコル) 経由
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54;
 const RAIL=16;                       // レールのコマ数 = 本体スロット数
 
 // ============================================================ 状態
-let devices=[];                      // {device,midiCh,cmdCh,name}  devices[0]=P1
+let devices=[];                      // {pk,name}  devices[0]=P1
 let N=4;                             // ループ数 (1〜16)
 let cur=0;                           // 現在ループ (0-based)
 let order=[0,1,2,3], pos=0;          // 本体へ送った再生順 (回転順) と、その中の現在位置
@@ -145,33 +144,25 @@ function save(){try{localStorage.setItem(LS,JSON.stringify({n:N}));}catch(e){}}
 function log(m){const e=document.getElementById('log');e.innerHTML+=`> ${m}<br>`;e.scrollTop=e.scrollHeight;}
 
 // ============================================================ BLE
-function midiBytes(s,d1,d2){return Uint8Array.from([0x80,0x80,s,d1,d2]);}
-function writeMIDI(e,s,d1,d2){const b=midiBytes(s,d1,d2);
-  return (e.midiCh.writeValueWithoutResponse?e.midiCh.writeValueWithoutResponse(b):e.midiCh.writeValue(b)).catch(()=>{});}
-function writeCmd(e,bytes){if(!e.cmdCh)return Promise.resolve();const b=Uint8Array.from(bytes);
-  return (e.cmdCh.writeValueWithoutResponse?e.cmdCh.writeValueWithoutResponse(b):e.cmdCh.writeValue(b)).catch(()=>{});}
-function midiAll(s,d1,d2){return Promise.all(devices.map(e=>writeMIDI(e,s,d1,d2)));}
-function cmdAll(bytes){return Promise.all(devices.map(e=>writeCmd(e,bytes)));}
+function midiAll(cc,val){return Promise.all(devices.map(e=>e.pk.sendCC(cc,val).catch(()=>{})));}
+function seqAll(ids){return Promise.all(devices.map(e=>e.pk.dbgCmdChar?e.pk.setSequence(ids).catch(()=>{}):Promise.resolve()));}
 
 document.getElementById('btnConnect').onclick=async()=>{ try{
   log('スキャン…');
-  const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
-  const gatt=await dev.gatt.connect();
-  const midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-  let cmdCh=null;
-  try{cmdCh=await(await gatt.getPrimaryService(DBG_SERVICE)).getCharacteristic(DBG_CMD);}
-  catch(e){log('⚠ ソングモード非対応ファーム: ループ数変更は効きません ('+(dev.name||'')+')');}
-  const entry={device:dev,midiCh,cmdCh,name:dev.name||'PONKEY'};
-  dev.addEventListener('gattserverdisconnected',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();
+  const pk=new Ponkey();
+  const entry={pk,name:'PONKEY'};
+  pk.on('disconnect',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();
     log(entry.name+' 切断'+(devices.length?' (P1='+devices[0].name+')':''));});
-  await midiCh.startNotifications();
-  midiCh.addEventListener('characteristicvaluechanged',ev=>onMidi(entry,ev));
+  pk.on('cc',e=>onCC(entry,e));
+  await pk.connect({debug:true});
+  entry.name=pk.device.name||'PONKEY';
+  if(!pk.dbgCmdChar)log('⚠ ソングモード非対応ファーム: ループ数変更は効きません ('+entry.name+')');
   devices.push(entry); renderPlayers();
   log('P'+devices.length+' 接続: '+entry.name);
-  if(entry.cmdCh){
-    await writeCmd(entry,[SONG_MAGIC,S_ENTER,0x00]);            // 入場 (本体はいったん停止する)
-    await writeCmd(entry,[SONG_MAGIC,S_SET_SEQ,0x00,order.length,...order]);
-    await writeMIDI(entry,0xB0,CC_PLAY_STOP,1);                 // すぐ再生再開
+  if(pk.dbgCmdChar){
+    await pk.songEnter().catch(()=>{});                         // 入場 (本体はいったん停止する)
+    await pk.setSequence(order).catch(()=>{});
+    await pk.sendCC(CC_PLAY_STOP,1).catch(()=>{});              // すぐ再生再開
     log('入場 → シーケンス'+order.length+'ループ → 再生');
   }
 }catch(e){log('接続エラー: '+e);} };
@@ -183,7 +174,7 @@ function renderPlayers(){
   devices.forEach((e,i)=>{
     const b=document.createElement('span');b.className='pbadge';b.style.marginRight='6px';
     b.innerHTML=`P${i+1}<span class="x" title="切断">✕</span>`;
-    b.querySelector('.x').onclick=()=>{try{e.device.gatt.disconnect();}catch(_){}
+    b.querySelector('.x').onclick=()=>{try{e.pk.disconnect();}catch(_){}
       devices=devices.filter(x=>x!==e);renderPlayers();};
     el.appendChild(b);
   });
@@ -196,28 +187,24 @@ function renderPlayers(){
 function rotation(head){const a=[];for(let i=0;i<N;i++)a.push((head+i)%N);return a;}
 function sendSeq(head){
   cur=head; order=rotation(head); pos=0; render();
-  return cmdAll([SONG_MAGIC,S_SET_SEQ,0x00,order.length,...order]);
+  return seqAll(order);
 }
 // 📍ホールド: そのループ1つだけのシーケンスに差し替え → 本体はそこを繰り返す
 function sendHold(k){
   cur=k; order=[k]; pos=0; render();
-  return cmdAll([SONG_MAGIC,S_SET_SEQ,0x00,1,k]);
+  return seqAll([k]);
 }
 
-document.getElementById('btnPlay').onclick=()=>{midiAll(0xB0,CC_PLAY_STOP,1);log('play all');};
-document.getElementById('btnStop').onclick=()=>{midiAll(0xB0,CC_PLAY_STOP,0);prevStep=null;log('stop all');};
+document.getElementById('btnPlay').onclick=()=>{midiAll(CC_PLAY_STOP,1);log('play all');};
+document.getElementById('btnStop').onclick=()=>{midiAll(CC_PLAY_STOP,0);prevStep=null;log('stop all');};
 
 // ============================================================ 受信: P1 の再生位置と BPM
 // CC_BAR_SYNC: 毎ステップ通知。値が小さい方へ折り返したら小節 (=1ループ) の頭 → 次のループへ。
 // CC_BPM: 本体の接続時ステートシンクと Fn×P2 での変更時に届く (val+60=BPM)。
-function onMidi(entry,ev){
-  if(entry!==devices[0])return;                       // P1 のみに従属
-  const b=new Uint8Array(ev.target.value.buffer);
-  for(let i=0;i+2<b.length;i++){
-    if(b[i]!==0xB0||b[i+2]>=0x80)continue;
-    if(b[i+1]===CC_BAR_SYNC){onStep(b[i+2]);i+=2;}
-    else if(b[i+1]===CC_BPM){ccBpm=b[i+2]+60;setBpm(ccBpm);i+=2;}
-  }
+function onCC(entry,{cc,val,ch}){
+  if(entry!==devices[0]||ch!==0)return;               // P1 のみに従属
+  if(cc===CC_BAR_SYNC)onStep(val);
+  else if(cc===CC_BPM){ccBpm=val+60;setBpm(ccBpm);}
 }
 let ccBpm=null, stepMs=null, lastStepAt=null;
 function setBpm(v){document.getElementById('bpmv').textContent=v==null?'–':v;}

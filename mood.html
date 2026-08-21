@@ -254,12 +254,10 @@
   </div>
 </div>
 
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <script>
 // ════════════════════════════════════════════════ ファーム側の契約 (PT2 v4.5.x)
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
-const DBG_SERVICE="504f4e4b-4559-4442-5047-445342000001";
-const DBG_CMD="504f4e4b-4559-4442-5047-445443000003", DBG_LOG="504f4e4b-4559-4442-5047-445442000002";
-const SONG_MAGIC=0x5A, S_ENTER=0x01, S_EXIT=0x02, S_LOAD_SLOT=0x04, S_SET_SEQ=0x05, S_SET_MUTE=0x06;
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54, CC_SAM_MUTE=0x55;
 const STEPS=16, SUB=4;                 // 1小節16ステップ / 1ステップ=4サブステップ (QUANTIZE_RATIO)
 const LOOP_SUBSTEPS=STEPS*SUB;         // 64 = MAX_SUBSTEPS
@@ -352,7 +350,7 @@ function load(){ try{const o=JSON.parse(localStorage.getItem(LS)); if(o) Object.
   if(!SCALE_BY_ID[store.scale]) store.scale='majpenta';
 }
 let tab=1;                      // 表示中のパート (初期 LEAD)
-let dev,gatt,midiCh,cmdCh, connected=false, entered=false, playhead=-1;
+let pk=null, connected=false, entered=false, playhead=-1;
 function log(m){const e=document.getElementById('log');e.innerHTML+=`[${new Date().toLocaleTimeString()}] ${m}<br>`;e.scrollTop=e.scrollHeight;}
 
 // ════════════════════════════════════════════════ スケール判定
@@ -380,16 +378,14 @@ function snapAll(){
 // ════════════════════════════════════════════════ BLE
 document.getElementById('btnConnect').onclick=async()=>{ try{
   log('デバイス選択…');
-  dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE,DBG_SERVICE]});
-  dev.addEventListener('gattserverdisconnected',()=>{setConn(false);entered=false;playhead=-1;renderRoll();
+  pk=new Ponkey();
+  pk.on('disconnect',()=>{setConn(false);entered=false;playhead=-1;renderRoll();
     log('切断（本体は自動でソングモードを退場し、切断時のループをそのまま繰り返す）');});
-  gatt=await dev.gatt.connect();
-  midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-  await midiCh.startNotifications();
-  midiCh.addEventListener('characteristicvaluechanged',onMidi);
-  cmdCh=await(await gatt.getPrimaryService(DBG_SERVICE)).getCharacteristic(DBG_CMD);
-  setConn(true); log('接続完了: '+(dev.name||'PONKEY'));
-  await writeCmd([SONG_MAGIC,S_ENTER,0x00]); entered=true; log('ソングモードに入場');
+  pk.on('cc',onCC);
+  await pk.connect();
+  if(!pk.dbgCmdChar)throw new Error('デバッグサービスが見つかりません');
+  setConn(true); log('接続完了: '+(pk.device.name||'PONKEY'));
+  await pk.songEnter().catch(()=>{}); entered=true; log('ソングモードに入場');
   await sendBpm(); await sendSam(); await sendMute(); await sendSolPart(); await fullSync();
 }catch(e){ log('接続エラー: '+e); } };
 
@@ -399,19 +395,12 @@ function setConn(c){ connected=c;
   setSync(c?'待機':'—');
 }
 function setSync(t){ document.getElementById('syncPill').textContent='自動同期: '+t; }
-async function writeCmd(b){ if(!cmdCh)return; const u=Uint8Array.from(b);
-  try{ cmdCh.writeValueWithoutResponse ? await cmdCh.writeValueWithoutResponse(u) : await cmdCh.writeValue(u); }
-  catch(e){ try{ await cmdCh.writeValue(u); }catch(_){ } } }
-async function writeMIDI(s,d1,d2){ if(!midiCh)return; const u=Uint8Array.from([0x80,0x80,s,d1,d2]);
-  try{ await midiCh.writeValueWithoutResponse(u); }catch(e){ try{ await midiCh.writeValue(u); }catch(_){ } } }
 
 // 本体は小節内の位置を CC_BAR_SYNC で流してくる。再生ヘッドはそれに乗せる (アプリ側で数えない)。
-function onMidi(e){
-  const b=new Uint8Array(e.target.value.buffer);
-  for(let i=0;i+2<b.length;i++){
-    if(b[i]===0xB0 && b[i+1]===CC_BAR_SYNC){ const st=b[i+2]&0x0f;
-      if(st!==playhead){ playhead=st; paintHead(); flashStrikes(st); if(store.preview) previewStep(st); } i+=2; }
-  }
+function onCC(e){
+  if(e.ch!==0||e.cc!==CC_BAR_SYNC)return;
+  const st=e.val&0x0f;
+  if(st!==playhead){ playhead=st; paintHead(); flashStrikes(st); if(store.preview) previewStep(st); }
 }
 
 // ════════════════════════════════════════════════ 送信
@@ -441,22 +430,22 @@ function scheduleSync(){ save(); if(!connected)return; setSync('送信予約…'
 async function fullSync(){
   if(!connected||!entered)return;
   const {bytes,dropped}=encodeSlot();
-  await writeCmd([SONG_MAGIC,S_LOAD_SLOT,0x00,0x00,...bytes]);
-  await writeCmd([SONG_MAGIC,S_SET_SEQ,0x00,1,0]);
+  await pk.loadSlot(0,bytes).catch(()=>{});
+  await pk.setSequence([0]).catch(()=>{});
   setSync('✓ 送信ずみ'+(dropped?` ⚠${dropped}音は多すぎて送れず`:''));
   if(dropped) log(`⚠ ノートが多すぎます (${dropped}音を送れませんでした。上限 ${MAX_NOTES})`);
 }
-async function sendBpm(){ if(connected) await writeMIDI(0xB0,CC_BPM,Math.max(0,Math.min(127,store.bpm-60))); }
+async function sendBpm(){ if(connected) await pk.sendCC(CC_BPM,Math.max(0,Math.min(127,store.bpm-60))).catch(()=>{}); }
 // 音の ON/OFF。payload=[muteMask][soloMask] (bit0-3=ドラム, bit4-6=シンセ)。
 // ミュートされたパートは本体側で丸ごとスキップされるので、ソレノイドも動かなくなる。
 async function sendMute(){ if(!connected)return;
   let m=0; store.on.forEach((v,i)=>{ if(!v) m|=1<<PART_BIT[i]; });
-  await writeCmd([SONG_MAGIC,S_SET_MUTE,0x00,m&0x7f,0]); }
+  await pk.setMute(m&0x7f,0).catch(()=>{}); }
 // ソレノイドを動かすパートを本体に伝える (CC = パート番号)。本体で P5-P7 を押すのと同じ。
-async function sendSolPart(){ if(connected) await writeMIDI(0xB0,PART_BIT[store.solPart],127); }
-async function sendSam(){ if(connected) await writeMIDI(0xB0,CC_SAM_MUTE,store.sam?127:0); }
+async function sendSolPart(){ if(connected) await pk.sendCC(PART_BIT[store.solPart],127).catch(()=>{}); }
+async function sendSam(){ if(connected) await pk.sendCC(CC_SAM_MUTE,store.sam?127:0).catch(()=>{}); }
 // 鍵を1本その場で叩く。ノート番号 0-15 は本体が「鍵番号そのもの」として受ける。
-async function strike(k){ if(connected) await writeMIDI(0x90,k&0x0f,100); previewNote(pitchOfKey(k),.5,'triangle',.28); }
+async function strike(k){ if(connected) await pk.noteOn(0,k&0x0f,100).catch(()=>{}); previewNote(pitchOfKey(k),.5,'triangle',.28); }
 
 // ════════════════════════════════════════════════ 試聴 (アプリ内 WebAudio)
 // 鳴らすのは「ソレノイドが叩く生の鍵盤の音高」。本体の内蔵シンセの音高ではない。
@@ -710,13 +699,13 @@ document.getElementById('btnFit').onclick=()=>{
 document.getElementById('btnGen').onclick=()=>{ generate(tab); renderAll(); scheduleSync(); log(PARTS[tab]+' を作りなおしました'); };
 document.getElementById('btnGenAll').onclick=()=>{ for(let p=0;p<3;p++)generate(p); renderAll(); scheduleSync(); log('3パートを作りました'); };
 document.getElementById('btnClear').onclick=()=>{ store.pat[tab]=mkPat(); renderAll(); scheduleSync(); log(PARTS[tab]+' を消しました'); };
-document.getElementById('btnPlay').onclick=()=>{ actx(); writeMIDI(0xB0,CC_PLAY_STOP,1); };
-document.getElementById('btnStop').onclick=()=>{ writeMIDI(0xB0,CC_PLAY_STOP,0); playhead=-1; paintHead();
+document.getElementById('btnPlay').onclick=()=>{ actx(); if(connected)pk.sendCC(CC_PLAY_STOP,1).catch(()=>{}); };
+document.getElementById('btnStop').onclick=()=>{ if(connected)pk.sendCC(CC_PLAY_STOP,0).catch(()=>{}); playhead=-1; paintHead();
   document.querySelectorAll('#keys .kb.hit').forEach(e=>e.classList.remove('hit')); };
 const bpmEl=document.getElementById('bpm');
 bpmEl.oninput=()=>{ store.bpm=+bpmEl.value; document.getElementById('bpmv').textContent=bpmEl.value; save(); };
 bpmEl.onchange=sendBpm;
-addEventListener('beforeunload',()=>{ if(connected&&entered){ try{ writeCmd([SONG_MAGIC,S_EXIT,0x00]); }catch(e){} } });
+addEventListener('beforeunload',()=>{ if(connected&&entered){ try{ pk.songExit().catch(()=>{}); }catch(e){} } });
 
 // ════════════════════════════════════════════════ 起動
 load();

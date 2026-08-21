@@ -79,25 +79,24 @@
     <div class="console" id="log"></div>
   </div>
 
+<script src="./ponkey.js"></script>
 <script>
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
+// BLE 層は ponkey.js (v4.5.73 プロトコル) 経由
 const CC_PLAY_STOP=0x40, CC_BPM=0x41;
-let devices=[];  // {device,char,name}
+let devices=[];  // {pk,name}
 
 function log(m){const e=document.getElementById('log');e.innerHTML+=`> ${m}<br>`;e.scrollTop=e.scrollHeight;}
-function midiBytes(status,d1,d2){return Uint8Array.from([0x80,0x80,status,d1,d2]);}  // BLE-MIDI: header,timestamp,status,d1,d2
 
 document.getElementById('btnAdd').onclick=async()=>{
   try{
     log('scanning…');
-    const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}], optionalServices:[MIDI_SERVICE]});
-    const gatt=await dev.gatt.connect();
-    const svc=await gatt.getPrimaryService(MIDI_SERVICE);
-    const ch=await svc.getCharacteristic(MIDI_CHAR);
-    const entry={device:dev,char:ch,name:dev.name||'PONKEY'};
-    dev.addEventListener('gattserverdisconnected',()=>{ devices=devices.filter(e=>e!==entry); render(); log(entry.name+' disconnected'); });
+    const pk=new Ponkey();
+    const entry={pk,name:'PONKEY'};
+    pk.on('disconnect',()=>{ devices=devices.filter(e=>e!==entry); render(); log(entry.name+' disconnected'); });
+    await pk.connect({debug:false});   // MIDI のみ
+    entry.name=pk.device.name||'PONKEY';
     devices.push(entry); render(); log('linked: '+entry.name);
-    await writeOne(entry,0xB0,CC_BPM,Math.max(0,Math.min(127,(+bpm.value)-60)));  // 接続時に現在BPMを自動送信
+    await writeOne(entry,CC_BPM,Math.max(0,Math.min(127,(+bpm.value)-60)));  // 接続時に現在BPMを自動送信
     log('BPM '+bpm.value+' → '+entry.name);
   }catch(e){ log('error: '+e); }
 };
@@ -109,31 +108,30 @@ function render(){
   devices.forEach((e)=>{
     const d=document.createElement('div');d.className='dev';
     d.innerHTML=`<span class="nm">${e.name}</span><span class="st">linked</span><span class="x" title="disconnect">✕</span>`;
-    d.querySelector('.x').onclick=()=>{ try{e.device.gatt.disconnect();}catch(_){}; devices=devices.filter(x=>x!==e); render(); };
+    d.querySelector('.x').onclick=()=>{ try{e.pk.disconnect();}catch(_){}; devices=devices.filter(x=>x!==e); render(); };
     el.appendChild(d);
   });
 }
-function writeOne(e,status,d1,d2){const buf=midiBytes(status,d1,d2);
-  return (e.char.writeValueWithoutResponse?e.char.writeValueWithoutResponse(buf):e.char.writeValue(buf)).catch(()=>{});}
-async function sendAll(status,d1,d2){
+function writeOne(e,cc,val){ return e.pk.sendCC(cc,val).catch(()=>{}); }
+async function sendAll(cc,val){
   if(!devices.length){ log('no devices'); return; }
-  await Promise.all(devices.map(e=>writeOne(e,status,d1,d2)));
+  await Promise.all(devices.map(e=>writeOne(e,cc,val)));
 }
-function sendBPM(b){ sendAll(0xB0,CC_BPM,Math.max(0,Math.min(127,b-60))); }
+function sendBPM(b){ sendAll(CC_BPM,Math.max(0,Math.min(127,b-60))); }
 
 const bpm=document.getElementById('bpm');
 let bpmTimer=null;
 bpm.oninput=()=>{ document.getElementById('bpmv').textContent=bpm.value;
   clearTimeout(bpmTimer); bpmTimer=setTimeout(()=>{ sendBPM(+bpm.value); log('BPM '+bpm.value+' → all'); },120); };
-document.getElementById('btnPlay').onclick=()=>{ sendAll(0xB0,CC_PLAY_STOP,1); log('play all'); };
-document.getElementById('btnStop').onclick=()=>{ sendAll(0xB0,CC_PLAY_STOP,0); log('stop all'); };
+document.getElementById('btnPlay').onclick=()=>{ sendAll(CC_PLAY_STOP,1); log('play all'); };
+document.getElementById('btnStop').onclick=()=>{ sendAll(CC_PLAY_STOP,0); log('stop all'); };
 // 頭出し: 全台停止 → 再生を並列で一斉発射(台間ズレ最小化)。残るズレはBLE接続間隔ぶん。
 document.getElementById('btnAlign').onclick=async()=>{
   if(!devices.length){ log('no devices'); return; }
   log('cue: stop → simultaneous start');
-  await Promise.all(devices.map(e=>writeOne(e,0xB0,CC_PLAY_STOP,0)));
+  await Promise.all(devices.map(e=>writeOne(e,CC_PLAY_STOP,0)));
   await new Promise(r=>setTimeout(r,60));
-  await Promise.all(devices.map(e=>writeOne(e,0xB0,CC_PLAY_STOP,1)));
+  await Promise.all(devices.map(e=>writeOne(e,CC_PLAY_STOP,1)));
   log('cue done (BLE jitter remains)');
 };
 </script>

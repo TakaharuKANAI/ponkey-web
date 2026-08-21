@@ -200,9 +200,10 @@
     <div class="console" id="log"></div>
   </div>
 
+<!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
+<script src="./ponkey.js"></script>
 <script>
 // ============================================================ 定数 (ファーム PT2 v4.5.x 一致 — FW変更なしで動く)
-const MIDI_SERVICE="03b80e5a-ede8-4b33-a751-6ce34ec4c700", MIDI_CHAR="7772e5db-3868-4112-a1a9-f2669d106bf3";
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54;
 // シンセパートの音階テーブル (グリッド左下=低音)。音高 → 鍵番号 (0-15) の逆引きに使う
 const NOTE_TABLE_BASS  =[45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
@@ -263,7 +264,7 @@ function chordCells(){
 }
 
 // ============================================================ 状態
-let devices=[];                    // {device,midiCh,name} devices[0]=P1
+let devices=[];                    // {pk,name} devices[0]=P1
 let bpm=120, ccBpm=null, stepMs=null, lastStepAt=0, prevStep=null;
 let playing=false, attract=true, score=0, lives=3, kills=0, combo=0, level=1;
 let cells=[], invaders=new Array(16).fill(null);   // invaders[k]={age}
@@ -275,17 +276,19 @@ function log(m){const e=document.getElementById('log');e.innerHTML+=`&gt; ${m}<b
 function pad6(n){return String(n).padStart(6,'0');}
 
 // ============================================================ BLE (入力: NoteOn / クロック: CC_BAR_SYNC / BPM: CC_BPM)
-function writeMIDI(e,s,d1,d2){const b=Uint8Array.from([0x80,0x80,s,d1,d2]);
-  return (e.midiCh.writeValueWithoutResponse?e.midiCh.writeValueWithoutResponse(b):e.midiCh.writeValue(b)).catch(()=>{});}
+function writeMIDI(e,s,d1,d2){return e.pk.sendMIDI(s,d1,d2).catch(()=>{});}
 document.getElementById('btnConnect').onclick=async()=>{ try{
   log('SCANNING...');
-  const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'PONKEY'}],optionalServices:[MIDI_SERVICE]});
-  const gatt=await dev.gatt.connect();
-  const midiCh=await(await gatt.getPrimaryService(MIDI_SERVICE)).getCharacteristic(MIDI_CHAR);
-  const entry={device:dev,midiCh,name:dev.name||'PONKEY'};
-  dev.addEventListener('gattserverdisconnected',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();log(entry.name+' DISCONNECTED');});
-  await midiCh.startNotifications();
-  midiCh.addEventListener('characteristicvaluechanged',ev=>onMidi(entry,ev));
+  const pk=new Ponkey();
+  const entry={pk,name:'PONKEY'};
+  pk.on('disconnect',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();log(entry.name+' DISCONNECTED');});
+  pk.on('note',ev=>{ if(!ev.on)return;                     // NoteOn (vel>0) → 鍵番号へ逆引き
+    const k=lookupKey(ev.ch,ev.note); if(k!=null)hit(k); });
+  pk.on('cc',ev=>{ if(entry!==devices[0]||ev.ch!==0)return; // クロック/BPM は P1 に従属
+    if(ev.cc===CC_BAR_SYNC)onStep(ev.val);
+    else if(ev.cc===CC_BPM){ccBpm=ev.val+60;bpm=ccBpm;setBpmView();} });
+  await pk.connect({debug:false});                          // MIDI サービスのみ
+  entry.name=pk.device.name||'PONKEY';
   devices.push(entry); renderPlayers();
   log('P'+devices.length+' READY - '+entry.name);
 }catch(e){log('ERROR: '+e);} };
@@ -295,21 +298,8 @@ function renderPlayers(){
   el.className='';el.innerHTML='';
   devices.forEach((e,i)=>{const b=document.createElement('span');b.className='pbadge';
     b.innerHTML=`P${i+1}<span class="x">✕</span>`;
-    b.querySelector('.x').onclick=()=>{try{e.device.gatt.disconnect();}catch(_){}devices=devices.filter(x=>x!==e);renderPlayers();};
+    b.querySelector('.x').onclick=()=>{try{e.pk.disconnect();}catch(_){}devices=devices.filter(x=>x!==e);renderPlayers();};
     el.appendChild(b);});
-}
-function onMidi(entry,ev){
-  const b=new Uint8Array(ev.target.value.buffer);
-  for(let i=0;i+2<b.length;i++){
-    const st=b[i];
-    if((st&0xF0)===0x90&&b[i+1]<0x80&&b[i+2]>0){          // NoteOn (vel>0) → 鍵番号へ逆引き
-      const k=lookupKey(st&0x0F,b[i+1]); if(k!=null)hit(k); i+=2; continue;
-    }
-    if(entry===devices[0]&&st===0xB0&&b[i+2]<0x80){        // クロック/BPM は P1 に従属
-      if(b[i+1]===CC_BAR_SYNC){onStep(b[i+2]);i+=2;}
-      else if(b[i+1]===CC_BPM){ccBpm=b[i+2]+60;bpm=ccBpm;setBpmView();i+=2;}
-    }
-  }
 }
 function setBpmView(){
   document.getElementById('bpmv').textContent=Math.round(bpm);

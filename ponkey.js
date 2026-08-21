@@ -131,15 +131,47 @@ class Ponkey {
   }
   disconnect() { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); }
 
+  // 既知デバイスへの再接続 (チューザーを出さない)。切断後の自動再接続用。
+  // connect() で選んだ this.device を GATT から再バインドし、送信キューも作り直す。
+  // デバッグサービスは以前使っていた場合のみ再購読を試みる (失敗しても MIDI は生きる)。
+  async reattach() {
+    if (!this.device) throw new Error('ponkey.js: no device to reattach');
+    const hadDebug = !!this.dbgCmdChar;
+    this.midiChar = null;
+    this.dbgCmdChar = null;
+    this._sendQueue = Promise.resolve();
+    const server = await this.device.gatt.connect();
+    const midiSvc = await server.getPrimaryService(UUID_MIDI_SERVICE);
+    this.midiChar = await midiSvc.getCharacteristic(UUID_MIDI_CHAR);
+    await this.midiChar.startNotifications();
+    this.midiChar.addEventListener('characteristicvaluechanged',
+      ev => this._onMidi(new Uint8Array(ev.target.value.buffer)));
+    if (hadDebug) {
+      try {
+        const dbgSvc = await server.getPrimaryService(UUID_DEBUG_SERVICE);
+        const logChar = await dbgSvc.getCharacteristic(UUID_DEBUG_LOG);
+        this.dbgCmdChar = await dbgSvc.getCharacteristic(UUID_DEBUG_CMD);
+        await logChar.startNotifications();
+        logChar.addEventListener('characteristicvaluechanged',
+          ev => this._onDbg(new Uint8Array(ev.target.value.buffer)));
+        await this._dbgCmd(DBG_CMD.GET_CAPS);
+      } catch (e) { console.warn('ponkey.js: debug reattach failed', e); }
+    }
+    return this;
+  }
+
   // ---- 受信: BLE-MIDI ----------------------------------------------------
   _onMidi(buf) {
     // FW の実形式 (sendMIDIOverBLE / bleBatch): [header(0x80|ts_hi)] のあと、
     // イベントごとに [tsLow(0x80|ts_lo)][status][d1][d2] が続く (バッチで複数連結)。
     // running status は使われない。PC/ChPressure (2バイト系) にも念のため対応。
-    let i = 1;                                     // buf[0] = header
+    let i = 1;                                     // buf[0] = header (0x80 | ts上位6bit)
+    const tsHi = (buf[0] & 0x3f) << 7;
+    let ts13 = 0;                                  // 13bit ms タイムスタンプ (イベントごと)
     while (i < buf.length) {
       let b = buf[i];
-      if (b & 0x80) {                              // timestamp byte を1つ読み飛ばす
+      if (b & 0x80) {                              // timestamp byte (下位7bit)
+        ts13 = tsHi | (b & 0x7f);
         i++;
         if (i >= buf.length) break;
         b = buf[i];
@@ -154,9 +186,9 @@ class Ponkey {
         else if (d1 === CC.FEATURES)  { this.caps.features  = d2; }
         else if (d1 === CC.FEATURES2) { this.caps.features2 = d2; this._emit('caps', this.caps); }
         else if (d1 === CC.FEATURES3) { this.caps.features3 = d2; }
-        this._emit('cc', { cc: d1, val: d2, ch });
+        this._emit('cc', { cc: d1, val: d2, ch, ts13 });
       } else if (cmd === 0x90 || cmd === 0x80) {
-        this._emit('note', { on: cmd === 0x90 && d2 > 0, ch, note: d1, vel: d2 });
+        this._emit('note', { on: cmd === 0x90 && d2 > 0, ch, note: d1, vel: d2, ts13 });
       }
       i += 1 + nData;
     }
@@ -201,11 +233,13 @@ class Ponkey {
 
   // ---- 送信 (直列化) ------------------------------------------------------
   _write(char, bytes) {
-    this._sendQueue = this._sendQueue.then(() =>
+    // 直列化しつつ、失敗をキューに残さない (残すと以降の全送信が巻き添えで reject し続ける)
+    const p = this._sendQueue.then(() =>
       char.writeValueWithoutResponse
         ? char.writeValueWithoutResponse(new Uint8Array(bytes))
         : char.writeValue(new Uint8Array(bytes)));
-    return this._sendQueue;
+    this._sendQueue = p.catch(() => {});
+    return p;
   }
   sendMIDI(status, d1, d2) { return this._write(this.midiChar, [0x80, 0x80, status, d1, d2]); }
   sendCC(cc, val, ch = 0)  { return this.sendMIDI(0xb0 | ch, cc & 0x7f, val & 0x7f); }
