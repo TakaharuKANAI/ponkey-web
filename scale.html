@@ -199,20 +199,21 @@ function curScale(){ return SCALES[idxOfId(store.scale)]; }
 // LEAD/PAD の音高 (ファーム rebuildSynthNoteTables と同じ算出)
 function pitchOfRank(r){
   const s=curScale();
-  if(s.id===SCALE_WHITE) return ROOT_BASE + Math.floor(r/7)*12 + WHITE[r%7];
+  // v4.5.76〜: 白鍵モードもキー(根音)ぶんだけ平行移動する (それ以前のファームは C 固定だった)
+  if(s.id===SCALE_WHITE) return ROOT_BASE + store.key + Math.floor(r/7)*12 + WHITE[r%7];
   const L=s.iv.length;
   return Math.min(127, ROOT_BASE + store.key + Math.floor(r/L)*12 + s.iv[r%L]);
 }
 const noteName=n=>PC[((n%12)+12)%12], octOf=n=>Math.floor(n/12)-1, isBlack=n=>!!IS_BLACK[((n%12)+12)%12];
-const rootPc=()=>curScale().id===SCALE_WHITE?0:store.key;
+const rootPc=()=>store.key;   // v4.5.76〜: 白鍵モードでもキーが効く
 
 // ════════════════════════════════════════════════ 描画
 function render(){
   const s=curScale(), white=s.id===SCALE_WHITE;
   document.getElementById('keyBig').textContent=PC[store.key];
-  document.getElementById('keySel').classList.toggle('dim',white);
+  document.getElementById('keySel').classList.remove('dim');   // v4.5.76〜: 白鍵でもキーは有効
   document.getElementById('scaleBig').textContent=sName(s);
-  document.getElementById('scaleSub').textContent= white ? sDesc(s)
+  document.getElementById('scaleSub').textContent= white ? `${noteName(pitchOfRank(0))}${octOf(pitchOfRank(0))} 起点  ·  ${sDesc(s)}`
     : s.iv.length===12 ? `${noteName(pitchOfRank(0))}${octOf(pitchOfRank(0))} – ${noteName(pitchOfRank(15))}${octOf(pitchOfRank(15))}  ·  ${sDesc(s)}`
     : s.iv.map(v=>PC[(store.key+v)%12]).join(' ')+'  ·  '+sDesc(s);
   document.getElementById('langBtn').textContent = store.lang==='en' ? 'JPN' : 'ENG';
