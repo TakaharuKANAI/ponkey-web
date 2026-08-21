@@ -294,6 +294,7 @@ body.l3 .cyl .tnum,body.l3 .cyl .tsub{paint-order:stroke;stroke-width:2.4px;stro
   <span id="demoLabel">DEMO</span>
 </button>
 
+<script src="./ponkey.js"></script>
 <script>
 "use strict";
 
@@ -523,7 +524,7 @@ const S={
   song:[[],[],[],[],[],[],[]], sel:0,
   done:[], hitCount:0, demoIdx:-1, interacted:false, clearing:false,
   playing:false, bpm:100, cur:-1, loopLen:16, scale:0,
-  connected:false, sync:false, device:null, logChar:null, cmdChar:null, midiChar:null,
+  connected:false, sync:false,
   held:new Set(), space:false, pending:null,
 };
 const prog=()=>S.lesson===null?[]:LESSONS[S.lesson].steps;
@@ -1188,14 +1189,13 @@ function devKey(t,i){
 }
 
 /* v4.5.72+: 本体のモード UI 通知 (DBG_EV_MODE_UI)。これが来る本体では推定をやめ、この値を正とする */
-function onModeUi(p){
+function onModeUi(m){
   D.fromDev=true;
-  const sub=p[0],mode=p[1],prev=p[2],fl=p[3],song=p[4];
-  D.sub=sub; D.prev=prev<7?prev:0;
-  D.fn=mode===7; D.sticky=false;
-  if(mode<7) D.sel=mode;
-  D.fx=!!(fl&1); D.interior=!!(fl&2); D.test=!!(fl&4); D.quiet=!!(fl&8);
-  D.song=song===0xFF?D.song:song;
+  D.sub=m.fnSubmode; D.prev=m.previousMode<7?m.previousMode:0;
+  D.fn=m.currentMode===7; D.sticky=false;
+  if(m.currentMode<7) D.sel=m.currentMode;
+  D.fx=m.fx; D.interior=m.interior; D.test=m.test; D.quiet=m.silent;
+  if(m.interiorSong!==null) D.song=m.interiorSong;
   // 見学済みマーク: 本体の判定で付ける (1秒コンボや600ms長押しの自前判定より確実)
   if(D.fn) markSeen('fn');
   if(D.fx) markSeen('fx');
@@ -1204,17 +1204,13 @@ function onModeUi(p){
   const SEEN={[SUB.SLOT]:'slot',[SUB.BPM]:'bpm',[SUB.LOOP]:'loop',[SUB.STEPPER]:'stepper',
     [SUB.MASTER]:'master',[SUB.PVOL]:'pvol',[SUB.VOICE]:'voice',
     [SUB.SCALE_SETUP]:'scaleSetup',[SUB.PATTERN]:'pattern'};
-  if(SEEN[sub]) markSeen(SEEN[sub]);
+  if(SEEN[m.fnSubmode]) markSeen(SEEN[m.fnSubmode]);
   paintLiveAll();
 }
 /* 本体からの答え合わせ (SONG_CMD_DUMP_SLOT 0xFF = 現在スロット → META + SLOT_DUMP) */
 let metaT=0;
 function queueMeta(){ clearTimeout(metaT); metaT=setTimeout(requestMeta,250); }
-async function requestMeta(){
-  if(!S.cmdChar) return;
-  try{ await S.cmdChar.writeValueWithoutResponse(new Uint8Array([0x5A,0x07,0x00,0xFF])); }
-  catch(e){ try{ await S.cmdChar.writeValue(new Uint8Array([0x5A,0x07,0x00,0xFF])); }catch(_){ } }
-}
+function requestMeta(){ if(pk&&S.connected) pk.dumpSlot(); }
 function onMeta(d){
   if(d.length<19) return;
   D.bpm=d[0]+60; D.slot=d[1]; D.playing=!!d[2];
@@ -1580,64 +1576,34 @@ function paintLiveAll(){ if(S.lesson!==2) return; paintLiveParts(); paintLiveGri
 /* =====================================================================
    8. 実機との接続
    ===================================================================== */
-const UUID_MIDI='03b80e5a-ede8-4b33-a751-6ce34ec4c700';
-const UUID_MIDI_CHAR='7772e5db-3868-4112-a1a9-f2669d106bf3';
-const UUID_DBG='504f4e4b-4559-4442-5047-445342000001';
-const UUID_LOG='504f4e4b-4559-4442-5047-445442000002';
-const UUID_CMD='504f4e4b-4559-4442-5047-445443000003';
 const CC_RESET=0x42;
-const FEAT_SONG_DUMP=1<<5, FEAT2_LED_RGB=1<<0, FEAT2_CLAIM=1<<5, FEAT2_UI=1<<6;
-const uiKnown=()=>S.connected&&!!(D.feat2&FEAT2_UI);
-/* SONG_MAGIC 体系 (デバッグ char): [0x5A][cmd][devId][payload...] */
-async function sendSong(cmd,payload){
-  if(!S.cmdChar) return;
-  const u=new Uint8Array([0x5A,cmd,0x00,...(payload||[])]);
-  try{ await (S.cmdChar.writeValueWithoutResponse?S.cmdChar.writeValueWithoutResponse(u):S.cmdChar.writeValue(u)); }
-  catch(e){ try{ await S.cmdChar.writeValue(u); }catch(_){ } }
-}
-/* 盤面ロック (Push!!) を実機にも効かせる: グリッドだけ claim (bit0)。P キーは押させたいので封印しない */
+let pk=null;                                   // BLE 層は共通クライアント ponkey.js (window.Ponkey) 経由
+const uiKnown=()=>S.connected&&!!pk&&pk.hasFeature('UI_STATE');
+
+/* 盤面ロック (Push!!) を実機にも効かせる: グリッドだけ claim。P キーは押させたいので封印しない */
 let claimed=false;
 function setClaim(on){
-  if(!S.connected||!(D.feat2&FEAT2_CLAIM)){ claimed=false; return; }
+  if(!S.connected||!pk||!pk.hasFeature('CLAIM')){ claimed=false; return; }
   if(on===claimed) return;
-  claimed=on; sendSong(0x0D,[on?1:0]);
+  claimed=on; on?pk.claim({grid:true}):pk.release();
 }
-/* 「ここを押して」を実機 LED でも: 対象キーを白で点滅 (SONG_CMD_LED_FRAME 48B) */
+/* 「ここを押して」を実機 LED でも: 対象キーを白で点滅 */
 let ledTargets=[],ledTimer=0,ledPhase=true;
 function sendLedFrame(keys){
-  const f=new Uint8Array(48);
-  for(const k of keys){ f[k*3]=255; f[k*3+1]=255; f[k*3+2]=255; }
-  sendSong(0x09,f);
+  if(!pk) return;
+  const f=[]; for(let k=0;k<16;k++) f.push(keys.includes(k)?[255,255,255]:[0,0,0]);
+  pk.ledFrame(f);
 }
 function ledSetTargets(t){
-  if(!S.connected||!(D.feat2&FEAT2_LED_RGB)){ if(ledTimer){clearInterval(ledTimer);ledTimer=0;} return; }
+  if(!S.connected||!pk||!pk.hasFeature('LED_RGB_FRAME')){ if(ledTimer){clearInterval(ledTimer);ledTimer=0;} return; }
   const same=t.length===ledTargets.length&&t.every((v,i)=>v===ledTargets[i]);
   ledTargets=t;
   if(!t.length){ if(ledTimer){clearInterval(ledTimer);ledTimer=0;} sendLedFrame([]); return; }
   if(!ledTimer) ledTimer=setInterval(()=>{ ledPhase=!ledPhase; sendLedFrame(ledPhase?ledTargets:[]); },450);
   if(!same){ ledPhase=true; sendLedFrame(ledTargets); }
 }
-async function sendCC(cc,val){
-  if(!S.midiChar) return;
-  const ts=Date.now()&0x1FFF;
-  const pkt=new Uint8Array([0x80|((ts>>7)&0x3F),0x80|(ts&0x7F),0xB0,cc,val]);
-  try{ await S.midiChar.writeValueWithoutResponse(pkt); }catch(e){ console.warn(e); }
-}
-function onPacket(ev){
-  const d=new Uint8Array(ev.target.value.buffer);
-  if(d.length<11||d[0]!==0xA5) return;
-  const cat=d[8],id=d[9],p=d.subarray(11,11+d[10]);
-  if(cat===0x03){ if(id===0x01) popCyl(p[0]); else if(id===0x02) dropCyl(p[0]); return; }
-  if(cat===0x00){ if(id===0x03&&p.length>=3){ D.proto=p[0]; D.feat=p[1]; D.feat2=p[2]; } return; }
-  if(cat===0x01){ if(id===0x10&&p.length>=5) onModeUi(p); return; }
-  if(cat===0x09){ if(id===0x0A) onMeta(p); else if(id===0x09) onSlotDump(p); return; }
-  if(cat!==0x02||S.lesson===null) return;
-  D.fromDev=true;
-  if(id===0x01) gridDown(p[0]);
-  else if(id===0x02) gridUp(p[0]);
-  else if(id===0x03) partDown(p[0]);
-  else if(id===0x04) partUp(p[0]);
-}
+const sendCC=(cc,val)=>pk?pk.sendCC(cc,val):Promise.resolve();
+
 function setSync(on){
   S.sync=on; el('btnPlay').disabled=on;
   if(on){
@@ -1650,26 +1616,29 @@ async function connect(){
   if(!navigator.bluetooth){ showErr('このブラウザでは接続できません。Chrome を使ってください。'); return; }
   showErr('');
   try{
-    S.device=await navigator.bluetooth.requestDevice({
-      filters:[{namePrefix:'PONKEY'},{services:[UUID_MIDI]}],
-      optionalServices:[UUID_DBG,UUID_MIDI]});
-    S.device.addEventListener('gattserverdisconnected',onDisc);
-    const server=await S.device.gatt.connect();
-    const dbg=await server.getPrimaryService(UUID_DBG);
-    S.logChar=await dbg.getCharacteristic(UUID_LOG);
-    S.cmdChar=await dbg.getCharacteristic(UUID_CMD);
-    S.logChar.addEventListener('characteristicvaluechanged',onPacket);
-    await S.logChar.startNotifications();
-    await S.cmdChar.writeValue(new Uint8Array([0xA6,0x01,0x00]));
+    pk=new Ponkey();
+    pk.on('caps',c=>{ D.proto=c.protocol; D.feat=c.features; D.feat2=c.features2; });
+    // ソレノイドの発火/解放で円柱を動かす (本体が鳴らした音がそのまま画面の動きになる)
+    pk.on('dbg',({cat,ev,data})=>{
+      if(cat!==0x03) return;
+      if(ev===0x01) popCyl(data[0]); else if(ev===0x02) dropCyl(data[0]);
+    });
+    // 本体のキー操作をレッスンの操作として受ける
+    const fromDev=fn=>e=>{ if(S.lesson===null) return; D.fromDev=true; fn(e.key); };
+    pk.on('keydown', fromDev(gridDown));  pk.on('keyup',  fromDev(gridUp));
+    pk.on('partdown',fromDev(partDown));  pk.on('partup', fromDev(partUp));
+    pk.on('modeui',   onModeUi);
+    pk.on('songmeta', onMeta);
+    pk.on('slotdump', onSlotDump);
+    pk.on('cc',       onCC);
+    pk.on('disconnect', onDisc);
+    await pk.connect({keyEvents:true});
+    await pk.dbgRaw(0x03,[0x03]);                  // SOLENOID カテゴリも購読 (円柱の動き)
     try{
-      const ms=await server.getPrimaryService(UUID_MIDI);
-      S.midiChar=await ms.getCharacteristic(UUID_MIDI_CHAR);
-      try{ S.midiChar.addEventListener('characteristicvaluechanged',onMidiNotify); await S.midiChar.startNotifications(); }catch(_){ }
-      // 能力ネゴ: SYS_CAPS を聞いてから、読める本体なら「読む」、読めない旧FWなら従来どおり「消して揃える」
-      await S.cmdChar.writeValue(new Uint8Array([0xA6,0x07,0x00]));
+      // 能力ネゴを待ってから、読める本体なら「読む」、読めない旧FWなら従来どおり「消して揃える」
       for(let w=0;w<12&&D.proto===null;w++) await new Promise(r=>setTimeout(r,80));
-      if(D.feat&FEAT_SONG_DUMP){
-        await sendSong(0x07,[0xFF]);                     // 現在スロットを読んで画面に写す
+      if(pk.hasFeature('SONG_DUMP')){
+        await pk.dumpSlot();                       // 現在スロットを読んで画面に写す
         showErr('本体のパターンを読み込みました。');
       }else{
         await sendCC(CC_RESET,0);
@@ -1684,37 +1653,28 @@ async function connect(){
     if(S.lesson!==null) paintStep();
   }catch(e){ showErr('接続できませんでした: '+(e.message||e)); }
 }
-/* 本体→アプリの BLE MIDI 通知。接続時の State Sync と、Fn 操作のたびに届く変更通知を状態に反映する */
-function onMidiNotify(ev){
-  const b=new Uint8Array(ev.target.value.buffer);
-  for(let i=1;i<b.length;){
-    if(b[i]&0x80&&i+1<b.length&&(b[i+1]&0xF0)===0xB0){ i++; }
-    if((b[i]&0xF0)!==0xB0){ i++; continue; }
-    const cc=b[i+1],v=b[i+2]; i+=3;
-    if(cc<=6&&v===127) D.sel=cc;
-    else if(cc===0x40) D.playing=v===127;
-    else if(cc===0x41) D.bpm=v+60;
-    else if(cc===0x30) D.voice[v>>4]=v&15;
-    else if(cc===0x31) queueMeta();                              // 形は SLOT_DUMP から
-    else if(cc===0x32){ const p=(v>>4)-4; if(p>=0&&p<3){ D.oct[p]=(v&15)-4; markSeen('oct'); } }
-    else if(cc===0x33){ const p=v>>4,vol=(v&15)<<3; let best=0;
-      VOL_VALUES.forEach((x,l)=>{ if(Math.abs(x-vol)<Math.abs(VOL_VALUES[best]-vol)) best=l; }); if(p<7) D.pvol[p]=best; }
-    else if(cc===0x20) D.slot=v;
-    else if(cc===0x35){ D.swing=v&7; markSeen('groove'); }
-    else if(cc===0x36){ D.accent=v&7; markSeen('groove'); }
-    else if(cc===0x38){ D.root=v%12; markSeen('key'); }
-    else if(cc===0x37){ D.scale10=v===0x7F?0:(v>=8?9:v+1); markSeen('key'); }
-    else if(cc===0x3A) D.proto=v;
-    else if(cc===0x3B) D.feat=v;
-    else if(cc===0x3C) D.feat2=v;
-    else continue;
-    paintLiveAll();
-  }
+/* 本体→アプリの CC 通知。接続時の State Sync と、Fn 操作のたびに届く変更通知を状態に反映する */
+function onCC({cc,val:v}){
+  if(cc<=6&&v===127) D.sel=cc;
+  else if(cc===0x40) D.playing=v===127;
+  else if(cc===0x41) D.bpm=v+60;
+  else if(cc===0x30) D.voice[v>>4]=v&15;
+  else if(cc===0x31) queueMeta();                              // 形は SLOT_DUMP から
+  else if(cc===0x32){ const p=(v>>4)-4; if(p>=0&&p<3){ D.oct[p]=(v&15)-4; markSeen('oct'); } }
+  else if(cc===0x33){ const p=v>>4,vol=(v&15)<<3; let best=0;
+    VOL_VALUES.forEach((x,l)=>{ if(Math.abs(x-vol)<Math.abs(VOL_VALUES[best]-vol)) best=l; }); if(p<7) D.pvol[p]=best; }
+  else if(cc===0x20) D.slot=v;
+  else if(cc===0x35){ D.swing=v&7; markSeen('groove'); }
+  else if(cc===0x36){ D.accent=v&7; markSeen('groove'); }
+  else if(cc===0x38){ D.root=v%12; markSeen('key'); }
+  else if(cc===0x37){ D.scale10=v===0x7F?0:(v>=8?9:v+1); markSeen('key'); }
+  else return;
+  paintLiveAll();
 }
 function onDisc(){
   claimed=false; if(ledTimer){clearInterval(ledTimer);ledTimer=0;}
   D.proto=null;
-  S.connected=false; S.midiChar=null;
+  S.connected=false;
   el('connLabel').textContent='接続'; el('btnConn').classList.remove('on');
   setSync(false);
 }
@@ -1776,7 +1736,7 @@ function openLesson(n){
   clearCylLeds();
   if(n===2){ const f=D.feat,f2=D.feat2,pr=D.proto; devReset(); D.feat=f; D.feat2=f2; D.proto=pr;
     D.seen.always=true; if(S.connected) queueMeta(); }
-  else if(S.connected&&(D.feat&FEAT_SONG_DUMP)) sendSong(0x07,[0xFF]);
+  else if(S.connected&&pk&&pk.hasFeature('SONG_DUMP')) pk.dumpSlot();
   el('wmSub').textContent='レッスン'+(n+1);
   paintStep(); scrollTo(0,0);
   if(!S.sync&&cur().part!==undefined) startSeq();

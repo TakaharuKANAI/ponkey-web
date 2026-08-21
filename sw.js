@@ -7,9 +7,10 @@
    ・フォント等の静的リソースは cache-first(変わらないので)
    ・DUET の Magenta/TensorFlow CDN は大きいのでキャッシュしない(要ネットのまま)
 */
-const CACHE = 'ponkey-v13';
+const CACHE = 'ponkey-v14';
 const CORE = [
   './', './index.html',
+  './ponkey.js',                       // 全アプリ共通の BLE クライアント
   './lesson.html',
   './sync.html', './sequence.html', './loops.html', './groove.html', './groove-engine.js',
   './invaders.html', './trance.html', './mood.html', './drawing.html', './scale.html', './dialogue.html', './duet.html', './echo.html',

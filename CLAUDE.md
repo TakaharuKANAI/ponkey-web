@@ -5,7 +5,7 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 ## 構成
 
 - `ponkey.js` — **全アプリ共通の BLE クライアント**（2026-08-22 に全アプリの BLE 層をこれ経由に移行済み。
-  未移行は lesson.html のみ）。**正本は ponkey-midi リポジトリの `web/ponkey.js`** — 修正は必ず正本に
+  lesson.html を含め未移行なし）。**正本は ponkey-midi リポジトリの `web/ponkey.js`** — 修正は必ず正本に
   入れてからここへコピーで同期する（直接編集しない）。プロトコル仕様は ponkey-midi の
   `PONKEY_CONTROL_PROTOCOL.md`。
 - `index.html` — アプリハブ（PONKEY Web Apps）。各アプリへの入口
@@ -18,8 +18,10 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   推定をやめて本体の申告を正とし、HUD の `?` も消える。旧FWのみ推定フォールバック）。
   Fn×Pn の割当や音色名はファーム `PONKEY_PT2_v4_5_34.ino` / `PONKEY_V2_DATA_STRUCTURES.h` から写しているので、
   ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる（現在 v4.5.71 のステッパページ準拠）。
-  v4.5.69+ の窓口を使用: Push!! ロック中はグリッドを `SONG_CMD_CLAIM`、お手本キーは `SONG_CMD_LED_FRAME` で白点滅、
-  接続時は `SONG_CMD_DUMP_SLOT 0xFF` で本体パターンを読んで写す（機能ビットでゲート、旧FWは CC_RESET にフォールバック）
+  v4.5.69+ の窓口を使用: Push!! ロック中はグリッドを `claim()`、お手本キーは `ledFrame()` で白点滅、
+  接続時は `dumpSlot()` で本体パターンを読んで写す（`hasFeature()` でゲート、旧FWは CC_RESET にフォールバック）。
+  BLE 層は `ponkey.js` 経由（`modeui`/`songmeta`/`slotdump`/`cc`/`keydown` 等のイベントを購読。
+  円柱の動きに使う SOLENOID カテゴリだけ `dbgRaw(0x03,[0x03])` で追加購読している）
 - `duet.html` — PONKEY AI Duet
 - `dialogue.html` — DIALOGUE
 - `sequence.html` — SEQUENCE（＋グルーブパネル）
