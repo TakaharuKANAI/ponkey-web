@@ -400,7 +400,7 @@ const L3=[
   { no:'ステップ 5', key:'stepper', mode:SUB.STEPPER, title:'Fn×P4 ステッパページ',
     one:'Fn を押しながら P4。16 キーが 8 組の「−／＋」ペアになります。',
     todo:'Fn×P4 で、どれかのペアを押そう', doneTxt:'ステッパを触りました',
-    more:'ひとつの画面で<b>キー・スケール・グルーブ・オクターブ</b>を全部調整します。左のキーが「下げる／前へ」、右のキーが「上げる／次へ」。押すと 1 段動いて音で確かめられます。<b>どれかを 600ms 長押しすると、そのペアだけ最初の値に戻ります</b>。本体の LED は「いじってあるほど明るい」——全部標準のときはページ全体が薄暗く点きます。',
+    more:'ひとつの画面で<b>キー・スケール・グルーブ・オクターブ</b>を全部調整します。左のキーが「下げる／前へ」、右のキーが「上げる／次へ」。押すと 1 段動いて音で確かめられます（<b>押した長さは関係ありません</b>。1回押して1段）。本体の LED は「いじってあるほど明るい」——全部標準のときはページ全体が薄暗く点きます。全部まとめて標準へ戻したいときは、<b>P4 を押しながら電源を入れ直します</b>。',
     },
   { no:'ステップ 6', key:'key', mode:SUB.STEPPER, title:'キーとスケール（G1〜G4）',
     one:'G2 でキーを♯へ、G4 でスケールを次へ進めてみましょう。', focus:[0,1,2,3],
@@ -1063,9 +1063,9 @@ const VOICE_NAMES=[
 ];
 
 
-/* ステッパページ (v4.5.67+): pair=key/2、偶数=下げ/前、奇数=上げ/次。600ms 長押し=そのペアをデフォルトへ */
+/* ステッパページ (v4.5.67+): pair=key/2、偶数=下げ/前、奇数=上げ/次。
+   v4.5.77 で長押しリセットは廃止 — タップだけ。押している長さは一切見ない */
 const STEP_OCT_SYNTH=[null,null,null,null,1,2,0,null];   // pair4=LEAD pair5=PAD pair6=BASS
-const stepTimers=new Array(16).fill(0);
 function stepperTap(i){
   const pair=i>>1, up=!!(i&1);
   switch(pair){
@@ -1080,14 +1080,6 @@ function stepperTap(i){
     default: return;   // G15/16 は空き
   }
   markSeen('stepper');
-  clearTimeout(stepTimers[i]);
-  stepTimers[i]=setTimeout(()=>stepperResetPair(pair),600);   // gu で clearTimeout される
-}
-function stepperResetPair(pair){
-  if(pair===0) D.root=0; else if(pair===1) D.scale10=0;
-  else if(pair===2) D.swing=0; else if(pair===3) D.accent=0;
-  else if(pair>=4&&pair<7) D.oct[STEP_OCT_SYNTH[pair]]=0;
-  paintLiveAll();
 }
 const D={};                       // 推定した本体の状態
 function devReset(){
@@ -1183,7 +1175,6 @@ function devKey(t,i){
   if(t==='gu'){
     if(D.fn&&D.sub===SUB.PVOL&&i===0&&D.g1DownAt&&now-D.g1DownAt>=600){ D.quiet=!D.quiet; markSeen('quiet'); }
     D.g1DownAt=0;
-    clearTimeout(stepTimers[i]);
   }
   paintLiveAll();
 }
