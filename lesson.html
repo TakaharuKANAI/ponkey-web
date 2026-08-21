@@ -365,7 +365,7 @@ const L2=[
     more:'16 のままだと必ず4拍子に聞こえます。<b>12 にすると3拍子っぽく、6 にすると忙しく</b>聞こえます。実機では <b>Fn を押しながら P3</b>、そのあとグリッドを押すと、そこまでの長さでループします。',
     loopStep:true },
 ];
-const SUB={NONE:0,BPM:1,VOICE:2,LOOP:3,PVOL:4,OCT:5,MASTER:6,SCALE_SETUP:7,PATTERN:8,SLOT:9,KEY:10,SCALE:11,GROOVE:12};
+const SUB={NONE:0,BPM:1,VOICE:2,LOOP:3,PVOL:4,STEPPER:5,MASTER:6,SCALE_SETUP:7,PATTERN:8,SLOT:9};
 const L3=[
   { no:'ステップ 1', key:'fn', mode:'fn', title:'Fn は「押しながら」のキー',
     one:'Fn を押したまま、離さずにいてください。',
@@ -383,22 +383,26 @@ const L3=[
     one:'Fn を押しながら P3。G キーで四角の大きさを選びましょう。',
     todo:'Fn×P3 で長さを選ぼう', doneTxt:'ループの長さを変えました',
     more:'押した G キーを右下の角として、<b>G1 からの四角の中だけが鳴ります</b>。G11 なら 3×3=9 ステップ。16 のままだと 4 拍子、12（3×4 か 4×3）にすると 3 拍子っぽく聞こえます。録音中は変えられません。' },
-  { no:'ステップ 5', key:'oct', mode:SUB.OCT, title:'Fn×P4 ① オクターブ（半音）',
-    one:'Fn を押しながら P4 を 1 回。G キーで高さを選びましょう。',
-    todo:'Fn×P4 で高さを選ぼう', doneTxt:'高さを変えました',
-    more:'名前はオクターブですが<b>単位は半音</b>です。下の段が低く、上の段が高い。G9 が ±0、いちばん下で −4、いちばん上で +11。<b>対象は Fn を押す直前に選んでいたシンセパート</b>（ドラムを選んでいたら P5 ベース）。スロットごとに別々に保存されます。' },
-  { no:'ステップ 6', key:'key', mode:SUB.KEY, title:'Fn×P4 ② 曲のキー',
-    one:'Fn を押したまま P4 をもう 1 回。G1〜G12 から根音を選びましょう。',
-    todo:'Fn×P4 を 2 回、キーを選ぼう', doneTxt:'キーを変えました',
-    more:'G1=C（ド）から G12=B（シ）まで。<b>P1〜P3 を SCALE にしたときのメロディ</b>に効きます（次のページと合わせて使う）。押すといまのキーで 1 音鳴って確かめられます。' },
-  { no:'ステップ 7', key:'scale', mode:SUB.SCALE, title:'Fn×P4 ③ スケール',
-    one:'P4 をもう 1 回。G1〜G8 で音階を選びましょう。',
-    todo:'Fn×P4 を 3 回、音階を選ぼう', doneTxt:'音階を変えました',
-    more:'8 種類。メジャーペンタ／マイナーペンタ／琉球／都節／メジャー／ドリアン／ブルース／ホールトーン。<b>SCALE にした P1〜P3 全部に同じ音階</b>がかかります。P5〜P7 の 16 キーは白鍵のままです（そちらはアプリ SCALE で）。' },
-  { no:'ステップ 8', key:'groove', mode:SUB.GROOVE, title:'Fn×P4 ④ グルーブ',
-    one:'P4 をもう 1 回。上 2 段でスイング、下 2 段でアクセント。',
-    todo:'Fn×P4 を 4 回、G を押そう', doneTxt:'グルーブを変えました',
-    more:'上 G1〜G8 は<b>スイング量</b>（G1=OFF、53〜75%）。8 分の裏だけを遅らせて跳ねさせます。下 G9〜G16 は<b>アクセント型</b>（G9=OFF、拍頭・裏拍・バックビート・ゴースト・うねり・ゆらぎ）。どちらも<b>パターンは書き換えず、再生のときにかけるだけ</b>。OFF に戻せば元どおり。ソレノイドの叩く強さにも 3 段階でかかります。' },
+  { no:'ステップ 5', key:'stepper', mode:SUB.STEPPER, title:'Fn×P4 ステッパページ',
+    one:'Fn を押しながら P4。16 キーが 8 組の「−／＋」ペアになります。',
+    todo:'Fn×P4 で、どれかのペアを押そう', doneTxt:'ステッパを触りました',
+    more:'ひとつの画面で<b>キー・スケール・グルーブ・オクターブ</b>を全部調整します。左のキーが「下げる／前へ」、右のキーが「上げる／次へ」。押すと 1 段動いて音で確かめられます。<b>どれかを 600ms 長押しすると、そのペアだけ最初の値に戻ります</b>。本体の LED は「いじってあるほど明るい」——全部標準のときはページ全体が薄暗く点きます。',
+    },
+  { no:'ステップ 6', key:'key', mode:SUB.STEPPER, title:'キーとスケール（G1〜G4）',
+    one:'G2 でキーを♯へ、G4 でスケールを次へ進めてみましょう。',
+    todo:'G1〜G4 を押してみよう', doneTxt:'キーかスケールを変えました',
+    more:'G1／G2 が<b>曲のキー</b>（C→C#→…→B の 12 循環）。G3／G4 が<b>スケール 10 段階</b>——0=白鍵（ふだんの PONKEY）→ 1〜8=メジャーペンタ／マイナーペンタ／琉球／都節／メジャー／ドリアン／ブルース／ホールトーン → 9=半音階。<b>P1〜P3 の SCALE モードと P5〜P7 の 16 キー、両方に同時にかかります</b>。押すと下から 8 音駆け上がって音階を聴かせてくれます。',
+    },
+  { no:'ステップ 7', key:'groove', mode:SUB.STEPPER, title:'グルーブ（G5〜G8）',
+    one:'G6 でスイングを 1 段上げて、再生の跳ね方を聴いてみましょう。',
+    todo:'G5〜G8 を押してみよう', doneTxt:'グルーブを変えました',
+    more:'G5／G6 が<b>スイング量</b>（OFF→53〜75%。8 分の裏だけ遅らせて跳ねさせる）。G7／G8 が<b>アクセント型</b>（OFF／拍頭／裏拍押し／バックビート／ゴースト16／うねり／ゆらぎ）。どちらも<b>パターンは書き換えず、再生のときにかけるだけ</b>。OFF に戻せば元どおりです。LED は強くかけるほど明るく色濃くなります。',
+    },
+  { no:'ステップ 8', key:'oct', mode:SUB.STEPPER, title:'オクターブ（G9〜G14）',
+    one:'G9／G10 で LEAD の高さを変えてみましょう。',
+    todo:'G9〜G14 を押してみよう', doneTxt:'高さを変えました',
+    more:'パートごとの±ペアです。G9／G10=<b>LEAD</b>、G11／G12=<b>PAD</b>、いちばん下の G13／G14=<b>BASS</b>（下の段が低音の担当、という並び）。名前はオクターブですが<b>単位は半音</b>で、−4〜＋11。<b>スロットごとに別々に保存</b>されます。G15／G16 は空きです。',
+    },
   { no:'ステップ 9', key:'master', mode:SUB.MASTER, title:'Fn×P5 全体の音量',
     one:'Fn を押しながら P5。階段のキーで音量を選びましょう。',
     todo:'Fn×P5 で音量を選ぼう', doneTxt:'全体の音量を変えました',
@@ -414,7 +418,7 @@ const L3=[
   { no:'ステップ 12', key:'scaleSetup', mode:SUB.SCALE_SETUP, title:'Fn＋グリッド直接 ＝ SCALE 設定',
     one:'P1〜P3 のどれかを選んでから、Fn を押しながら G1。',
     todo:'P1〜P3 を選び、Fn を押しながら G を押そう', doneTxt:'SCALE 設定に入りました',
-    more:'ドラムのパートを<b>メロディに変える</b>設定です。P1〜P3 を選んでいるときは、Fn を押しながらそのままグリッドを押すとこのページ。G1 で DRUM⇔SCALE の切替、G5〜G12 で音階、G4 でパターンページへ。SCALE にすると<b>ステップの位置がそのまま音の高さ</b>になります。音色はリードのパレット（オルゴールなど）。' },
+    more:'ドラムのパートを<b>メロディに変える</b>設定です。P1〜P3 を選んでいるときは、Fn を押しながらそのままグリッドを押すとこのページ。<b>G1 で DRUM⇔SCALE の切替、G4 でパターンページへ</b>。使うのはこの 2 キーだけで、音階そのものはステッパページ（Fn×P4 の G3／G4）で曲ごと選びます。SCALE にすると<b>ステップの位置がそのまま音の高さ</b>になります。音色はリードのパレット（オルゴールなど）。' },
   { no:'ステップ 13', key:'pattern', mode:SUB.PATTERN, title:'パターン流し込み',
     one:'SCALE 設定ページで G4。そのあと G1〜G16 を押してみましょう。',
     todo:'G4 でパターンページへ、G を押そう', doneTxt:'パターンを流し込みました',
@@ -430,7 +434,7 @@ const L3=[
   { no:'ステップ 16', key:'always', mode:'normal', title:'まとめ：階層',
     one:'Fn を離せば、いつでも通常モードに戻ります。',
     todo:'', doneTxt:'おつかれさまでした',
-    more:'通常 → <b>Fn を押す</b> → Fn×P1〜P7 のどれか（P4 だけは押すたび ①②③④ と巡る）→ <b>離すと通常へ</b>。特別な入口は 3 つ。<b>P5+P6+P7</b>＝エフェクト、<b>P1〜P4 を 1 秒</b>＝インテリア、<b>P1〜P3 を 1 秒</b>＝テスト（開発用。バーが全部上がる）。Fn を押しながら電源を入れると工場出荷リセットです。' },
+    more:'通常 → <b>Fn を押す</b> → Fn×P1〜P7 のどれか（P4 はステッパページ）→ <b>離すと通常へ</b>。特別な入口は 3 つ。<b>P5+P6+P7</b>＝エフェクト、<b>P1〜P4 を 1 秒</b>＝インテリア、<b>P1〜P3 を 1 秒</b>＝テスト（開発用。バーが全部上がる）。Fn を押しながら電源を入れると工場出荷リセットです。' },
 ];
 const LESSONS=[{name:'つかいかた',steps:L1},{name:'つくりかた',steps:L2},{name:'しくみ',steps:L3}];
 
@@ -804,6 +808,11 @@ function paintGrid(){
     lockText.style.display=show?'none':'';
     if(!show) lockText.textContent=PARTS[need].n+' を押す';
   }
+  // 実機側: ロック中はグリッドを claim、お手本キーは白点滅
+  setClaim(!show);
+  const wants=[];
+  if(show&&st.targets) for(const i of st.targets) if(!hasKey(S.sel<7?S.sel:0,i)&&i<16) wants.push(i);
+  ledSetTargets(wants);
 }
 function paintStep(){
   const st=cur();
@@ -1008,12 +1017,14 @@ function demo(){
    SONG_CMD_DUMP_SLOT の応答 (META + 現在スロット) で本体から答え合わせできる。
    音量・エフェクト・静音・インテリアは本体が報告しないので、推定のまま (HUD に ? を付ける)。
    ===================================================================== */
-const SUB_OF_P=[SUB.SLOT,SUB.BPM,SUB.LOOP,SUB.OCT,SUB.MASTER,SUB.PVOL,SUB.VOICE];   // Fn×P1..P7
+const SUB_OF_P=[SUB.SLOT,SUB.BPM,SUB.LOOP,SUB.STEPPER,SUB.MASTER,SUB.PVOL,SUB.VOICE];   // Fn×P1..P7
 const BPM_PRESETS=[60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210];
 const VOL_LEVEL_OF_KEY=[-1,-1,-1,9, -1,-1,5,8, -1,2,4,7, 0,1,3,6];   // 階段ゲージ (G13=0 … G4=9)
 const VOL_VALUES=[0,40,51,62,73,84,95,106,117,127];
 const OCT_GRID_MAP=[12,13,14,15, 8,9,10,11, 4,5,6,7, 0,1,2,3];       // 位置 p → キー (下段が低い)
 const SCALE_SHORT=['ﾒｼﾞｬｰﾍﾟﾝﾀ','ﾏｲﾅｰﾍﾟﾝﾀ','琉球','都節','メジャー','ドリアン','ブルース','ﾎｰﾙﾄｰﾝ'];
+// 統一スケール 10 段階 (v4.5.67): 0=白鍵 / 1-8=8種 / 9=半音階
+const SCALE10=['白鍵',...SCALE_SHORT,'半音階'];
 const SWING_NAMES=['OFF','53%','56%','59%','62%','66%','70%','75%'];
 const ACCENT_NAMES=['OFF','拍頭(弱)','拍頭(強)','裏拍押し','ﾊﾞｯｸﾋﾞｰﾄ','ｺﾞｰｽﾄ16','うねり','ゆらぎ'];
 const ACCENT_SHORT=['OFF','拍頭弱','拍頭強','裏拍','2と4','ｺﾞｰｽﾄ','うねり','ゆらぎ'];
@@ -1034,16 +1045,44 @@ const VOICE_NAMES=[
   ['ﾆｭｰｴｲｼﾞ','ウォーム','ボウド','ヘイロー','ハープ','クワイア','ｽﾄﾘﾝｸﾞｽ','ｺｰﾗｽPad','ｱﾄﾓｽ','エコーズ','波の音','鳥の声','ﾎﾟﾘｼﾝｾ','スイープ','ﾌﾞﾗｲﾄ','ゴブリン'],
 ];
 
+
+/* ステッパページ (v4.5.67+): pair=key/2、偶数=下げ/前、奇数=上げ/次。600ms 長押し=そのペアをデフォルトへ */
+const STEP_OCT_SYNTH=[null,null,null,null,1,2,0,null];   // pair4=LEAD pair5=PAD pair6=BASS
+const stepTimers=new Array(16).fill(0);
+function stepperTap(i){
+  const pair=i>>1, up=!!(i&1);
+  switch(pair){
+    case 0: D.root=((D.root??0)+(up?1:11))%12; markSeen('key'); break;
+    case 1: D.scale10=Math.max(0,Math.min(9,(D.scale10??0)+(up?1:-1))); markSeen('key'); break;
+    case 2: D.swing=Math.max(0,Math.min(7,(D.swing??0)+(up?1:-1))); markSeen('groove'); break;
+    case 3: D.accent=Math.max(0,Math.min(7,(D.accent??0)+(up?1:-1))); markSeen('groove'); break;
+    case 4: case 5: case 6: {
+      const sy=STEP_OCT_SYNTH[pair];
+      D.oct[sy]=Math.max(-4,Math.min(11,(D.oct[sy]??0)+(up?1:-1))); markSeen('oct'); break;
+    }
+    default: return;   // G15/16 は空き
+  }
+  markSeen('stepper');
+  clearTimeout(stepTimers[i]);
+  stepTimers[i]=setTimeout(()=>stepperResetPair(pair),600);   // gu で clearTimeout される
+}
+function stepperResetPair(pair){
+  if(pair===0) D.root=0; else if(pair===1) D.scale10=0;
+  else if(pair===2) D.swing=0; else if(pair===3) D.accent=0;
+  else if(pair>=4&&pair<7) D.oct[STEP_OCT_SYNTH[pair]]=0;
+  paintLiveAll();
+}
 const D={};                       // 推定した本体の状態
 function devReset(){
   Object.assign(D,{
     fn:false, sub:SUB.NONE, prev:0, sel:0, held:new Set(), heldAt:{},
     playing:null, slot:0, slotHas:0, p1Grid:false,
     bpm:null, click:null, rect:[4,4], oct:[null,null,null],
-    root:null, scale:null, swing:null, accent:null,
+    root:null, scale10:null, swing:null, accent:null,
+    proto:null, feat:0, feat2:0,
     voice:[null,null,null,null,null,null,null], pvol:[null,null,null,null,null,null,null], master:null,
     fx:false, fxSel:0, fxLv:[8,2,0,0], fxKnown:false,
-    scaleEn:[false,false,false], scaleIdx:[0,0,0], pattern:[null,null,null],
+    scaleEn:[false,false,false], pattern:[null,null,null],
     interior:false, song:null, iPreset:0, iFx:[false,false,false], iQuiet:false,
     quiet:false, test:false, seen:{}, fromDev:false, g1DownAt:0, sticky:false, fxSticky:false,
   });
@@ -1065,8 +1104,6 @@ function devKey(t,i){
       if(D.interior){
         if(i===0){ D.interior=false; markSeen('interior'); }
         else if(i===4) D.sub=SUB.MASTER; else if(i===5) D.sub=SUB.PVOL;
-      } else if(i===3){
-        D.sub = D.sub===SUB.OCT?SUB.KEY : D.sub===SUB.KEY?SUB.SCALE : D.sub===SUB.SCALE?SUB.GROOVE : SUB.OCT;
       } else D.sub=SUB_OF_P[i];
       if(D.sub===SUB.SLOT){ D.p1Grid=false; markSeen('slot'); }
     } else if(D.interior){
@@ -1110,17 +1147,14 @@ function devKey(t,i){
         case SUB.SLOT: D.p1Grid=true; D.slot=i; markSeen('slot'); break;
         case SUB.BPM:  if(D.bpm===BPM_PRESETS[i]) D.click=!(D.click??false); else D.bpm=BPM_PRESETS[i]; markSeen('bpm'); break;
         case SUB.LOOP: D.rect=[(i>>2)+1,(i&3)+1]; markSeen('loop'); break;
-        case SUB.OCT:  { const p=OCT_GRID_MAP.indexOf(i); D.oct[targetSynth()]=Math.max(-4,Math.min(11,p-4)); markSeen('oct'); break; }
-        case SUB.KEY:  if(i<12){ D.root=i; markSeen('key'); } break;
-        case SUB.SCALE:if(i<8){ D.scale=i; markSeen('scale'); } break;
-        case SUB.GROOVE: if(i<8) D.swing=i; else D.accent=i-8; markSeen('groove'); break;
+        case SUB.STEPPER: stepperTap(i); break;
         case SUB.MASTER:{ const l=VOL_LEVEL_OF_KEY[i]; if(l>=0){ D.master=l; markSeen('master'); } break; }
         case SUB.PVOL: { const l=VOL_LEVEL_OF_KEY[i]; if(l>=0){ D.pvol[target()]=l; markSeen('pvol'); }
                          if(i===0) D.g1DownAt=now; break; }
         case SUB.VOICE:  D.voice[target()]=i; markSeen('voice'); break;
         case SUB.SCALE_SETUP:{ const p=Math.min(D.prev,2);
           if(i===0) D.scaleEn[p]=!D.scaleEn[p]; else if(i===3) D.sub=SUB.PATTERN;
-          else if(i>=4&&i<=11) D.scaleIdx[p]=i-4; markSeen('scaleSetup'); break; }
+          markSeen('scaleSetup'); break; }
         case SUB.PATTERN:{ const p=Math.min(D.prev,2); D.pattern[p]=i; markSeen('pattern'); break; }
         case SUB.NONE:
           if(!D.interior&&D.prev<3){ D.sub=SUB.SCALE_SETUP; devKey('gd',i); return; }  // Fn+グリッド直接
@@ -1132,6 +1166,7 @@ function devKey(t,i){
   if(t==='gu'){
     if(D.fn&&D.sub===SUB.PVOL&&i===0&&D.g1DownAt&&now-D.g1DownAt>=600){ D.quiet=!D.quiet; markSeen('quiet'); }
     D.g1DownAt=0;
+    clearTimeout(stepTimers[i]);
   }
   paintLiveAll();
 }
@@ -1148,10 +1183,10 @@ function onMeta(d){
   if(d.length<19) return;
   D.bpm=d[0]+60; D.slot=d[1]; D.playing=!!d[2];
   D.scaleEn=[!!(d[3]&1),!!(d[3]&2),!!(d[3]&4)];
-  D.scaleIdx=[d[4]&7,d[5]&7,d[6]&7]; D.scale=d[4]&7;
   D.root=d[7]%12; D.swing=d[8]&7; D.accent=d[9]&7;
   D.voice=[d[10],d[11],d[12],d[13],d[14],d[15],d[16]].map(v=>v&15);
   D.slotHas=d[17]|(d[18]<<8);
+  if(d.length>=20) D.scale10=d[19]===0x7F?0:(d[19]>=8?9:d[19]+1);   // 統一10段 (v4.5.67)
   paintLiveAll();
 }
 const dumpAsm={};
@@ -1165,6 +1200,23 @@ function onSlotDump(d){
   const loopLen=full[2]; const oct=[full[3],full[4],full[5]].map(v=>(v<<24)>>24);
   const rr=full[6]||4, rc=full[7]||4;
   D.oct=oct; D.rect=[rr,rc]; D.loopLen=loopLen; D.slot=full[1];
+  // パターン本体を S.song に写す (本体が正)。substep(0-63)→ステップ(0-15)へ丸め
+  let i=8; const song=[[],[],[],[],[],[],[]];
+  const dc=full[i++]||0;
+  for(let n=0;n<dc&&i+2<full.length;n++){
+    const b=full[i++],lo=full[i++],hi=full[i++];
+    const part=(b>>4)&0xF, step=b&0xF, mask=lo|(hi<<8);
+    if(part<4) for(let k=0;k<16;k++) if((mask>>k)&1) song[part].push({s:step,k,d:1});
+  }
+  const sc=full[i++]||0;
+  for(let n=0;n<sc&&i+2<full.length;n++){
+    const b=full[i++],sub=full[i++],raw=full[i++];
+    const part=4+((b>>4)&0xF), k=b&0xF;                 // 上位ニブル=シンセ部 0-2 (bit7 レイヤーは raw 側)
+    if(part<7) song[part].push({s:sub>>2,k,d:Math.max(1,(raw&0x7F)>>2)});
+  }
+  S.song=song;
+  S.loopLen=Math.max(1,Math.min(16,loopLen>>2));
+  if(S.lesson!==null&&S.lesson!==2){ paintGrid(); paintStatus(); }
   paintLiveAll();
 }
 
@@ -1173,10 +1225,10 @@ const modeOf=()=>D.test?'test':D.fx?'fx':D.interior?(D.fn?'interiorFn':'interior
 const MODE_LABEL={normal:'通常（演奏・打ち込み）',fn:'Fn を押している',fx:'エフェクトモード（P5+P6+P7）',
   interior:'インテリアモード',interiorFn:'インテリア + Fn（曲選び）',test:'テストモード（開発用）',
   [SUB.SLOT]:'Fn×P1 スロット / 再生・停止',[SUB.BPM]:'Fn×P2 BPM',[SUB.LOOP]:'Fn×P3 ループの長さ',
-  [SUB.OCT]:'Fn×P4 ① オクターブ',[SUB.KEY]:'Fn×P4 ② キー',[SUB.SCALE]:'Fn×P4 ③ スケール',[SUB.GROOVE]:'Fn×P4 ④ グルーブ',
+  [SUB.STEPPER]:'Fn×P4 ステッパ（キー/スケール/グルーブ/オクターブ）',
   [SUB.MASTER]:'Fn×P5 マスター音量',[SUB.PVOL]:'Fn×P6 パート音量',[SUB.VOICE]:'Fn×P7 音色',
   [SUB.SCALE_SETUP]:'Fn＋グリッド SCALE 設定',[SUB.PATTERN]:'SCALE パターン'};
-const FN_P_ROLES=['スロット','BPM','ループ長','音高','マスター','パート音量','音色','Fn'];
+const FN_P_ROLES=['スロット','BPM','ループ長','ステッパ','マスター','パート音量','音色','Fn'];
 const NUM=i=>String(i+1);
 function roles(mode){
   const g=[],pk=new Array(8).fill(''),tp=target(),ts=targetSynth();
@@ -1194,15 +1246,23 @@ function roles(mode){
       BPM_PRESETS.forEach((b,i)=>set(i,String(b),D.bpm===b?(D.click===null?'クリック?':(D.click?'クリックON':'クリックOFF')):'',D.bpm===b,false)); break;
     case SUB.LOOP: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
       for(let i=0;i<16;i++){const r=(i>>2)+1,c=(i&3)+1; set(i,r+'×'+c,String(r*c)+'ステップ',D.rect[0]===r&&D.rect[1]===c,false);} break;
-    case SUB.OCT: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
-      OCT_GRID_MAP.forEach((k,p)=>{const v=p-4; set(k,(v>0?'+':'')+v,v===0?'基準':'',D.oct[ts]===v,false);}); break;
-    case SUB.KEY: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
-      for(let i=0;i<16;i++) i<12?set(i,NOTE_ABC[i],NOTE_KANA[i],D.root===i,false):set(i,'','',false,true); break;
-    case SUB.SCALE: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
-      for(let i=0;i<16;i++) i<8?set(i,NUM(i),SCALE_SHORT[i],D.scale===i,false):set(i,'','',false,true); break;
-    case SUB.GROOVE: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
-      for(let i=0;i<8;i++) set(i,SWING_NAMES[i],'スイング',D.swing===i,false);
-      for(let i=0;i<8;i++) set(8+i,ACCENT_SHORT[i],'アクセント',D.accent===i,false); break;
+    case SUB.STEPPER: FN_P_ROLES.forEach((r,u)=>pk[u]=r); {
+      // 8つの±ペア。sub に現在値、左=−/右=＋
+      const pv=[
+        ['キー',D.root===null?'?':NOTE_ABC[D.root]+NOTE_KANA[D.root]],
+        ['スケール',D.scale10===null?'?':SCALE10[D.scale10]],
+        ['スイング',D.swing===null?'?':SWING_NAMES[D.swing]],
+        ['アクセント',D.accent===null?'?':ACCENT_SHORT[D.accent]],
+        ['LEAD',D.oct[1]===null?'?':(D.oct[1]>0?'+':'')+D.oct[1]],
+        ['PAD',D.oct[2]===null?'?':(D.oct[2]>0?'+':'')+D.oct[2]],
+        ['BASS',D.oct[0]===null?'?':(D.oct[0]>0?'+':'')+D.oct[0]],
+        null];
+      for(let pr=0;pr<8;pr++){
+        if(!pv[pr]){ set(14,'','',false,true); set(15,'','',false,true); continue; }
+        set(pr*2,  '−'+pv[pr][0], pv[pr][1], false, false);
+        set(pr*2+1,'＋'+pv[pr][0], pv[pr][1], false, false);
+      }
+      break; }
     case SUB.MASTER: case SUB.PVOL: FN_P_ROLES.forEach((r,u)=>pk[u]=r); {
       const curL=mode===SUB.MASTER?D.master:D.pvol[tp];
       for(let i=0;i<16;i++){const l=VOL_LEVEL_OF_KEY[i];
@@ -1217,7 +1277,6 @@ function roles(mode){
       for(let i=0;i<16;i++) set(i,'','',false,true);
       set(0,D.scaleEn[p]?'SCALE':'DRUM','G1で切替',D.scaleEn[p],false);
       set(3,'ﾊﾟﾀｰﾝ','ページへ',false,false);
-      for(let i=0;i<8;i++) set(4+i,NUM(i),SCALE_SHORT[i],D.scaleIdx[p]===i,!D.scaleEn[p]);
       break; }
     case SUB.PATTERN: FN_P_ROLES.forEach((r,u)=>pk[u]=r); {
       const p=Math.min(D.prev,2);
@@ -1278,6 +1337,7 @@ function paintLiveGrid(){
     nums[i].style.fontSize=r.n.length>=4?'8.5px':'';
   }
   if(lockVeil){ lockVeil.style.display='none'; lockText.style.display='none'; }
+  setClaim(false); ledSetTargets([]);
   paintHud();
 }
 const fmt=(v,est)=>v===null||v===undefined?'<span class="unk">未取得</span>':(est?'<span class="est">'+v+'</span>':String(v));
@@ -1295,12 +1355,12 @@ function paintHud(){
     H('スロット',fmt(D.slot+1,!known))+
     W('オクターブ',octs)+
     H('キー',fmt(D.root===null?null:NOTE_ABC[D.root]+' '+NOTE_KANA[D.root],!known))+
-    H('スケール',fmt(D.scale===null?null:SCALE_SHORT[D.scale],!known))+
+    H('スケール',fmt(D.scale10===null?null:SCALE10[D.scale10],!known))+
     W('グルーブ',fmt(D.swing===null?null:'スイング '+SWING_NAMES[D.swing]+' · アクセント '+ACCENT_NAMES[D.accent??0],!known))+
     W('音色 '+PARTS[tp].n,fmt(D.voice[tp]===null?null:(D.voice[tp]+1)+' '+VOICE_NAMES[tp][D.voice[tp]],!known))+
     W('音量',PARTS[tp].n+' '+fmt(D.pvol[tp]===null?null:'L'+D.pvol[tp],true)+' · マスター '+fmt(D.master===null?null:'L'+D.master,true))+
     W('エフェクト',fmt(FX_NAMES.map((n,i)=>n+' '+D.fxLv[i]).join(' · '),true))+
-    W('SCALE',['P1','P2','P3'].map((n,i)=>n+' '+(D.scaleEn[i]?'♪'+SCALE_SHORT[D.scaleIdx[i]]:'ドラム')).join(' · '))+
+    W('SCALE',['P1','P2','P3'].map((n,i)=>n+' '+(D.scaleEn[i]?'♪メロディ':'ドラム')).join(' · '))+
     (other?W('そのほか',other):'');
 }
 function paintLiveStatus(){
@@ -1321,6 +1381,36 @@ const UUID_DBG='504f4e4b-4559-4442-5047-445342000001';
 const UUID_LOG='504f4e4b-4559-4442-5047-445442000002';
 const UUID_CMD='504f4e4b-4559-4442-5047-445443000003';
 const CC_RESET=0x42;
+const FEAT_SONG_DUMP=1<<5, FEAT2_LED_RGB=1<<0, FEAT2_CLAIM=1<<5;
+/* SONG_MAGIC 体系 (デバッグ char): [0x5A][cmd][devId][payload...] */
+async function sendSong(cmd,payload){
+  if(!S.cmdChar) return;
+  const u=new Uint8Array([0x5A,cmd,0x00,...(payload||[])]);
+  try{ await (S.cmdChar.writeValueWithoutResponse?S.cmdChar.writeValueWithoutResponse(u):S.cmdChar.writeValue(u)); }
+  catch(e){ try{ await S.cmdChar.writeValue(u); }catch(_){ } }
+}
+/* 盤面ロック (Push!!) を実機にも効かせる: グリッドだけ claim (bit0)。P キーは押させたいので封印しない */
+let claimed=false;
+function setClaim(on){
+  if(!S.connected||!(D.feat2&FEAT2_CLAIM)){ claimed=false; return; }
+  if(on===claimed) return;
+  claimed=on; sendSong(0x0D,[on?1:0]);
+}
+/* 「ここを押して」を実機 LED でも: 対象キーを白で点滅 (SONG_CMD_LED_FRAME 48B) */
+let ledTargets=[],ledTimer=0,ledPhase=true;
+function sendLedFrame(keys){
+  const f=new Uint8Array(48);
+  for(const k of keys){ f[k*3]=255; f[k*3+1]=255; f[k*3+2]=255; }
+  sendSong(0x09,f);
+}
+function ledSetTargets(t){
+  if(!S.connected||!(D.feat2&FEAT2_LED_RGB)){ if(ledTimer){clearInterval(ledTimer);ledTimer=0;} return; }
+  const same=t.length===ledTargets.length&&t.every((v,i)=>v===ledTargets[i]);
+  ledTargets=t;
+  if(!t.length){ if(ledTimer){clearInterval(ledTimer);ledTimer=0;} sendLedFrame([]); return; }
+  if(!ledTimer) ledTimer=setInterval(()=>{ ledPhase=!ledPhase; sendLedFrame(ledPhase?ledTargets:[]); },450);
+  if(!same){ ledPhase=true; sendLedFrame(ledTargets); }
+}
 async function sendCC(cc,val){
   if(!S.midiChar) return;
   const ts=Date.now()&0x1FFF;
@@ -1332,6 +1422,7 @@ function onPacket(ev){
   if(d.length<11||d[0]!==0xA5) return;
   const cat=d[8],id=d[9],p=d.subarray(11,11+d[10]);
   if(cat===0x03){ if(id===0x01) popCyl(p[0]); else if(id===0x02) dropCyl(p[0]); return; }
+  if(cat===0x00){ if(id===0x03&&p.length>=3){ D.proto=p[0]; D.feat=p[1]; D.feat2=p[2]; } return; }
   if(cat===0x09){ if(id===0x0A) onMeta(p); else if(id===0x09) onSlotDump(p); return; }
   if(cat!==0x02||S.lesson===null) return;
   D.fromDev=true;
@@ -1367,10 +1458,18 @@ async function connect(){
       const ms=await server.getPrimaryService(UUID_MIDI);
       S.midiChar=await ms.getCharacteristic(UUID_MIDI_CHAR);
       try{ S.midiChar.addEventListener('characteristicvaluechanged',onMidiNotify); await S.midiChar.startNotifications(); }catch(_){ }
-      await sendCC(CC_RESET,0);
-      S.song=[[],[],[],[],[],[],[]];
-      showErr('本体のパターンを消して、空の状態から合わせました。');
-    }catch(e){ showErr('本体のパターンを消せませんでした。画面と本体がずれる可能性があります。'); }
+      // 能力ネゴ: SYS_CAPS を聞いてから、読める本体なら「読む」、読めない旧FWなら従来どおり「消して揃える」
+      await S.cmdChar.writeValue(new Uint8Array([0xA6,0x07,0x00]));
+      for(let w=0;w<12&&D.proto===null;w++) await new Promise(r=>setTimeout(r,80));
+      if(D.feat&FEAT_SONG_DUMP){
+        await sendSong(0x07,[0xFF]);                     // 現在スロットを読んで画面に写す
+        showErr('本体のパターンを読み込みました。');
+      }else{
+        await sendCC(CC_RESET,0);
+        S.song=[[],[],[],[],[],[],[]];
+        showErr('本体のパターンを消して、空の状態から合わせました。(旧ファームのため読み出し非対応)');
+      }
+    }catch(e){ showErr('本体との同期に失敗しました。画面と本体がずれる可能性があります。'); }
     S.connected=true;
     el('connLabel').textContent='接続中'; el('btnConn').classList.add('on');
     setSync(true);
@@ -1397,11 +1496,17 @@ function onMidiNotify(ev){
     else if(cc===0x35) D.swing=v&7;
     else if(cc===0x36) D.accent=v&7;
     else if(cc===0x38) D.root=v%12;
+    else if(cc===0x37) D.scale10=v===0x7F?0:(v>=8?9:v+1);
+    else if(cc===0x3A) D.proto=v;
+    else if(cc===0x3B) D.feat=v;
+    else if(cc===0x3C) D.feat2=v;
     else continue;
     paintLiveAll();
   }
 }
 function onDisc(){
+  claimed=false; if(ledTimer){clearInterval(ledTimer);ledTimer=0;}
+  D.proto=null;
   S.connected=false; S.midiChar=null;
   el('connLabel').textContent='接続'; el('btnConn').classList.remove('on');
   setSync(false);
@@ -1432,7 +1537,9 @@ function openLesson(n){
   if(S.playing) stopSeq();
   document.body.classList.remove('home');
   document.body.classList.toggle('l3',n===2);
-  if(n===2){ devReset(); D.seen.always=true; if(S.connected) queueMeta(); }
+  if(n===2){ const f=D.feat,f2=D.feat2,pr=D.proto; devReset(); D.feat=f; D.feat2=f2; D.proto=pr;
+    D.seen.always=true; if(S.connected) queueMeta(); }
+  else if(S.connected&&(D.feat&FEAT_SONG_DUMP)) sendSong(0x07,[0xFF]);
   el('wmSub').textContent='レッスン'+(n+1);
   paintStep(); scrollTo(0,0);
   if(!S.sync&&cur().part!==undefined) startSeq();

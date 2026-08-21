@@ -12,7 +12,9 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   BPM/スロット/キー/スケール/グルーブ/音色/オクターブ/ループ矩形は `SONG_CMD_DUMP_SLOT 0xFF` の
   META+SLOT_DUMP と BLE MIDI の CC 通知で答え合わせ。音量・エフェクト・静音・インテリアは推定のまま = HUD に `?`）。
   Fn×Pn の割当や音色名はファーム `PONKEY_PT2_v4_5_34.ino` / `PONKEY_V2_DATA_STRUCTURES.h` から写しているので、
-  ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる
+  ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる（現在 v4.5.71 のステッパページ準拠）。
+  v4.5.69+ の窓口を使用: Push!! ロック中はグリッドを `SONG_CMD_CLAIM`、お手本キーは `SONG_CMD_LED_FRAME` で白点滅、
+  接続時は `SONG_CMD_DUMP_SLOT 0xFF` で本体パターンを読んで写す（機能ビットでゲート、旧FWは CC_RESET にフォールバック）
 - `duet.html` — PONKEY AI Duet
 - `dialogue.html` — DIALOGUE
 - `sequence.html` — SEQUENCE（＋グルーブパネル）
