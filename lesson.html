@@ -405,7 +405,7 @@ const L3=[
   { no:'ステップ 6', key:'key', mode:SUB.STEPPER, title:'キーとスケール（G1〜G4）',
     one:'G2 でキーを♯へ、G4 でスケールを次へ進めてみましょう。', focus:[0,1,2,3],
     todo:'G1〜G4 を押してみよう', doneTxt:'キーかスケールを変えました',
-    more:'G1／G2 が<b>曲のキー</b>（C→C#→…→B の 12 循環）。G3／G4 が<b>スケール 10 段階</b>——0=白鍵（ふだんの PONKEY）→ 1〜8=メジャーペンタ／マイナーペンタ／琉球／都節／メジャー／ドリアン／ブルース／ホールトーン → 9=半音階。<b>P1〜P3 の SCALE モードと P5〜P7 の 16 キー、両方に同時にかかります</b>。押すと下から 8 音駆け上がって音階を聴かせてくれます。',
+    more:'G1／G2 が<b>曲のキー</b>（C→C#→…→B の 12 循環）。G3／G4 が<b>スケール 10 段階</b>——0=白鍵（ふだんの PONKEY）→ 1〜8=メジャーペンタ／マイナーペンタ／琉球／都節／メジャー／ドリアン／ブルース／ホールトーン → 9=半音階。<b>P1〜P3 の SCALE モードと P5〜P7 の 16 キー、両方に同時にかかります</b>。押すと音で確かめられます——<b>キーを変えたときは「変わる前の音」から「新しい音」へ鳴らしてから</b>、新しいキーで下から 8 音駆け上がります（半音ずらしただけだと同じ形に聞こえてしまうため）。',
     },
   { no:'ステップ 7', key:'groove', mode:SUB.STEPPER, title:'グルーブ（G5〜G8）',
     one:'G6 でスイングを 1 段上げて、再生の跳ね方を聴いてみましょう。', focus:[4,5,6,7],
@@ -1633,7 +1633,7 @@ async function connect(){
     pk.on('cc',       onCC);
     pk.on('disconnect', onDisc);
     await pk.connect({keyEvents:true});
-    await pk.dbgRaw(0x03,[0x03]);                  // SOLENOID カテゴリも購読 (円柱の動き)
+    await pk.subscribeSolenoid();                  // 本体の物理の動き → 画面の円柱
     try{
       // 能力ネゴを待ってから、読める本体なら「読む」、読めない旧FWなら従来どおり「消して揃える」
       for(let w=0;w<12&&D.proto===null;w++) await new Promise(r=>setTimeout(r,80));

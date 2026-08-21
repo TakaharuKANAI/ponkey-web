@@ -4,10 +4,11 @@
    ・オフラインでもアプリが開ける(DIALOGUE等は外部依存が少なく完全オフライン動作)
    方針:
    ・HTML(ドキュメント)は network-first → 更新を即反映、オフライン時はキャッシュ
-   ・フォント等の静的リソースは cache-first(変わらないので)
+   ・自前の JS/CSS も network-first (共通ライブラリ ponkey.js の更新を確実に配るため)
+   ・フォント等の外部リソースは cache-first(変わらないので)
    ・DUET の Magenta/TensorFlow CDN は大きいのでキャッシュしない(要ネットのまま)
 */
-const CACHE = 'ponkey-v14';
+const CACHE = 'ponkey-v15';
 const CORE = [
   './', './index.html',
   './ponkey.js',                       // 全アプリ共通の BLE クライアント
@@ -45,6 +46,17 @@ self.addEventListener('fetch', e => {
       fetch(req)
         .then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); return r; })
         .catch(() => caches.match(req).then(m => m || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // 自前の JS/CSS は network-first。cache-first だと ponkey.js を更新しても
+  // CACHE バージョンを上げるまで利用者に古い版が配られ続ける (実際に起きた)
+  if (url.origin === location.origin && /\.(js|css)$/.test(url.pathname)) {
+    e.respondWith(
+      fetch(req)
+        .then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); return r; })
+        .catch(() => caches.match(req))
     );
     return;
   }
