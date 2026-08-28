@@ -97,24 +97,30 @@
        padding:calc(var(--cell,90px)*.07);text-align:center;overflow:hidden;
        transition:background .08s,border-color .08s;min-width:0;min-height:0}
   .key .n{position:absolute;top:4%;left:6%;font-size:calc(var(--cell,90px)*.085);color:var(--dim);opacity:.7}
-  /* 文字の大きさは**文字数で決める** (renderBoard が --f を入れる)。
-     「C4」のような短い名前は大きく、「ムートトライアングル」のような長い名前は小さく。
-     1つの倍率では両方を満たせないので、キーごとに決める。 */
+  /* 文字の大きさは**盤面で1つ**に揃える (renderBoard が board に --f を入れる)。
+     キーごとに変えるとバラバラに見えるので、**いちばん長いラベルに合わせて全部同じ**にする。
+     モードが変われば長さも変わるので、音名の画面は大きく・キット名の画面は小さくなる。 */
   .key .big{font-size:calc(var(--cell,90px)*var(--f,.14));font-weight:600;line-height:1.15;
             word-break:break-word;max-width:100%}
-  .key .small{font-size:calc(var(--cell,90px)*.082);color:var(--dim);
+  .key .small{font-size:max(8px,calc(var(--cell,90px)*.082));color:var(--dim);
               margin-top:calc(var(--cell,90px)*.045);line-height:1.25;max-width:100%}
+  body.mini .key .small{display:none}          /* セルが小さいときは補助ラベルを畳む */
   .key.on{background:var(--panel2)}
   .key.dim{opacity:.3}
   .key.press{border-color:#fff;background:#2a2f37}
   .key.head::after{content:'';position:absolute;inset:0;border:2px solid var(--warn);pointer-events:none}
 
   /* ── P キーの列 ── */
-  .pkeys{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:10px;flex:none}
-  .pk{border:1px solid var(--line);background:var(--panel);padding:6px 3px;text-align:center}
-  .pk .pn{font-size:clamp(11px,1.1vw,13px);font-weight:600}
-  .pk .pr{font-size:clamp(8.5px,.85vw,10px);color:var(--dim);margin-top:2px;line-height:1.2;
-          min-height:2.4em;overflow:hidden}
+  /* P キーの列は**盤面と同じ幅**にして左右を揃える (別の幅だと2つの塊に見えてしまう) */
+  .pkeys{display:grid;grid-template-columns:repeat(8,1fr);gap:var(--gap,8px);margin:10px auto 0;
+         flex:none;width:var(--bs,400px)}
+  /* P キーの文字もセルの一辺から出す (盤面と同じ幅に収めるので、G キーの半分の幅になる) */
+  .pk{border:1px solid var(--line);background:var(--panel);padding:calc(var(--cell,90px)*.05) 2px;
+      text-align:center;overflow:hidden}
+  .pk .pn{font-size:max(10px,calc(var(--cell,90px)*.105));font-weight:600;line-height:1.1}
+  .pk .pr{font-size:max(7.5px,calc(var(--cell,90px)*.072));color:var(--dim);margin-top:2px;
+          line-height:1.15;min-height:2.3em;overflow:hidden;word-break:break-word}
+  body.mini .pk .pr{display:none}
   .pk.sel{border-color:#fff}
   .pk.held{background:#2a2f37;border-color:#fff}
 
@@ -206,10 +212,12 @@
    ════════════════════════════════════════════════════════════ */
 const PARTS = Ponkey.PARTS;                       // 0 = P1 ドラム / 1-6 = P2-P7 メロディ
 const MEL   = PARTS.slice(1);
+// 盤面は**全部同じ文字サイズ**にする (バラバラだと読みにくい) ので、
+//   いちばん長い名前がそのまま全体の大きさを決めてしまう。長い名前は短く言い換えてある。
 const KIT_SOUNDS = ['バスドラ','スネア','クローズHH','タンバリン',
-                    '低フロアタム','リムショット','ペダルHH','カウベル',
-                    '低コンガ','クラベス','ライド','木ブロック高',
-                    '中低タム','クラップ','オープンHH','ﾑｰﾄﾄﾗｲｱﾝｸﾞﾙ'];
+                    'フロアタム','リムショット','ペダルHH','カウベル',
+                    '低コンガ','クラベス','ライド','木ブロック',
+                    '中低タム','クラップ','オープンHH','トライアングル'];
 const VOICE_NAMES=[
   // P1 は**キット**なので Fn×P7 では選べない (キー位置で打楽器が決まる)。表示用に既定キット「トイ」の中身
   ['バスドラ','スネア','クローズHH','タンバリン','低フロアタム','リムショット','ペダルHH','カウベル',
@@ -423,20 +431,20 @@ function renderBoard(){
     c.className='key'+(r.on?' on':'')+(r.dim?' dim':'')+(D.pressed.has(i)?' press':'')
       +(modeOf()==='normal'&&D.step===i&&D.playing?' head':'');
     const big=c.querySelector('.big'); big.textContent=r.big; big.style.color=r.color||'';
-    c.style.setProperty('--f', fontRatio(r.big));
     c.querySelector('.small').textContent=r.small;
   }
+  // 盤面ぜんたいで1つの文字サイズ (いちばん長いラベルが収まる大きさ)
+  b.style.setProperty('--f', fontRatio(Math.max(...g.map(r=>(r.big||'').length))));
 }
-// 文字数 → セルの一辺に対する文字サイズの倍率
-function fontRatio(t){
-  const n=(t||'').length;
-  if(n<=2) return .26;
-  if(n<=3) return .22;
-  if(n<=4) return .18;
-  if(n<=5) return .155;
-  if(n<=7) return .125;
-  if(n<=9) return .105;
-  return .092;
+// いちばん長いラベルの文字数 → セルの一辺に対する文字サイズの倍率 (盤面で共通)。
+//   長い名前は2行に折り返す前提なので、1行に詰め込むより大きめに取れる。
+function fontRatio(n){
+  if(n<=2) return .27;
+  if(n<=4) return .21;
+  if(n<=6) return .17;
+  if(n<=8) return .145;
+  if(n<=10) return .12;
+  return .10;
 }
 function renderPkeys(){
   const el=$('pkeys');
@@ -675,6 +683,8 @@ function doFit(){
   r.setProperty('--bs', (cell*4+gap*3)+'px');
   r.setProperty('--cell', cell+'px');
   r.setProperty('--gap', gap+'px');
+  // セルが小さいときは補助ラベルを畳む (読めない字を並べても意味が無い)
+  document.body.classList.toggle('mini', cell < 62);
 }
 addEventListener('resize',fit);
 addEventListener('load',fit);
