@@ -21,7 +21,10 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   META+SLOT_DUMP と BLE MIDI の CC 通知で答え合わせ。v4.5.72+ なら `DBG_EV_MODE_UI` と拡張 META が届くので
   推定をやめて本体の申告を正とし、HUD の `?` も消える。旧FWのみ推定フォールバック）。
   Fn×Pn の割当や音色名はファーム `PONKEY_PT2_v4_5_34.ino` / `PONKEY_V2_DATA_STRUCTURES.h` から写しているので、
-  ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる（現在 v4.5.71 のステッパページ準拠）。
+  ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる（**現在 v4.6.16 準拠**）。
+  v4.6 追従で入れ替えたもの: L1/L2 は「P1=パッド＋長押し録音 / P2-P7=メロディ6パート」の操作モデルへ全面書き直し、
+  L3 は Fn+G＝クイックページ（プリセット8/スケール/キー/BPM/音量）とインスタントFX（P1+Pn）の項を新設、
+  廃止された SCALE 設定・パターン流し込みの2項を削除、ステッパ下段＝現パートのオクターブへ。
   v4.5.69+ の窓口を使用: Push!! ロック中はグリッドを `claim()`、お手本キーは `ledFrame()` で白点滅、
   接続時は `dumpSlot()` で本体パターンを読んで写す（`hasFeature()` でゲート、旧FWは CC_RESET にフォールバック）。
   BLE 層は `ponkey.js` 経由（`modeui`/`songmeta`/`slotdump`/`cc`/`keydown` 等のイベントを購読。
