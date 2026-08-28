@@ -32,32 +32,42 @@
     [ 70, 60, 75, 65,  85, 72, 90, 80, 100, 85,105, 92, 118,100,125,108],
     [105, 90, 98, 90, 105, 90, 98, 90, 105, 90, 98, 90, 105, 90, 98, 90],
   ];
-  const PART_NAMES = ['KICK', 'SNARE', 'HAT', 'TOM', 'BASS', 'LEAD', 'PAD'];
+  // v4.6: P1 = ドラムキット1パート (16打楽器)。**列 = 系統**なので `key % 4` で
+  //   キック/スネア/ハット/パーカッションの4系統に束ねられる。
+  //   この束ね方のおかげで、旧来の「キックは1拍目・ハットは8分」という分析がそのまま生きる。
+  const DRUM_FAMILIES = ['キック', 'スネア', 'ハット', 'パーカス'];
+  const MEL_NAMES = ['けんばん', 'リード', 'ベース', 'わおん', 'ベル', 'こえ'];
+  const PART_NAMES = [...DRUM_FAMILIES, ...MEL_NAMES];
+  const NMEL = MEL_NAMES.length;             // 6
+  const IDX_BASS = 4 + 2;                    // parts[] 上のベースの位置 (P4 = メロディ index2)
   const SCALE_NAMES = ['メジャー', 'マイナー', 'ペンタ', 'マイナーペンタ', 'ドリアン', 'ブルース', '琉球', 'ハーモニックマイナー'];
   // Longuet-Higgins & Lee 風メトリック重み (16分16ステップ)
   const METRIC_W = [5,1,2,1, 3,1,2,1, 4,1,2,1, 3,1,2,1];
 
   // ─────────────────────────────────────────── ① 正規化
-  // Score = { loopLen(substep), steps, rect:{row,col}, oct:[3],
+  // Score = { loopLen(substep), steps, rect:{row,col}, oct:[6],
   //           drums:[{part,step,keys:[..]}], synth:[{part,key,sub,dur,layer}] }
   function scoreFromLoop(L) {
-    const drums = (L.drums || []).map(([p, s]) => ({ part: p, step: s, keys: [s] }));
+    // loop 形式のドラムは [サウンド, ステップ] (v4.6: 1バイトが (サウンド<<4)|ステップ と同じ意味)
+    const drums = (L.drums || []).map(([k, s]) => ({ step: s, keys: [k] }));
     const synth = (L.synth || []).map(([l, k, sub, du]) => ({ part: l, key: k, sub, dur: (du & 0x7f) || 1, layer: (du >> 7) & 1 }));
     return { loopLen: L.loopLen || 64, steps: Math.max(1, Math.round((L.loopLen || 64) / 4)),
-             rect: { row: 4, col: 4 }, oct: (L.oct || [0, 0, 0]).slice(), drums, synth, slot: null };
+             rect: { row: 4, col: 4 }, oct: (L.oct || new Array(NMEL).fill(0)).slice(), drums, synth, slot: null };
   }
-  // 本体 DUMP v2: [0xF2][slot][loopLen][oct0..2][rectRow][rectCol][dc]{(p<<4)|s,maskLo,maskHi}[sc]{(l<<4)|k,sub,raw}
+  // 本体 DUMP v2: [0xF2][slot][loopLen][**oct×6**][rectRow][rectCol][dc]{(p<<4)|s,maskLo,maskHi}[sc]{(l<<4)|k,sub,raw}
+  //   ⚠ v4.6.0 でオクターブ欄が 3→6 要素になった。ここを間違えると以降のバイトが全部ずれる。
+  //   ドラムは part が常に 0 で、マスクのビット k = キット音 k (= キー k)。
   function decodeSlotV2(d) {
     let i = 0;
     if (d[i++] !== 0xF2) return null;
     const slot = d[i++], loopLen = d[i++] || 64;
-    const oct = [d[i++], d[i++], d[i++]].map(v => (v << 24) >> 24);
+    const oct = []; for (let n = 0; n < NMEL; n++) oct.push((d[i++] << 24) >> 24);
     let rr = d[i++], rc = d[i++]; if (!rr) rr = 4; if (!rc) rc = 4;
     const dc = d[i++], drums = [];
     for (let n = 0; n < dc; n++) {
       const b = d[i++], mask = d[i++] | (d[i++] << 8);
       const keys = []; for (let k = 0; k < 16; k++) if ((mask >> k) & 1) keys.push(k);
-      drums.push({ part: (b >> 4) & 0xf, step: b & 0xf, keys });
+      drums.push({ step: b & 0xf, keys });
     }
     const sc = d[i++], synth = [];
     for (let n = 0; n < sc; n++) {
@@ -66,17 +76,18 @@
     }
     return { loopLen, steps: Math.max(1, Math.round(loopLen / 4)), rect: { row: rr, col: rc }, oct, drums, synth, slot };
   }
-  // 本体 META: [bpm-60][curSlot][playing][scaleBits][sc0][sc1][sc2][root][swing][accent][voice×7][hasLo][hasHi]
+  // 本体 META: [bpm-60][curSlot][playing][0][0][0][0][root][swing][accent][voice×7][hasLo][hasHi]
+  //   v4.6.0: 旧 scaleEnabledBits / scaleIdx の欄はドラムのスケールモード廃止で常に 0 (形式長は維持)
   function decodeMeta(d) {
     return { bpm: 60 + d[0], currentSlot: d[1], playing: !!d[2],
-             scaleEnabled: [!!(d[3] & 1), !!(d[3] & 2), !!(d[3] & 4)],
-             scaleIdx: [d[4], d[5], d[6]], root: d[7], swing: d[8], accent: d[9],
+             root: d[7], swing: d[8], accent: d[9],
              voices: Array.from(d.slice(10, 17)), hasData: d[17] | (d[18] << 8) };
   }
   // Score → SEQUENCE の loop 形式 (書き戻し/表示用)。矩形は線形に展開しない(そのまま)。
   function loopFromScore(sc) {
     const drums = [], synth = [];
-    for (const h of sc.drums) for (const k of h.keys) if (k === h.step) drums.push([h.part, h.step]);
+    // v4.6: 立っているキット音をそのまま [サウンド, ステップ] で並べる (対角の制約はもう無い)
+    for (const h of sc.drums) for (const k of h.keys) drums.push([k, h.step]);
     for (const n of sc.synth) synth.push([n.part, n.key, n.sub, (n.dur & 0x7f) | (n.layer ? 0x80 : 0)]);
     return { name: '', loopLen: sc.loopLen, oct: sc.oct.slice(), drums, synth };
   }
@@ -96,15 +107,17 @@
     const tl = timeline(sc);
     const N = tl.n;                                  // 時間ステップ数 (通常 16)
     const gridToT = {}; tl.map.forEach((g, t) => { gridToT[g] = t; });
-    // 時間位置ごとのヒット (ドラム 4 パート): hits[part] = Set(t)
+    // v4.6: ドラムは1パート16音。**列 (key % 4) = 系統**なので4系統に束ねて数える。
+    //   こうすると「キックは1拍目 / スネアはバックビート / ハットは8分」という
+    //   従来の見立てがそのまま成立する (束ね方だけが変わり、音楽的な読みは変わらない)。
     const hits = [new Set(), new Set(), new Set(), new Set()];
-    const keyHits = [[], [], [], []];                // {t,key} — SCALE パートの音高
+    const keyHits = [[], [], [], []];                // {t,key} — その系統で叩かれた打楽器
     for (const h of sc.drums) {
       const t = gridToT[h.step]; if (t == null) continue;
-      hits[h.part].add(t); for (const k of h.keys) keyHits[h.part].push({ t, key: k });
+      for (const k of h.keys) { const fam = k % 4; hits[fam].add(t); keyHits[fam].push({ t, key: k }); }
     }
-    // シンセ: t(16分) と細分 sub%4
-    const syn = [[], [], []];
+    // メロディ: t(16分) と細分 sub%4
+    const syn = Array.from({ length: NMEL }, () => []);
     for (const nt of sc.synth) {
       const g = Math.floor(nt.sub / 4), t = gridToT[g]; if (t == null) continue;
       syn[nt.part].push({ t, fine: nt.sub % 4, key: nt.key, dur: nt.dur, layer: nt.layer, sub: nt.sub });
@@ -118,9 +131,10 @@
       const c = H.length;
       const down = H.filter(isDown).length, eighth = H.filter(isEighth).length, odd = H.filter(isOdd).length;
       parts.push({ name: PART_NAMES[p], count: c, density: c / N * 16, down, eighth, odd,
-                   pos: H, syncopation: syncIndex(H, N), scale: !!(meta.scaleEnabled && meta.scaleEnabled[p]) });
+                   pos: H, syncopation: syncIndex(H, N),
+                   sounds: [...new Set(keyHits[p].map(x => x.key))].sort((a, b) => a - b) });
     }
-    for (let l = 0; l < 3; l++) {
+    for (let l = 0; l < NMEL; l++) {
       const S = syn[l];
       const ts = [...new Set(S.map(x => x.t))].sort((a, b) => a - b);
       const keys = S.map(x => x.key);
@@ -146,8 +160,8 @@
     // スイングが「聞こえる」素材: 16分裏(奇数ステップ)の音、または細分位置が後半(sub%8>=4)のシンセ音
     const swingMaterial = oddHitsAll + syn.flat().filter(x => x.sub % 8 >= 4).length;
     // 総合シンコペーション (キック+スネア+ベース、ヒット数で正規化)
-    const syncTotal = (K.syncopation + SN.syncopation + parts[4].syncopation);
-    const syncPerHit = syncTotal / Math.max(1, K.count + SN.count + parts[4].count);
+    const syncTotal = (K.syncopation + SN.syncopation + parts[IDX_BASS].syncopation);
+    const syncPerHit = syncTotal / Math.max(1, K.count + SN.count + parts[IDX_BASS].count);
     // アクセント型ごとの「効き」= 実ヒットにかかる倍率の標準偏差 (0 なら何も変わらない)
     const accentEffect = ACCENT_TPL.map(tpl => {
       const v = [];
@@ -156,9 +170,9 @@
       const m = v.reduce((a, b) => a + b, 0) / v.length;
       return Math.sqrt(v.reduce((a, b) => a + (b - m) * (b - m), 0) / v.length);
     });
-    return { N, parts, fourOnFloor, backbeat, hatSub, drumHits, oddHitsAll, swingMaterial,
+    return { N, parts, drum: parts.slice(0, 4), mel: parts.slice(4), bass: parts[IDX_BASS],
+             fourOnFloor, backbeat, hatSub, drumHits, oddHitsAll, swingMaterial,
              syncTotal, syncPerHit, accentEffect, bpm: meta.bpm || 120,
-             scaleEnabled: meta.scaleEnabled || [false, false, false], scaleIdx: meta.scaleIdx || [0, 0, 0],
              root: meta.root, current: { swing: meta.swing || 0, accent: meta.accent || 0 } };
   }
   // LHL 風シンコペーション指数: 弱拍のヒットで、次に来るより強い位置が空なら (強-弱) を加算
@@ -176,8 +190,8 @@
 
   // ─────────────────────────────────────────── ③ スタイル推定 (事前分布)
   function inferStyle(f) {
-    const bpm = f.bpm, bass = f.parts[4];
-    if (f.drumHits <= 6 && f.parts.slice(4).reduce((a, p) => a + p.count, 0) <= 8)
+    const bpm = f.bpm, bass = f.bass;
+    if (f.drumHits <= 6 && f.mel.reduce((a, p) => a + p.count, 0) <= 8)
       return { key: 'minimal', label: 'ミニマル', swing: 1, accents: [7, 1], why: '音数が少ないので、大きく崩さず"揺らぎ"だけ足すのが合いそうです。' };
     if (f.fourOnFloor && f.hatSub === '16th')
       return { key: 'house16', label: '四つ打ち (16分ハット)', swing: 3, accents: [3, 5, 1], why: '四つ打ち＋16分ハット。裏拍を押すとフロア感が出ます。' };
@@ -190,7 +204,7 @@
       return { key: 'hiphop', label: 'ヒップホップ寄り', swing: 5, accents: [5, 4, 2], why: 'ゆったりしたバックビート。深めのスイングとゴーストが似合います。' };
     if (f.backbeat)
       return { key: 'beat', label: 'ビート', swing: 3, accents: [4, 1, 5], why: '2・4拍にスネア。バックビートを主役にすると締まります。' };
-    if (bpm >= 130 && f.parts[2].count >= 8)
+    if (bpm >= 130 && f.drum[2].count >= 8)
       return { key: 'techno', label: 'テクノ/エレクトロ', swing: 1, accents: [2, 3, 7], why: '速くて直線的。スイングは控えめ、拍頭の強弱で推進力を。' };
     return { key: 'straight', label: 'ストレート', swing: 2, accents: [1, 3, 7], why: 'まず拍頭を少し立てるところから。' };
   }
@@ -247,15 +261,18 @@
 
   // 人が読む要約 (UI 用)
   function describe(f) {
-    const K = f.parts[0], SN = f.parts[1], HT = f.parts[2], B = f.parts[4];
+    const K = f.drum[0], SN = f.drum[1], HT = f.drum[2], B = f.bass;
     const out = [];
     out.push(`${f.bpm} BPM / ドラム ${f.drumHits} 打`);
     if (f.fourOnFloor) out.push('キック: 四つ打ち'); else if (K.count) out.push(`キック: ${K.count}打${K.odd ? '(16分裏あり)' : ''}`);
     if (f.backbeat) out.push('スネア: 2・4拍'); else if (SN.count) out.push(`スネア: ${SN.count}打`);
     out.push('ハット: ' + ({ '16th': '16分', '8th': '8分', 'sparse': 'まばら', 'none': 'なし' })[f.hatSub]);
     if (B.count) out.push(`ベース: ${B.count}音 / キック追従 ${Math.round(B.lockKick * 100)}%`);
-    if (f.parts[5].count) out.push(`リード: ${f.parts[5].count}音${f.parts[5].longRatio > .4 ? '(伸ばし多め)' : ''}`);
-    if (f.parts[6].count) out.push(`パッド: ${f.parts[6].count}音`);
+    // v4.6: メロディ6パート。音のあるパートだけ並べる
+    f.mel.forEach((mp, i) => {
+      if (i === 2 || !mp.count) return;                       // ベースは上で B として扱っている
+      out.push(`${mp.name}: ${mp.count}音${mp.longRatio > .4 ? '(伸ばし多め)' : ''}`);
+    });
     out.push(`シンコペーション指数 ${f.syncTotal}`);
     if (f.swingMaterial === 0) out.push('16分裏の音: なし');
     return out;

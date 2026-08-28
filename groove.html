@@ -73,8 +73,8 @@
   .opt.act .l{color:var(--teal)}
   .opt .v{font-size:14px;margin:3px 0 2px}
   .opt .w{font-size:11.5px;color:var(--dim);line-height:1.5}
-  /* パターンのミニ表示 (7パート×16) */
-  .mini{display:grid;grid-template-columns:repeat(16,1fr);grid-template-rows:repeat(7,1fr);gap:2px;width:100%;height:56px;margin-top:8px}
+  /* パターンのミニ表示 (ドラム4系統 + メロディ6パート × 16) */
+  .mini{display:grid;grid-template-columns:repeat(16,1fr);grid-template-rows:repeat(10,1fr);gap:2px;width:100%;height:76px;margin-top:8px}
   .mini i{background:var(--panel2)}
   .mini i.b{background:#e5e1d6}
   .mini i.on{background:var(--dim)}
@@ -160,7 +160,7 @@ function onDump(data){
   let off=0;for(let c=0;c<cnt;c++){full.set(a.parts[c],off);off+=a.parts[c].length;} delete chunkAsm[gen];
   const sc=GrooveEngine.decodeSlotV2(full);
   if(!sc){log('⚠ 未知の形式');return;}
-  log(`スロット${sc.slot+1} 読み取り: ドラム${sc.drums.length} / シンセ${sc.synth.length}`);
+  log(`スロット${sc.slot+1} 読み取り: ドラム${sc.drums.reduce((a,h)=>a+h.keys.length,0)}打 / メロディ${sc.synth.length}音`);
   if(dumpWaiter){dumpWaiter.resolve(sc);dumpWaiter=null;}
 }
 // 現在スロットを読む (META → SLOT_DUMP)。5秒でタイムアウト
@@ -227,14 +227,16 @@ function renderAnalysis(){
     o.onclick=()=>apply(pr.swing,pr.accent,pr.label); w.appendChild(o);});
   renderMini();
 }
-// 7パート×16: 音がある所を点で。かかっているアクセント型で 強=ティール / 弱=薄い に色分け(何が変わるかが見える)
+// 10行×16: 音がある所を点で。かかっているアクセント型で 強=ティール / 弱=薄い に色分け(何が変わるかが見える)
+//   v4.6: 上4行 = ドラムの4系統 (列 key%4 = キック/スネア/ハット/パーカス)、下6行 = メロディ P2-P7
+const MINI_ROWS=10;
 function renderMini(){
   if(!score)return; const m=$('mini'); m.innerHTML='';
   const tpl=GrooveEngine.ACCENT_TPL[(applied&&applied.accent)||0];
-  const on=[[],[],[],[],[],[],[]];
-  for(const h of score.drums) on[h.part][h.step]=1;
+  const on=Array.from({length:MINI_ROWS},()=>[]);
+  for(const h of score.drums) for(const k of h.keys) on[k%4][h.step]=1;
   for(const n of score.synth) on[4+n.part][Math.floor(n.sub/4)]=1;
-  for(let p=0;p<7;p++)for(let s=0;s<16;s++){const i=document.createElement('i');
+  for(let p=0;p<MINI_ROWS;p++)for(let s=0;s<16;s++){const i=document.createElement('i');
     if(s%4===0)i.classList.add('b');
     if(on[p][s]){i.classList.add('on'); if(tpl[s]>=110)i.classList.add('acc'); else if(tpl[s]<=70)i.classList.add('gh');}
     m.appendChild(i);}
