@@ -912,7 +912,7 @@
   </details>
 
   <footer>
-    Translator · ch0 BASS · ch3 LEAD · ch4 PAD · ch9 DRUM · ch10-13 DRUM MELODY
+    Translator · PONKEY ch0-5 = P2-P7 メロディ / ch9 = ドラムキット → Logic ch2-7 / ch10 (旋律化は ch1)
   </footer>
 </div>
 
@@ -955,38 +955,63 @@
 //   v1.8: アプリ名を "Translator" に変更
 //         プリセット + MIDI 出力ステータスを統合ヘッダーに集約
 //         PONKEY デバイスを縦コンパクト化、英字ラベル化、IAC 案内を i ツールチップに
+//   v2.0 (2026-08-28): **ファーム v4.6 のパート再編に追従**
+//         - P1 = ドラムキット1パート (ch9、16キー = 16打楽器、列 = 系統)。
+//           キット8種は CC_VOICE_SELECT の part0 で追う (音の中身が変わるため)
+//         - P2-P7 = メロディ6パート。レイヤー0 = ch0-5 / レイヤー1 = ch6,7,8,10,11,12。
+//           レイヤー1 は同じパートの Logic ch へ寄せる (重ね録りが同じトラックに乗る)
+//         - **Logic の chN = PONKEY の PN** に整理: ch2-7 = P2-P7 / ch1 = 旋律化したドラム /
+//           ch10 = 素のドラム (GM 互換)。旧 (ch5-7 = シンセ、ch1-4 = 旋律化ドラム) から変更
+//         - ドラム旋律化は「ステップ位置 → 音高」から**「叩いたキー (打楽器) → 音高」**へ。
+//           v4.6 でドラムがステップ列でなくパッドになったので、位置ではなく音が意味を持つ
+//         - **アプリ側のドラムステップシーケンサ (drumPattern) は撤去**。ファームが
+//           「置いて待つ」をやめたので、アプリだけ旧モデルを持つと本体と食い違う。
+//           クロック同期 (BPM 配信・PLAY/STOP・位相合わせ) と拍表示はそのまま
+//         - Mute/Solo の index は 0 = P1 ドラム / 1-6 = P2-P7 へ
+//         - 旧プリセットの melodyMode / melodyMap / stepVelocity は構造が変わったため読み捨て
 // ════════════════════════════════════════════════════════
 
 const KEY_COUNT    = 16;
 const SLOT_COUNT   = 4;
 
-// ── Drum melody mode 関連 (v1.2) ────────────────────────
+// ── ファーム v4.6 のパート構成 ──────────────────────────
+//   P1 = ドラムキット1パート (ch9、16キー = 16打楽器)。
+//   P2-P7 = メロディ6パート。レイヤー0 = ch0-5 / レイヤー1 (凍結レイヤー) = ch6,7,8,10,11,12。
+//   表の正本は ponkey.js の Ponkey.PARTS (ファームのヘッダを写したもの)。
 const CC_BAR_SYNC     = 0x54;  // ファームが現在の再生ステップ (0-15) を流す CC
 const CC_PHASE_NUDGE  = 0x56;  // v1.36: 1小節ごとに少しだけ位相を寄せる(gentle再同期). val=0-15
-const CC_VOICE_SELECT = 0x30;  // ボイス変更通知 (high4=part, low4=voice)
+const CC_VOICE_SELECT = 0x30;  // ボイス変更通知 (high4=part, low4=voice)。part0 = ドラムのキット番号
 
-// ファーム V2 header の DRUM_NOTE_TABLES と一致させる
-const DRUM_NOTE_TABLES = [
-  [36, 35, 41, 43, 47, 64, 61, 66, 77, 56, 39, 54, 68, 75, 80, 58],  // KICK
-  [38, 40, 37, 39, 56, 75, 76, 54, 69, 70, 62, 63, 60, 65, 67, 81],  // SNARE
-  [42, 44, 46, 49, 57, 51, 59, 53, 55, 52, 80, 81, 54, 69, 70, 56],  // HAT
-  [45, 47, 48, 50, 41, 43, 60, 61, 62, 63, 64, 65, 66, 73, 76, 77],  // TOM
+const MEL_PARTS   = Ponkey.PARTS.slice(1);                 // P2-P7
+const PART_NAMES  = Ponkey.PARTS.map(p => p.name);         // DRUM/KEYS/LEAD/BASS/CHORD/BELL/VOICE
+const PART_JA     = Ponkey.PARTS.map(p => p.ja);
+const KIT_NOTES   = Ponkey.KIT_NOTES;                      // 8キット × 16打楽器
+const KIT_NAMES   = Ponkey.PRESET_NAMES;                   // TOY/ORCH/BAND/...
+const DRUM_CH     = Ponkey.DRUM_CH;                        // 9
+
+// キット0 (トイ) の16音の呼び名。列 = 系統 (キック/スネア/ハット/パーカッション)
+const KIT_SOUND_NAMES = [
+  'バスドラ','スネア','クローズHH','タンバリン',
+  '低フロアタム','リムショット','ペダルHH','カウベル',
+  '低コンガ','クラベス','ライド','木ブロック高',
+  '中低タム','クラップ','オープンHH','ﾑｰﾄﾄﾗｲｱﾝｸﾞﾙ',
 ];
-const DRUM_PART_NAMES = ['KICK', 'SNARE', 'HAT', 'TOM'];
-// v1.31(#19): SCALE(旋律化)モードのときは KICK/SNARE/… ではなく SCALE1〜4 と表示する。
-function partDisplayName(part, scaleMode) {
-  return scaleMode ? `SCALE${part + 1}` : DRUM_PART_NAMES[part];
-}
+const KIT_COL_NAMES = Ponkey.KIT_COL_NAMES;                // 列 = 系統の名前
 
-// デフォルトメロディ: C ペンタトニック (C-D-E-G-A) を 16 ステップ上昇
+// デフォルトメロディ: C ペンタトニック (C-D-E-G-A) を 16 音上昇
 const DEFAULT_MELODY = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81, 84, 86, 88, 91, 93, 96];
 
-// v1.10: P1-P4 の SCALE モードを ch1-4 に, P5-P7 を ch5-7 に整理。
-// DRUM モードは GM 互換のため ch10 のまま (Logic 側の音源設定を変えずに済む)。
-// SCALE モード時の出力 ch (Logic 表示 ch1-4)
-const MELODY_CHANNELS = [0, 1, 2, 3];
-// P5-P7 シンセパート: PONKEY 発の ch (0=BASS, 3=LEAD, 4=PAD) → Logic ch5-7
-const SYNTH_CH_REMAP = { 0: 4, 3: 5, 4: 6 };     // BASS→ch5, LEAD→ch6, PAD→ch7
+// ── PONKEY の ch → Logic の ch ────────────────────────────
+//   **Logic の chN = PONKEY の PN** に揃えた (v4.6 追従)。
+//     ch1  = P1 ドラム (旋律化したとき。素のドラムは GM 互換で ch10 のまま)
+//     ch2-7 = P2-P7 のメロディ
+//   レイヤー1 (重ね録り) は同じパートの ch へ寄せる = Logic 側では同じトラックに乗る。
+const DRUM_MELODY_CH = 0;                                  // 0-origin。Logic 表示 ch1
+const SYNTH_CH_REMAP = {};
+MEL_PARTS.forEach(p => {
+  SYNTH_CH_REMAP[p.ch]   = p.part;                         // ch0→1(Logic ch2) … ch5→6(Logic ch7)
+  SYNTH_CH_REMAP[p.chL2] = p.part;
+});
 
 // MIDI ノート番号 → 名前 (Logic 表記: MIDI 60 = C3)
 function noteName(n) {
@@ -995,16 +1020,13 @@ function noteName(n) {
   return `${names[n % 12]}${Math.floor(n / 12) - 2}`;
 }
 
-// 受信したドラムノートから「どのドラムパートか (0-3)」を特定。ボイス状態に依存
-function identifyDrumPart(slot, note) {
-  for (let part = 0; part < 4; part++) {
-    const v = slot.drumVoice[part];
-    if (DRUM_NOTE_TABLES[part][v] === note) return part;
-  }
-  return -1;
+// 受信したドラムノート → 叩かれたキー (0-15)。キットによって音が違うので slot.kit を見る
+function identifyKitKey(slot, note) {
+  const kit = KIT_NOTES[slot.kit & 7];
+  return kit.indexOf(note);            // -1 = このキットにない音
 }
 
-// ── シンセパート (BASS/LEAD/PAD) のキー/スケールマッピング (v1.5) ──────
+// ── メロディ6パートのキー/スケールマッピング (v1.5) ──────
 // グリッド 4x4 配置: 左下=低音、右上=高音 (ファーム NOTE_TABLE と同じ並び)
 // 16 セルをスケール上昇順で割り当て: グリッド位置 (3-row)*4 + col = スケール上の位置
 const SCALES = [
@@ -1029,12 +1051,10 @@ const SCALE_BY_ID = Object.fromEntries(SCALES.map(s => [s.id, s]));
 
 const KEY_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-// v1.11: 各シンセパートの出力ベースノート (中立ラベル LOW/MID/HIGH に対応)
-// BASS (LOW)  → 24 (C1) ファームの NOTE_TABLE_BASS と同じ最低音
-// LEAD (MID)  → 48 (C3) ファームの NOTE_TABLE_NORMAL と同じ
-// PAD  (HIGH) → 60 (C4) ファームより 1 オクターブ上げて高音域に
-// → 3 パートで 5 オクターブ (C1-D6) を 1 台の PONKEY でカバー
-const SYNTH_PART_BASE = { BASS: 24, LEAD: 48, PAD: 60 };
+// 各メロディパートの出力ベースノート。**ファームの音域シフトと同じ向き**に置く
+//   (けんばん/わおん/こえ = C3 / リード = +1oct / ベース = 専用の低域 / ベル = +2oct)。
+//   6 パートで C1-C7 をカバーする。
+const SYNTH_PART_BASE = { KEYS: 48, LEAD: 60, BASS: 24, CHORD: 48, BELL: 72, VOICE: 48 };
 
 // keyIndex (0-15, グリッド配置) → そのスケール/キーでの MIDI ノート
 function synthMappedNote(scaleId, root, partName, keyIndex) {
@@ -1050,31 +1070,28 @@ function synthMappedNote(scaleId, root, partName, keyIndex) {
   return base + (root | 0) + octave * 12 + intervals[step];
 }
 
-// ── PONKEY v4.5.08 の音階テーブル ──────────────────────
-const NOTE_TABLE_BASS   = [45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
-const NOTE_TABLE_NORMAL = [69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];
-
-function buildReverse(table) {
-  const m = new Map();
-  for (let i = 0; i < table.length; i++) if (!m.has(table[i])) m.set(table[i], i);
-  return m;
-}
-const PART_BY_CHANNEL = {
-  0: { name: "BASS", table: NOTE_TABLE_BASS,   reverse: buildReverse(NOTE_TABLE_BASS) },
-  3: { name: "LEAD", table: NOTE_TABLE_NORMAL, reverse: buildReverse(NOTE_TABLE_NORMAL) },
-  4: { name: "PAD",  table: NOTE_TABLE_NORMAL, reverse: buildReverse(NOTE_TABLE_NORMAL) },
-};
+// ── 受信ノート → どのパートのどのキーか ─────────────────
+//   表 (音階テーブル + 音域シフト) は Ponkey.PARTS が正本。オクターブ設定で上下しても
+//   当てられるよう ±12 半音まで探す。レイヤー1 の ch も同じパートとして扱う。
+const PART_BY_CHANNEL = {};
+MEL_PARTS.forEach(p => {
+  const rev = new Map();
+  p.table.forEach((n, k) => { const v = n + p.shift; if (!rev.has(v)) rev.set(v, k); });
+  const entry = { name: p.name, ja: p.ja, part: p.part, synth: p.synth, reverse: rev };
+  PART_BY_CHANNEL[p.ch]   = entry;
+  PART_BY_CHANNEL[p.chL2] = entry;
+});
 
 function lookupKey(channel, note) {
   const p = PART_BY_CHANNEL[channel];
   if (!p) return null;
   const exact = p.reverse.get(note);
-  if (exact !== undefined) return { part: p.name, keyIndex: exact, shifted: 0 };
+  if (exact !== undefined) return { part: p.name, synth: p.synth, keyIndex: exact, shifted: 0 };
   for (let delta = 1; delta <= 12; delta++) {
     let m = p.reverse.get(note - delta);
-    if (m !== undefined) return { part: p.name, keyIndex: m, shifted: -delta };
+    if (m !== undefined) return { part: p.name, synth: p.synth, keyIndex: m, shifted: -delta };
     m = p.reverse.get(note + delta);
-    if (m !== undefined) return { part: p.name, keyIndex: m, shifted: +delta };
+    if (m !== undefined) return { part: p.name, synth: p.synth, keyIndex: m, shifted: +delta };
   }
   return null;
 }
@@ -1144,9 +1161,8 @@ function playMonitor(keyIndex, velocity, midiNote, partName) {
     src.connect(gain).connect(audioCtx.destination);
     src.start(0);
   } else {
-    const note = (midiNote !== null)
-      ? midiNote
-      : (partName === "BASS" ? NOTE_TABLE_BASS[keyIndex] : NOTE_TABLE_NORMAL[keyIndex]);
+    const mp = MEL_PARTS.find(p => p.name === partName) || MEL_PARTS[0];
+    const note = (midiNote !== null) ? midiNote : (mp.table[keyIndex] + mp.shift);
     playSynth(partName, midiToFreq(note), velocity);
   }
 }
@@ -1187,15 +1203,13 @@ function markPadsLoaded(keyIndex) {
 // padClickToMIDI: 選択中パートと padIdx から MIDI status/note を計算
 function padClickToMIDI(slot, padIdx) {
   const part = slot.simSelectedPart;
-  if (part >= 5 && part <= 7) {
-    const synthIdx = part - 5;
-    const ch = SAM_SYNTH_CHANNELS_SIM[synthIdx];
-    const table = synthIdx === 0 ? NOTE_TABLE_BASS : NOTE_TABLE_NORMAL;
-    return { ch, note: table[padIdx], onStatus: 0x90 | ch, offStatus: 0x80 | ch };
-  } else if (part >= 1 && part <= 4) {
-    const ch = 9;
-    const drumIdx = part - 1;
-    const note = DRUM_NOTE_TABLES[drumIdx][0];  // voice 0
+  if (part >= 2 && part <= 7) {                       // P2-P7 メロディ
+    const mp = MEL_PARTS[part - 2];
+    const ch = mp.ch;
+    return { ch, note: mp.table[padIdx] + mp.shift, onStatus: 0x90 | ch, offStatus: 0x80 | ch };
+  } else if (part === 1) {                            // P1 ドラムキット: キー = 打楽器
+    const ch = DRUM_CH;
+    const note = KIT_NOTES[slot.kit & 7][padIdx];
     return { ch, note, onStatus: 0x90 | ch, offStatus: 0x80 | ch };
   }
   return null;
@@ -1206,36 +1220,18 @@ function simulateMIDI(slot, status, d1, d2) {
   processMidiEvent(slot, 0, status, d1, d2);
 }
 
-// v1.15: パッドクリック振る舞い
-//   - DRUM mode (P1-P4): その step を toggle (パターンに刻む)。即時プレビュー音も
-//   - SCALE モード扱いはせず、SYNTH mode (P5-P7) では real-time trigger
+// パッドクリック = **どのパートでも押した瞬間に鳴る** (実機と同じ)。
+//   v4.6 で「ステップを置いて待つ」操作がファームから無くなったので、
+//   アプリ側にあったドラムのステップ打ち込み (drumPattern) も畳んだ。
 function onPadClick(slot, padIdx) {
-  const part = slot.simSelectedPart;
-  if (part >= 1 && part <= 4) {
-    const drumIdx = part - 1;
-    const newState = !slot.drumPattern[drumIdx][padIdx];
-    slot.drumPattern[drumIdx][padIdx] = newState;
-    const pad = document.getElementById(`pad${slot.id}-${padIdx}`);
-    if (pad) pad.classList.toggle("step-on", newState);
-    if (newState) {
-      // ON 化したらプレビュー音を一発
-      simulatePadPress(slot, padIdx);
-    }
-  } else {
-    simulatePadPress(slot, padIdx);
-  }
+  simulatePadPress(slot, padIdx);
 }
 
-// 選択パート切替時に、その part に対応するドラムパターンを表示
+// 選択パート切替時のパッド表示。打ち込み状態は持たないのでハイライトは消すだけ
 function refreshPadsForSelectedPart(slot) {
-  const part = slot.simSelectedPart;
   for (let i = 0; i < KEY_COUNT; i++) {
     const pad = document.getElementById(`pad${slot.id}-${i}`);
-    if (!pad) continue;
-    pad.classList.remove("step-on");
-    if (part >= 1 && part <= 4) {
-      if (slot.drumPattern[part-1][i]) pad.classList.add("step-on");
-    }
+    if (pad) pad.classList.remove("step-on");
   }
 }
 
@@ -1245,9 +1241,9 @@ function simulatePadPress(slot, padIdx) {
   simulateMIDI(slot, m.onStatus, m.note, 100);
   setTimeout(() => simulateMIDI(slot, m.offStatus, m.note, 0), 100);
 
-  // 現在選択中のシンセパートがルーパー録音中なら記録
-  if (slot.simSelectedPart >= 5 && slot.simSelectedPart <= 7) {
-    const si = slot.simSelectedPart - 5;
+  // 現在選択中のメロディパートがルーパー録音中なら記録
+  if (slot.simSelectedPart >= 2 && slot.simSelectedPart <= 7) {
+    const si = slot.simSelectedPart - 2;
     const lp = slot.looper[si];
     if (lp.recording) {
       const t = performance.now() - lp.startTime;
@@ -1322,7 +1318,7 @@ function stopLooper(slot, synthIdx) {
     clearTimeout(lp.playTimer);
     lp.playTimer = null;
   }
-  if (wasRec || wasPlay) log("sys", `S${slot.id} P${synthIdx+5} ルーパー STOP`);
+  if (wasRec || wasPlay) log("sys", `S${slot.id} P${synthIdx+2} ルーパー STOP`);
 }
 
 function refreshPkeyVisuals(slot) {
@@ -1333,10 +1329,10 @@ function refreshPkeyVisuals(slot) {
     btn.classList.toggle("active", p === slot.simSelectedPart);
     btn.classList.remove("recording", "looping");
   });
-  for (let si = 0; si < 3; si++) {
+  for (let si = 0; si < MEL_PARTS.length; si++) {
     const lp = slot.looper[si];
     if (lp.recording || lp.playing) {
-      const btn = pkeysEl.querySelector(`.pkey[data-p="${si+5}"]`);
+      const btn = pkeysEl.querySelector(`.pkey[data-p="${si+2}"]`);
       if (btn) {
         btn.classList.add(lp.recording ? "recording" : "looping");
       }
@@ -1469,13 +1465,13 @@ function serializeSettings() {
     slots: slots.map(slot => ({
       id: slot.id,
       // v1.31(#17/#18): outputName / transpose は廃止 (出力は PONKEY{id} へ自動)
-      synthScale: slot.synthScale.slice(),
+      synthScale: slot.synthScale.slice(),   // v4.6: 6パート分
       synthKey:   slot.synthKey.slice(),
-      melodyMode: slot.melodyMode.slice(),
-      melodyMap: slot.melodyMap.map(arr => arr.slice()),
-      stepVelocity: slot.stepVelocity.map(arr => arr.slice()),
+      kitMelody:  slot.kitMelody,            // v4.6: ドラム旋律化 (キットで1つ)
+      kitMap:     slot.kitMap.slice(),       // 叩いたキー → 音の高さ
+      kitVel:     slot.kitVel.slice(),
       mute: slot.mute.slice(),               // v1.29: Mute は保存 (Solo は保存しない)
-      // drumPattern / simSelectedPart / solo は演奏・作業状態なので保存しない
+      // simSelectedPart / solo は演奏・作業状態なので保存しない
     })),
   };
 }
@@ -1506,41 +1502,32 @@ function applySettings(data) {
     if (!slot) return;
 
     // v1.13 以前の slot.monitor (廃止) / transpose(#18廃止) は無視
-    // v1.29 (item1): drumPattern / simSelectedPart は演奏・作業状態なので読込で復元しない
-    //   (旧プリセットに含まれていても無視する)。
+    // v1.29 (item1): simSelectedPart は演奏・作業状態なので読込で復元しない。
+    // v4.6: 旧形式 (melodyMode / melodyMap / stepVelocity は 4ドラムパート × 16ステップ、
+    //   synthScale / synthKey は 3パート) は**構造が変わったので読み捨てる**。
+    //   ドラムがステップ列からキット (16打楽器) になり、位置と音の対応が付かないため。
     // v1.29: Mute は設定として復元 (Solo は上で全 OFF 済み)
     if (Array.isArray(sd.mute) && sd.mute.length === 7) {
       slot.mute = sd.mute.map(b => !!b);
     }
     // v1.9: per-part スケール/キー
-    if (Array.isArray(sd.synthScale) && sd.synthScale.length === 3) {
+    const NP = MEL_PARTS.length;
+    if (Array.isArray(sd.synthScale) && sd.synthScale.length === NP) {
       slot.synthScale = sd.synthScale.map(s => (typeof s === "string" && SCALE_BY_ID[s]) ? s : "major");
     } else if (typeof sd.scaleId === "string" && SCALE_BY_ID[sd.scaleId]) {
-      // 旧形式互換: 単一 scaleId を全パートに適用
-      slot.synthScale = [sd.scaleId, sd.scaleId, sd.scaleId];
+      slot.synthScale = new Array(NP).fill(sd.scaleId);      // 旧形式: 単一 scaleId を全パートへ
     }
-    if (Array.isArray(sd.synthKey) && sd.synthKey.length === 3) {
+    if (Array.isArray(sd.synthKey) && sd.synthKey.length === NP) {
       slot.synthKey = sd.synthKey.map(k => (typeof k === "number") ? ((k % 12) + 12) % 12 : 0);
     } else if (typeof sd.keyRoot === "number") {
-      const k = ((sd.keyRoot % 12) + 12) % 12;
-      slot.synthKey = [k, k, k];
+      slot.synthKey = new Array(NP).fill(((sd.keyRoot % 12) + 12) % 12);
     }
-    if (Array.isArray(sd.melodyMode) && sd.melodyMode.length === 4) {
-      slot.melodyMode = sd.melodyMode.map(b => !!b);
+    if (typeof sd.kitMelody === "boolean") slot.kitMelody = sd.kitMelody;
+    if (Array.isArray(sd.kitMap) && sd.kitMap.length === 16) {
+      slot.kitMap = sd.kitMap.map(n => Math.max(0, Math.min(127, n|0)));
     }
-    if (Array.isArray(sd.melodyMap) && sd.melodyMap.length === 4) {
-      slot.melodyMap = sd.melodyMap.map(arr =>
-        (Array.isArray(arr) && arr.length === 16)
-          ? arr.map(n => Math.max(0, Math.min(127, n|0)))
-          : DEFAULT_MELODY.slice()
-      );
-    }
-    if (Array.isArray(sd.stepVelocity) && sd.stepVelocity.length === 4) {
-      slot.stepVelocity = sd.stepVelocity.map(arr =>
-        (Array.isArray(arr) && arr.length === 16)
-          ? arr.map(v => Math.max(0, Math.min(127, v|0)))
-          : new Array(16).fill(100)
-      );
+    if (Array.isArray(sd.kitVel) && sd.kitVel.length === 16) {
+      slot.kitVel = sd.kitVel.map(v => Math.max(0, Math.min(127, v|0)));
     }
     refreshSlotUI(slot);
     appliedCount++;
@@ -1596,32 +1583,27 @@ function refreshSlotUI(slot) {
   refreshPkeyVisuals(slot);
   refreshPadsForSelectedPart(slot);
   refreshMuteSoloVisuals(slot);   // v1.29: Mute/Solo ボタンの表示も同期
-  // v1.9: per-part synth スケール/キー
-  for (let pi = 0; pi < 3; pi++) {
+  // per-part スケール/キー (P2-P7)
+  for (let pi = 0; pi < MEL_PARTS.length; pi++) {
     const sSel = document.getElementById(`scaleSel${slot.id}-${pi}`);
     if (sSel) sSel.value = slot.synthScale[pi];
     const kSel = document.getElementById(`keySel${slot.id}-${pi}`);
     if (kSel) kSel.value = slot.synthKey[pi];
   }
-  for (let part = 0; part < 4; part++) {
-    const tog = document.getElementById(`mmTog${slot.id}-${part}`);
-    if (tog) tog.checked = slot.melodyMode[part];
-    const chEl = document.getElementById(`partCh${slot.id}-${part}`);
-    if (chEl) chEl.textContent = drumPartChannelLabel(slot, part);
-    const nmEl = document.getElementById(`dpartName${slot.id}-${part}`);  // v1.31(#19)
-    if (nmEl) nmEl.textContent = partDisplayName(part, slot.melodyMode[part]);
-    const cellsEl = document.getElementById(`mpCells${slot.id}-${part}`);
-    if (cellsEl) cellsEl.classList.toggle("drum-mode", !slot.melodyMode[part]);
-    for (let step = 0; step < 16; step++) {
-      const cell = document.getElementById(`mpCell${slot.id}-${part}-${step}`);
-      if (cell) {
-        const v = slot.melodyMap[part][step];
-        cell.querySelector(".nname").textContent = noteName(v);
-        const vel = slot.stepVelocity[part][step];
-        const bar = cell.querySelector(".vel-bar");
-        if (bar) bar.style.height = `${(vel/127*100).toFixed(0)}%`;
-      }
-    }
+  // ドラム (P1) の旋律化と 16 打楽器のセル
+  const tog = document.getElementById(`mmTog${slot.id}`);
+  if (tog) tog.checked = slot.kitMelody;
+  const chEl = document.getElementById(`partCh${slot.id}`);
+  if (chEl) chEl.textContent = drumChannelLabel(slot);
+  const cellsEl = document.getElementById(`mpCells${slot.id}`);
+  if (cellsEl) cellsEl.classList.toggle("drum-mode", !slot.kitMelody);
+  for (let i = 0; i < 16; i++) {
+    const cell = document.getElementById(`mpCell${slot.id}-${i}`);
+    if (!cell) continue;
+    cell.querySelector(".nname").textContent = slot.kitMelody
+      ? noteName(slot.kitMap[i]) : KIT_SOUND_NAMES[i];
+    const bar = cell.querySelector(".vel-bar");
+    if (bar) bar.style.height = `${(slot.kitVel[i]/127*100).toFixed(0)}%`;
   }
 }
 
@@ -1853,25 +1835,12 @@ function getIdealStepTime(stepCount) {
 }
 
 // computeDrumOutput: processMidiEvent の変換ロジックをミラー (sequencer 用)
-function computeDrumOutput(slot, drumIdx, step) {
-  const vel = slot.stepVelocity[drumIdx][step] || 100;
-  let outNote, outCh;
-  if (slot.melodyMode[drumIdx]) {
-    const rawNote = slot.melodyMap[drumIdx][step];
-    outCh = MELODY_CHANNELS[drumIdx];
-    outNote = transposedNote(slot, outCh, rawNote);
-  } else {
-    outCh = 9;
-    outNote = DRUM_NOTE_TABLES[drumIdx][0];
-    // ch9 ドラムは transpose しない (既存挙動)
-  }
-  return {
-    onStatus: 0x90 | outCh, offStatus: 0x80 | outCh,
-    note: outNote, vel: vel
-  };
-}
+// v4.6: アプリ側のドラムステップシーケンサ (drumPattern / computeDrumOutput) は撤去した。
+//   ファームが「ステップを置いて待つ」操作をやめてパッド+録音になったので、
+//   アプリだけが旧モデルを持っていると本体と食い違う。クロック同期 (BPM 配信・
+//   PLAY/STOP・位相合わせ) と拍の表示はそのまま残してある。
 
-// fireStep: 指定 stepCount のドラムを理想時刻に予約送信 + UI 更新を rAF に遅延
+// fireStep: 拍の頭で UI を更新する (送信するパターンはもう持たない)
 function fireStep(stepCount) {
   const step = stepCount % 16;
   const now = performance.now();
@@ -1883,30 +1852,8 @@ function fireStep(stepCount) {
     clockState.baselineStep = stepCount;
   }
 
-  // 送信時刻: 理想時刻 or 現在+2ms (安全マージン)
-  const sendTime = Math.max(now + 2, getIdealStepTime(stepCount));
-
-  // 各 slot のドラムパターンを予約送信
-  slots.forEach(slot => {
-    // v1.35: A(Logic座標)の表示は局所 step を使う。slot.currentStep は
-    //   PONKEY が CC_BAR_SYNC で報告する位置(B)専用に温存する(メロディ参照にも使うため)。
-    if (!slot.outputId || !midiAccess) return;
-    const out = midiAccess.outputs.get(slot.outputId);
-    if (!out) return;
-    for (let drumIdx = 0; drumIdx < 4; drumIdx++) {
-      if (slot.drumPattern[drumIdx][step]) {
-        const m = computeDrumOutput(slot, drumIdx, step);
-        try {
-          out.send([m.onStatus, m.note, m.vel], sendTime);
-          out.send([m.offStatus, m.note, 0], sendTime + 1);
-        } catch {
-          out.send([m.onStatus, m.note, m.vel]);
-          out.send([m.offStatus, m.note, 0]);
-        }
-      }
-    }
-  });
-
+  // v1.35: A(Logic座標)の表示は局所 step を使う。slot.currentStep は
+  //   PONKEY が CC_BAR_SYNC で報告する位置(B)専用に温存する。
   // UI を rAF に遅延 (差分更新)
   scheduleStepUI(step);
 }
@@ -2242,44 +2189,25 @@ for (let i = 1; i <= SLOT_COUNT; i++) {
     monitor: false,  // v1.13: デフォルト OFF
     connected: false,
     lastChannel: null,
-    // v1.2: ドラム旋律化モード
+    // v4.6: ドラムは1パート (キット)。16キー = 16打楽器で、**列 = 系統**
     currentStep: 0,                                // CC_BAR_SYNC で更新
-    drumVoice: [0, 0, 0, 0],                       // CC_VOICE_SELECT で更新
-    melodyMode: [false, false, false, false],     // 旋律化トグル per drum part
-    melodyMap: [
-      DEFAULT_MELODY.slice(),
-      DEFAULT_MELODY.slice(),
-      DEFAULT_MELODY.slice(),
-      DEFAULT_MELODY.slice(),
-    ],
-    // v1.12: per-step velocity (0-127). 各ドラムパートの 16 ステップごとに。
-    // DRUM モード時はこの値がドラムのヒット強度に、SCALE モード時はメロディノートの強度に反映
-    stepVelocity: [
-      new Array(16).fill(100),
-      new Array(16).fill(100),
-      new Array(16).fill(100),
-      new Array(16).fill(100),
-    ],
+    kit: 0,                                        // CC_VOICE_SELECT の part0 で更新 (0-7)
+    kitMelody: false,                              // 旋律化トグル (キット全体で1つ)
+    // 旋律化したときの「叩いたキー → 音の高さ」。**ステップではなくキー (打楽器) で引く**
+    //   (v4.6 でドラムがステップ列でなくパッドになったので、位置ではなく叩いた音が意味を持つ)
+    kitMap: DEFAULT_MELODY.slice(),
+    // per-sound velocity (0-127)。DRUM モードでは打つ強さ、SCALE モードでは音の強さ
+    kitVel: new Array(16).fill(100),
     // v1.3: per-slot 半音 transpose (-48〜+48)。ch9 ドラム以外の全出力ノートに適用
     transpose: 0,
-    // v1.9: per-synth-part スケール/キー (index 0=BASS, 1=LEAD, 2=PAD)
-    // デフォルト "major" + root 0 (C) で、ファーム NOTE_TABLE_BASS/_NORMAL と同等の音が出る
-    synthScale: ["major", "major", "major"],
-    synthKey:   [0, 0, 0],
+    // per-part スケール/キー (index 0-5 = P2-P7)。
+    // デフォルト "major" + root 0 (C) で、ファーム既定の白鍵テーブルと同等の音が出る
+    synthScale: ["major","major","major","major","major","major"],
+    synthKey:   [0, 0, 0, 0, 0, 0],
     // v1.14: シミュレータ用
-    simSelectedPart: 6,  // デフォルト LEAD
-    looper: [
-      { recording: false, playing: false, events: [], startTime: 0, barLength: 2000, playTimer: null },
-      { recording: false, playing: false, events: [], startTime: 0, barLength: 2000, playTimer: null },
-      { recording: false, playing: false, events: [], startTime: 0, barLength: 2000, playTimer: null },
-    ],
-    // v1.15: per-slot ドラムパターン (4 part × 16 step、boolean)
-    drumPattern: [
-      new Array(16).fill(false),
-      new Array(16).fill(false),
-      new Array(16).fill(false),
-      new Array(16).fill(false),
-    ],
+    simSelectedPart: 3,  // デフォルト P3 リード
+    looper: Array.from({length:6}, () => (
+      { recording: false, playing: false, events: [], startTime: 0, barLength: 2000, playTimer: null })),
     // v1.21 (候補B): BLE MIDI タイムスタンプによるデジッタ用のクロック復元状態
     //   bleClockFw  … ファーム時刻 (13bit) を wrap 解除して積算した連続 ms
     //   bleLastTs13 … 直前に受け取った 13bit 生タイムスタンプ (wrap 検出用)
@@ -2289,20 +2217,22 @@ for (let i = 1; i <= SLOT_COUNT; i++) {
     bleLastTs13: null,
     bleOffset: null,
     // v1.27 (item2): per-part Mute/Solo (index 0=P1 … 6=P7)。
+    //   index 0 = P1 ドラム / 1-6 = P2-P7 メロディ。
     //   mute は保存対象 / solo は保存しない (読込時に全OFF)。
     mute: [false, false, false, false, false, false, false],
     solo: [false, false, false, false, false, false, false],
   });
 }
 
-// part name → synth index (0=BASS, 1=LEAD, 2=PAD)
+// パート名 → メロディ index (0-5 = P2-P7)
 function synthPartIdx(partName) {
-  return partName === "BASS" ? 0 : partName === "LEAD" ? 1 : 2;
+  const i = MEL_PARTS.findIndex(p => p.name === partName);
+  return i < 0 ? 0 : i;
 }
 
 // ── v1.27 (item2): Mute/Solo 判定 ──
-// partIndex: 0-3 = ドラム P1-P4, 4-6 = シンセ P5-P7, -1 = 不明 (常に通す)
-// Solo は「28 パート全体」で評価: どこか1つでも Solo ON なら、Solo パートだけ Logic へ。
+// partIndex: 0 = P1 ドラム, 1-6 = P2-P7 メロディ, -1 = 不明 (常に通す)
+// Solo は「全スロットのパート全体」で評価: どこか1つでも Solo ON なら、Solo パートだけ Logic へ。
 function anySoloActive() {
   return slots.some(s => s.solo.some(Boolean));
 }
@@ -2312,16 +2242,15 @@ function partAllowedToLogic(slot, partIndex) {
   return !slot.mute[partIndex];
 }
 
-// ── シミュレータ用 (v1.14): PONKEY ファームと同じチャンネル ──
-const SAM_SYNTH_CHANNELS_SIM = [0, 3, 4];  // BASS=0, LEAD=3, PAD=4
+// ── シミュレータ用 (v1.14): PONKEY ファームと同じチャンネル (P2-P7 = ch0-5) ──
+const SAM_SYNTH_CHANNELS_SIM = MEL_PARTS.map(p => p.ch);
 
-// drum: DRUM モードは ch10 (GM 互換), SCALE モードは MELODY_CHANNELS (ch1-4)
-function drumPartChannelLabel(slot, partIdx) {
-  if (slot.melodyMode[partIdx]) return `ch${MELODY_CHANNELS[partIdx] + 1}`;
-  return "ch10";
+// drum: DRUM モードは ch10 (GM 互換), SCALE モードは Logic ch1
+function drumChannelLabel(slot) {
+  return slot.kitMelody ? `ch${DRUM_MELODY_CH + 1}` : "ch10";
 }
-// シンセパート (P5-P7) のチャンネル表示: ch5, ch6, ch7
-const SYNTH_CHANNEL_DISPLAY = [5, 6, 7];
+// メロディパート (P2-P7) の Logic 側チャンネル表示: ch2 … ch7
+const SYNTH_CHANNEL_DISPLAY = MEL_PARTS.map(p => p.part + 1);
 
 // 出力時の transpose 適用。ch9 (GM ドラム) はノート番号が楽器選択を兼ねるので転調しない
 function transposedNote(slot, channel, note) {
@@ -2393,12 +2322,12 @@ function buildSlots() {
       if (p !== 8) {
         btn.addEventListener("click", (e) => {
           ensureAudio();
-          if (e.shiftKey && p >= 5 && p <= 7) {
-            // ルーパー: そのパートに切り替えつつ録音/停止
+          if (e.shiftKey && p >= 2 && p <= 7) {
+            // ルーパー: そのパートに切り替えつつ録音/停止 (メロディ P2-P7)
             slot.simSelectedPart = p;
             refreshPkeyVisuals(slot);
             refreshPadsForSelectedPart(slot);
-            toggleLooper(slot, p - 5);
+            toggleLooper(slot, p - 2);
           } else {
             slot.simSelectedPart = p;
             refreshPkeyVisuals(slot);
@@ -2443,82 +2372,67 @@ function buildSlots() {
 
     refreshPadsForSelectedPart(slot);
 
-    // 4 ドラムパート分のメロディマップ行を生成
+    // ── P1 ドラム: 1行。16 セル = **16 打楽器** (v4.6。旧はドラム4パート × 16 ステップ) ──
     const melodyContainer = document.getElementById(`melody${slot.id}`);
-    for (let part = 0; part < 4; part++) {
+    {
       const row = document.createElement("div");
       row.className = "melody-part";
       row.innerHTML = `
         <div class="mp-head">
-          <span class="name">P${part+1}</span>
-          <span class="part-ch" id="partCh${slot.id}-${part}">ch10</span>
-          <span class="dpart-name" id="dpartName${slot.id}-${part}">${partDisplayName(part, slot.melodyMode[part])}</span>
+          <span class="name">P1</span>
+          <span class="part-ch" id="partCh${slot.id}">ch10</span>
+          <span class="dpart-name" id="dpartName${slot.id}">DRUM KIT</span>
           <span class="dscale-wrap">
             <span class="ds-label left">DRUM</span>
-            <label class="toggle toggle-dscale" title="Drum: ch10 へそのまま / Scale: melody map で別 ch に書き換え">
-              <input type="checkbox" id="mmTog${slot.id}-${part}">
+            <label class="toggle toggle-dscale" title="Drum: ch10 へそのまま / Scale: 叩いたキーを melody map の音に置き換えて ch1 へ">
+              <input type="checkbox" id="mmTog${slot.id}">
               <span class="knob"></span>
             </label>
             <span class="ds-label right">SCALE</span>
           </span>
         </div>
-        <div class="mp-cells drum-mode" id="mpCells${slot.id}-${part}"></div>
+        <div class="mp-cells drum-mode" id="mpCells${slot.id}"></div>
       `;
       melodyContainer.appendChild(row);
 
-      // 16 セル生成
-      const cellsEl = document.getElementById(`mpCells${slot.id}-${part}`);
-      for (let step = 0; step < 16; step++) {
+      // 16 セル = キット の 16 打楽器 (列 = 系統)
+      const cellsEl = document.getElementById(`mpCells${slot.id}`);
+      for (let i = 0; i < 16; i++) {
         const cell = document.createElement("div");
         cell.className = "mp-cell";
-        cell.id = `mpCell${slot.id}-${part}-${step}`;
-        const vel = slot.stepVelocity[part][step];
-        const noteN = slot.melodyMap[part][step];
+        cell.id = `mpCell${slot.id}-${i}`;
+        cell.title = `${KIT_SOUND_NAMES[i]} (${KIT_COL_NAMES[i % 4]}系)`;
         cell.innerHTML = `
-          <span class="vel-bar" style="height:${(vel/127*100).toFixed(0)}%"></span>
-          <span class="nname">${noteName(noteN)}</span>
+          <span class="vel-bar" style="height:${(slot.kitVel[i]/127*100).toFixed(0)}%"></span>
+          <span class="nname">${slot.kitMelody ? noteName(slot.kitMap[i]) : KIT_SOUND_NAMES[i]}</span>
         `;
-        // クリックで note + velocity 編集ポップアップを開く
-        cell.addEventListener("click", (e) => {
-          e.stopPropagation();
-          openCellPopup(slot, part, step, cell);
-        });
-        // ホイールはクイック調整 (shift で note, 通常で velocity)
+        cell.addEventListener("click", (e) => { e.stopPropagation(); openCellPopup(slot, i, cell); });
         cell.addEventListener("wheel", (e) => {
           e.preventDefault();
-          if (e.shiftKey) {
-            changeCellNote(slot, part, step, e.deltaY < 0 ? 1 : -1);
-          } else {
-            changeCellVelocity(slot, part, step, e.deltaY < 0 ? 8 : -8);
-          }
+          if (e.shiftKey) changeCellNote(slot, i, e.deltaY < 0 ? 1 : -1);
+          else            changeCellVelocity(slot, i, e.deltaY < 0 ? 8 : -8);
         }, { passive: false });
         cellsEl.appendChild(cell);
       }
 
-      // 旋律化トグルのハンドラ
-      document.getElementById(`mmTog${slot.id}-${part}`).addEventListener("change", (e) => {
-        slot.melodyMode[part] = e.target.checked;
-        refreshMelodyCells(slot, part);
-        const chEl = document.getElementById(`partCh${slot.id}-${part}`);
-        if (chEl) chEl.textContent = drumPartChannelLabel(slot, part);
-        // v1.31(#19): パート名を DRUM 名 ⇄ SCALE{n} で切替
-        const nmEl = document.getElementById(`dpartName${slot.id}-${part}`);
-        if (nmEl) nmEl.textContent = partDisplayName(part, slot.melodyMode[part]);
-        log("sys", `スロット${slot.id} P${part+1}(${DRUM_PART_NAMES[part]}): ${slot.melodyMode[part] ? "SCALE" : "DRUM"} (${drumPartChannelLabel(slot, part)})`);
+      document.getElementById(`mmTog${slot.id}`).addEventListener("change", (e) => {
+        slot.kitMelody = e.target.checked;
+        refreshSlotUI(slot);
+        log("sys", `スロット${slot.id} P1 ドラム: ${slot.kitMelody ? "SCALE" : "DRUM"} (${drumChannelLabel(slot)})`);
       });
     }
 
-    // v1.11: シンセパート (P5/P6/P7) を中立ラベル SYNTH LOW/MID/HIGH で表示
-    //         内部 found.part は "BASS"/"LEAD"/"PAD" のまま (ファーム識別用)
-    const SYNTH_PART_NAMES = ["SYNTH LOW", "SYNTH MID", "SYNTH HIGH"];
-    for (let pi = 0; pi < 3; pi++) {
+    // ── P2-P7 メロディ6パート ──
+    for (let pi = 0; pi < MEL_PARTS.length; pi++) {
+      const mp = MEL_PARTS[pi];
       const row = document.createElement("div");
       row.className = "melody-part synth-part";
       row.innerHTML = `
         <div class="mp-head">
-          <span class="name">P${pi+5}</span>
+          <span class="name">P${mp.part + 1}</span>
           <span class="part-ch">ch${SYNTH_CHANNEL_DISPLAY[pi]}</span>
-          <span style="color:var(--ink);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;font-weight:700">${SYNTH_PART_NAMES[pi]}</span>
+          <span style="color:${mp.rgb};font-size:9px;letter-spacing:0.08em;text-transform:uppercase;font-weight:700">${mp.name}</span>
+          <span style="color:var(--dim);font-size:9px">${mp.ja}</span>
         </div>
         <div class="synth-ctl">
           <select class="syn-scale" id="scaleSel${slot.id}-${pi}"></select>
@@ -2530,16 +2444,16 @@ function buildSlots() {
       // populate scale dropdown (グループ分け)
       const scaleSel = document.getElementById(`scaleSel${slot.id}-${pi}`);
       const groups = {};
-      SCALES.forEach(s => {
-        if (!groups[s.group]) groups[s.group] = [];
-        groups[s.group].push(s);
+      SCALES.forEach(sc => {
+        if (!groups[sc.group]) groups[sc.group] = [];
+        groups[sc.group].push(sc);
       });
       Object.entries(groups).forEach(([gname, list]) => {
         const og = document.createElement("optgroup");
         og.label = gname;
-        list.forEach(s => {
+        list.forEach(sc => {
           const o = document.createElement("option");
-          o.value = s.id; o.textContent = s.name;
+          o.value = sc.id; o.textContent = sc.name;
           og.appendChild(o);
         });
         scaleSel.appendChild(og);
@@ -2547,7 +2461,7 @@ function buildSlots() {
       scaleSel.value = slot.synthScale[pi];
       scaleSel.addEventListener("change", (e) => {
         slot.synthScale[pi] = e.target.value;
-        log("sys", `スロット${slot.id} P${pi+5}(${SYNTH_PART_NAMES[pi]}) スケール: ${SCALE_BY_ID[e.target.value].name}`);
+        log("sys", `スロット${slot.id} P${mp.part+1}(${mp.name}) スケール: ${SCALE_BY_ID[e.target.value].name}`);
       });
 
       // populate key dropdown
@@ -2560,7 +2474,7 @@ function buildSlots() {
       keySel.value = slot.synthKey[pi];
       keySel.addEventListener("change", (e) => {
         slot.synthKey[pi] = parseInt(e.target.value, 10);
-        log("sys", `スロット${slot.id} P${pi+5}(${SYNTH_PART_NAMES[pi]}) キー: ${KEY_NAMES[slot.synthKey[pi]]}`);
+        log("sys", `スロット${slot.id} P${mp.part+1}(${mp.name}) キー: ${KEY_NAMES[slot.synthKey[pi]]}`);
       });
     }
 
@@ -2580,32 +2494,25 @@ function updateTransposeUI(slot) {
 }
 
 // セル操作: ノート編集 (SCALE モード時のみ意味、DRUM 時でも内部値は更新)
-function changeCellNote(slot, part, step, delta) {
-  let v = slot.melodyMap[part][step] + delta;
+// セル操作 (v4.6: 引数は「キット の キー 0-15」= 打楽器。旧はステップだった)
+function changeCellNote(slot, i, delta) {
+  let v = slot.kitMap[i] + delta;
   if (v < 0) v = 0;
   if (v > 127) v = 127;
-  slot.melodyMap[part][step] = v;
-  const cell = document.getElementById(`mpCell${slot.id}-${part}-${step}`);
-  if (cell) cell.querySelector(".nname").textContent = noteName(v);
+  slot.kitMap[i] = v;
+  const cell = document.getElementById(`mpCell${slot.id}-${i}`);
+  if (cell && slot.kitMelody) cell.querySelector(".nname").textContent = noteName(v);
 }
-// セル操作: velocity 編集
-function changeCellVelocity(slot, part, step, delta) {
-  let v = slot.stepVelocity[part][step] + delta;
+function changeCellVelocity(slot, i, delta) {
+  let v = slot.kitVel[i] + delta;
   if (v < 0) v = 0;
   if (v > 127) v = 127;
-  slot.stepVelocity[part][step] = v;
-  const cell = document.getElementById(`mpCell${slot.id}-${part}-${step}`);
+  slot.kitVel[i] = v;
+  const cell = document.getElementById(`mpCell${slot.id}-${i}`);
   if (cell) {
     const bar = cell.querySelector(".vel-bar");
     if (bar) bar.style.height = `${(v/127*100).toFixed(0)}%`;
   }
-}
-
-// DRUM/SCALE 切替で mp-cells のクラスを更新 (ノート名の濃淡)
-function refreshMelodyCells(slot, part) {
-  const cellsEl = document.getElementById(`mpCells${slot.id}-${part}`);
-  if (!cellsEl) return;
-  cellsEl.classList.toggle("drum-mode", !slot.melodyMode[part]);
 }
 
 // ── セル編集ポップアップ ─────────────────────────────────
@@ -2626,12 +2533,12 @@ function cellPopupEscapeKey(e) {
   if (e.key === "Escape") closeCellPopup();
 }
 
-function openCellPopup(slot, part, step, cellEl) {
+function openCellPopup(slot, i, cellEl) {
   closeCellPopup();
   const popup = document.createElement("div");
   popup.className = "cell-popup";
   popup.innerHTML = `
-    <div class="popup-title">P${part+1} ${DRUM_PART_NAMES[part]} · STEP ${String(step+1).padStart(2,'0')}</div>
+    <div class="popup-title">P1 ${KIT_SOUND_NAMES[i]} · ${KIT_COL_NAMES[i % 4]}系 (キー${String(i+1).padStart(2,'0')})</div>
     <div class="popup-row">
       <label>Note</label>
       <select class="popup-note"></select>
@@ -2649,11 +2556,11 @@ function openCellPopup(slot, part, step, cellEl) {
     o.value = String(n); o.textContent = `${noteName(n)} (${n})`;
     noteSel.appendChild(o);
   }
-  noteSel.value = String(slot.melodyMap[part][step]);
+  noteSel.value = String(slot.kitMap[i]);
   noteSel.addEventListener("change", (e) => {
     const v = parseInt(e.target.value, 10);
-    slot.melodyMap[part][step] = v;
-    if (cellEl) cellEl.querySelector(".nname").textContent = noteName(v);
+    slot.kitMap[i] = v;
+    if (cellEl && slot.kitMelody) cellEl.querySelector(".nname").textContent = noteName(v);
   });
 
   // Velocity dropdown (8 刻み + 127)
@@ -2668,12 +2575,12 @@ function openCellPopup(slot, part, step, cellEl) {
     velSel.appendChild(o);
   });
   // 現在値に最も近い preset を選択
-  const cur = slot.stepVelocity[part][step];
+  const cur = slot.kitVel[i];
   const closest = velLevels.reduce((p, c) => Math.abs(c - cur) < Math.abs(p - cur) ? c : p, velLevels[0]);
   velSel.value = String(closest);
   velSel.addEventListener("change", (e) => {
     const v = parseInt(e.target.value, 10);
-    slot.stepVelocity[part][step] = v;
+    slot.kitVel[i] = v;
     if (cellEl) {
       const bar = cellEl.querySelector(".vel-bar");
       if (bar) bar.style.height = `${(v/127*100).toFixed(0)}%`;
@@ -2711,12 +2618,8 @@ function updateStepHighlight(slot) {
   if (stepNowEl && !clockState.transportRunning) {
     stepNowEl.textContent = (slot.currentStep + 1).toString().padStart(2, '0');
   }
-  for (let part = 0; part < 4; part++) {
-    for (let step = 0; step < 16; step++) {
-      const cell = document.getElementById(`mpCell${slot.id}-${part}-${step}`);
-      if (cell) cell.classList.toggle("dev-echo", step === slot.currentStep);
-    }
-  }
+  // v4.6: ドラムのセルは「ステップ」ではなく「打楽器」になったので、
+  //   ここでステップ位置を光らせる意味が無くなった (拍の表示は上の stepNow が担う)。
 }
 
 function updateConnectedCount() {
@@ -2879,25 +2782,28 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
     } else if (d1 === CC_VOICE_SELECT) {
       const part = (d2 >> 4) & 0x0F;
       const voice = d2 & 0x0F;
-      if (part < 4 && voice < 16) {
-        slot.drumVoice[part] = voice;
-        log("sys", `S${slot.id} ボイス変更 P${part+1}(${DRUM_PART_NAMES[part]}) → voice ${voice} (note ${DRUM_NOTE_TABLES[part][voice]})`);
+      if (part === 0) {
+        // v4.6: part0 = ドラムの**キット番号**。16音の中身が変わるので逆引きに効く
+        slot.kit = voice & 7;
+        refreshSlotUI(slot);
+        log("sys", `S${slot.id} ドラムキット → ${voice & 7} (${KIT_NAMES[voice & 7]})`);
+      } else if (part < 7 && voice < 16) {
+        log("sys", `S${slot.id} 音色変更 P${part+1}(${PART_NAMES[part]}) → voice ${voice}`);
       }
     }
   }
 
-  // v1.12: ドラム NoteOn を処理
-  //   1) per-step velocity を d2 に上書き (DRUM/SCALE 両モード共通)
-  //   2) SCALE モードならノートも melody map に置換 (ch1-4 に出力)
+  // ドラム NoteOn の処理 (v4.6: キットの16打楽器)
+  //   1) per-sound velocity を d2 に上書き (DRUM/SCALE 両モード共通)
+  //   2) SCALE モードなら「叩いたキー」に対応する音へ置換して Logic ch1 に出力
   let melodyOverride = null;
-  if (isOn && channel === 9) {
-    const part = identifyDrumPart(slot, d1);
-    if (part >= 0) {
-      d2 = slot.stepVelocity[part][slot.currentStep];
-      if (slot.melodyMode[part]) {
-        const melodyNote = slot.melodyMap[part][slot.currentStep];
-        const melCh = MELODY_CHANNELS[part];
-        melodyOverride = { part, melodyNote, ch: melCh };
+  let kitKey = -1;
+  if (isOn && channel === DRUM_CH) {
+    kitKey = identifyKitKey(slot, d1);
+    if (kitKey >= 0) {
+      d2 = slot.kitVel[kitKey];
+      if (slot.kitMelody) {
+        melodyOverride = { kitKey, melodyNote: slot.kitMap[kitKey], ch: DRUM_MELODY_CH };
       }
     }
   }
@@ -2924,16 +2830,16 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
   // v1.27 (item2): このイベントのパート番号 (0-3=ドラム P1-P4, 4-6=シンセ P5-P7, -1=不明) と、
   //   Logic へ送ってよいか (Mute/Solo) を判定。NoteOn のみゲートし、NoteOff は常に通す
   //   (mute をノート保持中に切り替えても stuck note にならないように)。
+  //   v4.6: 0 = P1 ドラム (キットは1パート) / 1-6 = P2-P7 メロディ
   let evPartIndex = -1;
-  if (melodyOverride) evPartIndex = melodyOverride.part;             // ドラム SCALE
-  else if (channel === 9) evPartIndex = identifyDrumPart(slot, d1);  // ドラム DRUM
-  else if (found) evPartIndex = 4 + synthPartIdx(found.part);       // シンセ
+  if (channel === DRUM_CH) evPartIndex = 0;
+  else if (found) evPartIndex = 1 + synthPartIdx(found.part);
   const blockToLogic = isOn && !partAllowedToLogic(slot, evPartIndex);
   const muteTag = blockToLogic ? ` 🔇(${anySoloActive() ? "not-solo" : "muted"})` : "";
 
   // 1) 素通し転送
-  //    - SCALE 時: 元の ch9 を送らず、書き換えた音を MELODY_CHANNELS[part] (ch1-4) に送る
-  //    - シンセ (BASS/LEAD/PAD): スケールリマップ + ch リマップ (ch1/4/5 → ch5/6/7)
+  //    - SCALE 時: 元の ch9 を送らず、書き換えた音を Logic ch1 に送る
+  //    - メロディ (P2-P7): スケールリマップ + ch リマップ (PONKEY ch0-5 → Logic ch2-7)
   //    - DRUM モード時 / その他: チャンネルそのままで素通し (ch10 = Logic 標準ドラム)
   let fwdNote = "";
   const out = (slot.outputId && midiAccess) ? midiAccess.outputs.get(slot.outputId) : null;
@@ -2949,7 +2855,7 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       out.send([0x80 | melodyOverride.ch, melNote, 0], offAt);
     }
     const trTag = slot.transpose ? ` [tr ${slot.transpose>0?"+":""}${slot.transpose}]` : "";
-    fwdNote = ` ▶ ${out.name}${muteTag} 🎵 ch${melodyOverride.ch+1} note=${melNote}(${noteName(melNote)})${trTag} [P${melodyOverride.part+1}=${DRUM_PART_NAMES[melodyOverride.part]}, step${slot.currentStep+1}]`;
+    fwdNote = ` ▶ ${out.name}${muteTag} 🎵 ch${melodyOverride.ch+1} note=${melNote}(${noteName(melNote)})${trTag} [P1 ${KIT_SOUND_NAMES[melodyOverride.kitKey]}]`;
   } else if (out) {
     if (cmd === 0x90 || cmd === 0x80) {
       const remapped = found ? synthRemap(d1) : d1;
@@ -2961,8 +2867,8 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       //   → ループは揃う / 生演奏は即応、を同時に成立させる。
       // v1.24: ドラムの NoteOn/NoteOff は同一ファーム時刻で届くため待合室で同時刻になり、
       //   順序が入れ替わると「止める」が先に処理され鳴りっぱなしになる。NoteOff を +2ms 後ろへ。
-      let sendAt = (channel === 9) ? dejTime : 0;
-      if (channel === 9 && sendAt !== 0 && cmd === 0x80) sendAt += 2;  // NoteOff を NoteOn の後ろに
+      let sendAt = (channel === DRUM_CH) ? dejTime : 0;
+      if (channel === DRUM_CH && sendAt !== 0 && cmd === 0x80) sendAt += 2;  // NoteOff を NoteOn の後ろに
       // v1.27: Mute/Solo で NoteOn がブロックされていなければ送る (NoteOff は常に通る)。
       if (!blockToLogic) out.send([outStatus, outNote, d2], sendAt);
       let scaleTag = "";
@@ -2974,7 +2880,7 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
           scaleTag = ` [${KEY_NAMES[kR]} ${SCALE_BY_ID[sId]?.name?.split(" ")[0]}]`;
         }
       }
-      const trTag = (slot.transpose && channel !== 9) ? ` [tr ${slot.transpose>0?"+":""}${slot.transpose}]` : "";
+      const trTag = (slot.transpose && channel !== DRUM_CH) ? ` [tr ${slot.transpose>0?"+":""}${slot.transpose}]` : "";
       const chTag = (found && outCh !== channel) ? ` ch${channel+1}→${outCh+1}` : "";
       fwdNote = ` ▶ ${out.name}${muteTag}${chTag}${scaleTag}${trTag}`;
     } else {
@@ -3014,9 +2920,9 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
   if (isOn && melodyOverride) {
     // SCALE モード: 旋律化された音をモニター発音
     const melNote = transposedNote(slot, melodyOverride.ch, melodyOverride.melodyNote);
-    flashSlotPad(slot.id, slot.currentStep);
+    flashSlotPad(slot.id, melodyOverride.kitKey);          // 叩かれたキーを光らせる
     if (slotLastHit) slotLastHit.textContent =
-      `🎵 ${DRUM_PART_NAMES[melodyOverride.part]} STEP ${String(slot.currentStep+1).padStart(2,'0')} ${noteName(melNote)}`;
+      `🎵 P1 ${KIT_SOUND_NAMES[melodyOverride.kitKey]} → ${noteName(melNote)}`;
     if (globalMonitor) {
       ensureAudio();
       playSynth("LEAD", midiToFreq(melNote), d2);
@@ -3027,22 +2933,18 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       clearTimeout(slot._activeT);
       slot._activeT = setTimeout(() => el.classList.remove("active"), 400);
     }
-  } else if (isOn && channel === 9) {
+  } else if (isOn && channel === DRUM_CH) {
     // v1.25 (item5): DRUM モードの実機ヒットをモニターに反映する。
-    // 旧版はここで何も光らせず「unmapped」表示だけだった = 反映バグ。
-    // 実機が Logic に送っているドラム信号は全て Translator を通るので、
-    // ファーム改修なしで「どのパート・どのステップに入力が来たか」を表示できる。
-    const dpart = identifyDrumPart(slot, d1);           // 0-3 or -1
-    const stepDisp = slot.currentStep;
-    if (dpart >= 0) {
-      flashPartButton(slot.id, dpart + 1);              // 入力の来たパートを光らせる
-      if (dpart + 1 === slot.simSelectedPart) {
-        flashSlotPad(slot.id, stepDisp);                // 選択中パートならステップパッドも
-      }
+    // v4.6: キットなので「どのキー (打楽器) を叩いたか」がそのまま分かる。
+    //   キー番号 = グリッド位置なので、パッドもその位置を光らせられる。
+    const k = kitKey >= 0 ? kitKey : identifyKitKey(slot, d1);
+    if (k >= 0) {
+      flashPartButton(slot.id, 1);                      // P1 を光らせる
+      flashSlotPad(slot.id, k);                         // 叩かれたキーの位置
     }
-    const pname = dpart >= 0 ? DRUM_PART_NAMES[dpart] : `note${d1}`;
+    const pname = k >= 0 ? `${KIT_SOUND_NAMES[k]}(${KIT_COL_NAMES[k % 4]})` : `note${d1}`;
     if (slotLastHit) slotLastHit.textContent =
-      `🥁 ${pname} STEP ${String(stepDisp+1).padStart(2,'0')} vel=${d2}`;
+      `🥁 ${pname} vel=${d2}`;
     const el = document.getElementById(`slot${slot.id}`);
     if (el) {
       el.classList.add("active");
@@ -3078,8 +2980,8 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
 
 // ── 起動 ────────────────────────────────────────────────
 buildSlots();
-log("sys", "Translator v1.40-MIN 起動 (BLEまとめ送り対応・通信最適化版。要 v4.5.31-MIN ファーム)");
-log("sys", "シミュレータ: P1-P4 でドラムパターン入力, P5-P7 で実時間演奏, shift+P5-P7 で 1bar ループ録音 (パート自動切替)");
+log("sys", "Translator v2.0 起動 (ファーム v4.6 のパート構成に対応: P1=ドラムキット / P2-P7=メロディ6パート)");
+log("sys", "シミュレータ: パッドはどのパートでも押した瞬間に鳴る (P1=16打楽器 / P2-P7=音階)。shift+P2-P7 で 1bar ループ録音");
 log("sys", "1) Web MIDI 許可 → 2) PONKEY 接続 → 3) IAC ポート割当 → 4) (任意) 各種設定 → 5) (任意) プリセットを .json で保存");
 </script>
 </body>
