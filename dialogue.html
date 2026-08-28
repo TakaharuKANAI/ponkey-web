@@ -297,6 +297,9 @@ h1 .x{color:var(--human)}
       <input type="checkbox" id="sRampage" checked></div>
     <div class="srow"><span class="lbl">Cの音 (ブラウザ・ドラム)</span>
       <input type="checkbox" id="sCVoice" checked></div>
+    <div class="srow"><span class="lbl">Cの本体でドラムを鳴らす</span>
+      <input type="checkbox" id="sCDrum" checked>
+      <span class="val" id="vCDrum">—</span></div>
     <div class="srow"><span class="lbl">1台でかけあい</span>
       <select id="sOne">
         <option value="auto">Bが未接続なら Aの本体で こたえる</option>
@@ -799,7 +802,7 @@ function log(msg,cls=''){const el=$('log');const t=new Date().toTimeString().sli
 function setStatus(text,mode=''){const s=$('statusLine');s.textContent=text;s.className='status-line '+mode;}
 
 const cfg={mood:.55,session:'dialog',modal:true,gapMode:'auto',gapMs:800,maxLen:16,
-           voice:true,vol:.7,yield:true,rampage:true,parse:'table',one:'auto'};
+           voice:true,vol:.7,yield:true,rampage:true,parse:'table',one:'auto',cDrum:true};
 let currentMode='ionian';
 function setWorld(mode,announce){
   currentMode=mode;
@@ -823,6 +826,7 @@ $('sYield').onchange=e=>cfg.yield=e.target.checked;
 $('sParse').onchange=e=>cfg.parse=e.target.value;
 $('sRampage').onchange=e=>cfg.rampage=e.target.checked;
 $('sCVoice').onchange=e=>Drummer.voice=e.target.checked;
+$('sCDrum').onchange=e=>{cfg.cDrum=e.target.checked;refreshCDrum();};
 $('sOne').onchange=e=>{cfg.one=e.target.value;refreshOneBox();
   log('1台でかけあい: '+(cfg.one==='auto'?'B が未接続なら A へ':'しない'));};
 
@@ -831,6 +835,7 @@ $('sOne').onchange=e=>{cfg.one=e.target.value;refreshOneBox();
    ════════════════════════════════════════════ */
 const BLE={
   pk:{A:null,B:null,C:null},   // slot → Ponkey インスタンス
+  passthruOK:{A:false,B:false,C:false},   // ch10 (GM ドラム) の素通しを宣言できたか
   q:{A:Promise.resolve(),B:Promise.resolve(),C:Promise.resolve()},
   wanted:{A:false,B:false,C:false},retryN:{A:0,B:0,C:0},retryT:{A:null,B:null,C:null},
 
@@ -862,7 +867,8 @@ const BLE={
       }                                    // B/C は受信読み捨て
       this.pk[slot]=p;
       this.wanted[slot]=true;
-      await p.connect({debug:false});
+      // C だけデバッグサービスを開ける (SONG_CMD_PASSTHRU の通り道。A/B は MIDI だけで足りる)
+      await p.connect({debug:slot==='C'});
       this.afterAttach(slot);
       log(`${slot} "${p.device.name||'PONKEY'}" connected`,'ok');
     }catch(e){
@@ -882,6 +888,8 @@ const BLE={
   afterAttach(slot){
     this.q[slot]=Promise.resolve();
     this.retryN[slot]=0;
+    this.passthruOK[slot]=false;
+    if(slot==='C')this.declareDrumPassthru();
     setTimeout(()=>{
       this.send(slot,[0xB0,CC_STATE_SYNC,127]);
       if(slot==='A')setTimeout(()=>applyModalMute(),150);
@@ -929,6 +937,18 @@ const BLE={
   },
   soloDevice(){ return !this.pk.B?.midiChar && !!this.pk.A?.midiChar && cfg.one!=='off'; },
 
+  // C の本体で GM ドラムを鳴らせるようにする。切断でファーム側が既定 (ch16のみ) に戻すので毎回宣言する
+  async declareDrumPassthru(){
+    const p=this.pk.C;
+    if(!p||!p.dbgCmdChar){ this.passthruOK.C=false; refreshCDrum(); return; }
+    try{
+      await p.passthru([GM_DRUM_CH]);
+      this.passthruOK.C=true;
+      log(`C: ch${GM_DRUM_CH} (GMドラム) を素通しに宣言`,'ok');
+    }catch(e){ this.passthruOK.C=false; log('C passthru: '+e.message,'err'); }
+    refreshCDrum();
+  },
+
   send(slot,bytes){
     const to=this.route(slot);
     const p=this.pk[to];if(!p||!p.midiChar)return;
@@ -939,6 +959,11 @@ const BLE={
   }
 };
 // 「1台でかけあい」が効いているかを画面に出す (黙って挙動が変わるのがいちばん困る)
+// C の本体ドラムが効いているか (宣言できていないと鳴らないので、状態を出す)
+function refreshCDrum(){
+  const el=$('vCDrum'); if(!el)return;
+  el.textContent=!cfg.cDrum?'OFF':(BLE.passthruOK.C?'ON':'C未接続');
+}
 function refreshOneBox(){
   const el=$('oneNote'); if(!el)return;
   const on=BLE.soloDevice();
@@ -1191,6 +1216,12 @@ setInterval(()=>Gauge.tick(),600);
    ・小節境界で density とノリゲージに応じ fill / 抜きの装飾
    ════════════════════════════════════════════ */
 const DRUM_KI={kick:12,snare:14,hat:3};
+// v4.6: C の本体スピーカーで**本物のドラム音**を鳴らす。
+//   ch10 (GM パーカッション) を SONG_CMD_PASSTHRU で宣言しておくと、そこへ送ったノートが
+//   本体の内蔵音源へ素通しされる (本体の状態には触らない / ソレノイドも動かない)。
+//   ソレノイドは従来どおり ch1 の NoteOn(鍵番号) を別送して叩く = 機械の打点と音が両立する。
+const GM_DRUM_CH=10;                       // 1始まり (ponkey.js の passthru に渡す番号)
+const GM_DRUM_NOTE={kick:36,snare:38,hat:42};
 const Drummer={
   on:false,step:0,nextAt:0,timer:null,
   curBpm:0,pendingBpm:0,drumMap:null,density:0.6,bar:0,voice:true,
@@ -1260,7 +1291,12 @@ const Drummer={
   },
   hit(part){
     const ki=DRUM_KI[part];
-    BLE.send('C',[0x90,ki,127]);          // C のソレノイド発火 (物理リズム音)
+    BLE.send('C',[0x90,ki,127]);          // C のソレノイド発火 (機械の打点)
+    if(cfg.cDrum&&BLE.passthruOK.C){      // 本体スピーカーで本物のドラム音
+      const n=GM_DRUM_NOTE[part];
+      BLE.send('C',[0x99,n,110]);
+      setTimeout(()=>BLE.send('C',[0x89,n,0]),60);
+    }
     drumFire(part,ki);
     if(this.voice&&cfg.voice)drumVoice(part);
   }
@@ -1865,6 +1901,7 @@ buildGrid('gridA',true);buildGrid('gridB',false);buildGrid('gridC',false);
 /* エイリアンは IIFE 内の requestAnimationFrame で自走 */
 buildDrumGridDOM();renderDrumMap(buildDrumMap(null,0.6),-1);
 setWorld('ionian');
+refreshCDrum();refreshOneBox();
 log(`PONKEY SESSION v${VERSION} — multi-channel surprisal`,'ok');
 if(!navigator.bluetooth)log('Web Bluetooth なし → デモモード(画面入力)で動きます');
 setStatus('PONKEY A をひいてみて — Bが ことばを おぼえはじめる');
