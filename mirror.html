@@ -41,10 +41,15 @@
     --txt:#e6e9ee; --dim:#7d838d; --accent:#6fb0b8; --warn:#c96a5e;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  /* ── ウィンドウに収める: 縦スクロールを作らず、盤面が残りの高さいっぱいに広がる ──
+       --bs (盤面の一辺) と --cell (1キーの一辺) は fit() が実測して入れる。
+       キーの中の文字も --cell から算出するので、窓を縮めても字が溢れない。 */
+  html,body{height:100%}
   body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--txt);
-       min-height:100vh;font-weight:400;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+       font-weight:400;-webkit-font-smoothing:antialiased;overflow:hidden;
+       display:flex;flex-direction:column}
   header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);
-         position:sticky;top:0;background:var(--bg);z-index:30}
+         background:var(--bg);z-index:30;flex:none}
   header a{color:var(--dim);text-decoration:none;font-size:13px}
   h1{font-size:17px;font-weight:500;letter-spacing:.14em}
   .sub{font-size:11px;color:var(--dim);letter-spacing:.04em}
@@ -54,32 +59,57 @@
          background:transparent;color:var(--accent);cursor:pointer}
   button:hover{background:rgba(111,176,184,.12)}
 
-  .wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;padding:16px;align-items:start}
-  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  .wrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(170px,24vw,300px);
+        gap:12px;padding:12px;align-items:stretch}
+  .main{display:flex;flex-direction:column;min-height:0;min-width:0}
+  .side{min-height:0;overflow:auto}
+  #boardWrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+  /* 横に余裕が無いときだけ縦積み。横に広ければ (低い窓でも) 2カラムのままの方が盤面が大きい */
+  /* 低い窓では右カラムを削って盤面に高さを譲る */
+  @media(max-height:560px){ .card{padding:9px 11px;margin-bottom:9px} .kv{padding:2px 0;font-size:11.5px} }
+  /* 横に本当に余裕が無いときだけ縦積み (2カラムのままの方が盤面は大きくなる) */
+  @media(max-width:560px){
+    .wrap{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;gap:10px;padding:10px}
+    .side{max-height:clamp(90px,26vh,210px)}
+    header{padding:8px 12px;gap:8px}
+    header .sub{display:none}          /* ヘッダを1行に収める */
+    header .pill{white-space:nowrap}
+    header button{white-space:nowrap;padding:6px 11px}
+  }
+  /* 窓が低いときは説明文を畳んで盤面に高さを譲る (fit() が付け外しする) */
+  body.tight .mode .m2{display:none}
+  body.tight .mode{padding:7px 12px}
+  body.tight .pk .pr{min-height:1.2em}
 
   /* ── モード帯: いま何のモードか ── */
-  .mode{padding:12px 16px;border:1px solid var(--line);background:var(--panel);margin-bottom:12px}
-  .mode .m1{font-size:26px;font-weight:600;letter-spacing:.02em;line-height:1.15}
-  .mode .m2{font-size:13px;color:var(--dim);margin-top:5px;line-height:1.6}
+  .mode{padding:10px 14px;border:1px solid var(--line);background:var(--panel);flex:none}
+  .mode .m1{font-size:clamp(17px,2.1vw,26px);font-weight:600;letter-spacing:.02em;line-height:1.15}
+  .mode .m2{font-size:clamp(10.5px,1.05vw,13px);color:var(--dim);margin-top:4px;line-height:1.5}
 
   /* ── 盤面: 真上から見た16キー ── */
-  .board{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  .key{position:relative;aspect-ratio:1;border:1px solid var(--line);background:var(--panel);
+  /* 盤面は正方形。一辺は fit() が「残っている場所の短い方」に合わせる */
+  .board{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);
+         gap:var(--gap,8px);width:var(--bs,400px);height:var(--bs,400px)}
+  .key{position:relative;border:1px solid var(--line);background:var(--panel);
        display:flex;flex-direction:column;align-items:center;justify-content:center;
-       padding:8px;text-align:center;overflow:hidden;transition:background .08s,border-color .08s}
-  .key .n{position:absolute;top:5px;left:7px;font-size:10px;color:var(--dim)}
-  .key .big{font-size:clamp(15px,2.4vw,26px);font-weight:600;line-height:1.12;word-break:break-word}
-  .key .small{font-size:clamp(9px,1.05vw,12px);color:var(--dim);margin-top:5px;line-height:1.3}
+       padding:calc(var(--cell,90px)*.07);text-align:center;overflow:hidden;
+       transition:background .08s,border-color .08s;min-width:0;min-height:0}
+  .key .n{position:absolute;top:4%;left:6%;font-size:calc(var(--cell,90px)*.11);color:var(--dim)}
+  .key .big{font-size:calc(var(--cell,90px)*.20);font-weight:600;line-height:1.1;
+            word-break:break-word;max-width:100%}
+  .key .small{font-size:calc(var(--cell,90px)*.115);color:var(--dim);
+              margin-top:calc(var(--cell,90px)*.05);line-height:1.25;max-width:100%}
   .key.on{background:var(--panel2)}
   .key.dim{opacity:.3}
   .key.press{border-color:#fff;background:#2a2f37}
   .key.head::after{content:'';position:absolute;inset:0;border:2px solid var(--warn);pointer-events:none}
 
   /* ── P キーの列 ── */
-  .pkeys{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:12px}
-  .pk{border:1px solid var(--line);background:var(--panel);padding:8px 4px;text-align:center}
-  .pk .pn{font-size:13px;font-weight:600}
-  .pk .pr{font-size:9.5px;color:var(--dim);margin-top:3px;line-height:1.25;min-height:24px}
+  .pkeys{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:10px;flex:none}
+  .pk{border:1px solid var(--line);background:var(--panel);padding:6px 3px;text-align:center}
+  .pk .pn{font-size:clamp(11px,1.1vw,13px);font-weight:600}
+  .pk .pr{font-size:clamp(8.5px,.85vw,10px);color:var(--dim);margin-top:2px;line-height:1.2;
+          min-height:2.4em;overflow:hidden}
   .pk.sel{border-color:#fff}
   .pk.held{background:#2a2f37;border-color:#fff}
 
@@ -126,16 +156,16 @@
 </header>
 
 <div class="wrap">
-  <div>
+  <div class="main">
     <div class="mode">
       <div class="m1" id="modeName">未接続</div>
       <div class="m2" id="modeHow">本体とつなぐと、16キーがいま何になっているかをここに映します。</div>
     </div>
-    <div class="board" id="board"></div>
+    <div id="boardWrap"><div class="board" id="board"></div></div>
     <div class="pkeys" id="pkeys"></div>
   </div>
 
-  <div>
+  <div class="side">
     <div class="card">
       <h2>いまの設定</h2>
       <div class="kv"><span>パート</span><b id="vPart">—</b></div>
@@ -592,8 +622,48 @@ function onSlotDump(d){
   $('lpNote').textContent=`スロット${slot+1}: ドラム${drums.length}打 / メロディ${synth.length}音`;
 }
 
+/* ════════════════════════════════════════════════════════════
+   ウィンドウに収める — 盤面の一辺は「残っている場所の短い方」に合わせる。
+   キー内の文字サイズも --cell から出しているので、窓を縮めても溢れない。
+   ════════════════════════════════════════════════════════════ */
+// 呼び出しを1フレームにまとめる。**レイアウトを変えたら必ずもう一度測り直す**
+//   (説明文を畳む → 使える高さが増える → 盤面をもう一回計算しないと小さいままになる)
+// ⚠ requestAnimationFrame は**タブが隠れている間は止まる**。窓を裏で開いたまま
+//   リサイズされると計算されないので、まとめるのは setTimeout で行う (隠れていても動く)。
+let fitQ=null;
+function fit(){
+  if(fitQ) return;
+  fitQ=setTimeout(()=>{ fitQ=null; doFit(); },0);
+}
+function doFit(){
+  const w=$('boardWrap');
+  const aw=w.clientWidth, ah=w.clientHeight;
+  if(aw<20||ah<20){ setTimeout(fit,120); return; }   // まだ組み上がっていない → 少し待って測り直す
+  // 盤面に回せる高さが足りないときは説明文を畳む。畳んだら測り直し (次フレーム)
+  const tight = (ah < 300);
+  if(tight !== document.body.classList.contains('tight')){
+    document.body.classList.toggle('tight', tight);
+    fit(); return;
+  }
+  const gap = aw<420 ? 4 : (aw<700 ? 6 : 8);
+  const side = Math.max(120, Math.floor(Math.min(aw,ah)));
+  const cell = Math.floor((side - gap*3)/4);
+  const r=document.documentElement.style;
+  r.setProperty('--bs', (cell*4+gap*3)+'px');
+  r.setProperty('--cell', cell+'px');
+  r.setProperty('--gap', gap+'px');
+}
+addEventListener('resize',fit);
+addEventListener('load',fit);
+addEventListener('visibilitychange',()=>{ if(!document.hidden) fit(); });
+addEventListener('orientationchange',()=>setTimeout(fit,150));
+if(window.ResizeObserver) new ResizeObserver(()=>fit()).observe($('boardWrap'));
+// フォント読み込みや初回レイアウトのあとでもう一度 (最初の1回を取りこぼさないため)
+[60,200,600].forEach(t=>setTimeout(fit,t));
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit);
+
 /* ── 起動 ── */
-renderAll(); renderLooper();
+renderAll(); renderLooper(); fit();
 log('起動。<b>読むだけのアプリ</b>です — 本体には書き込みません。');
 </script>
 </body>
