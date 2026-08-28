@@ -203,18 +203,15 @@
 <!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
 <script src="./ponkey.js"></script>
 <script>
-// ============================================================ 定数 (ファーム PT2 v4.5.x 一致 — FW変更なしで動く)
+// ============================================================ 定数 (ファーム PT2 v4.6.x 一致 — FW変更なしで動く)
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54;
-// シンセパートの音階テーブル (グリッド左下=低音)。音高 → 鍵番号 (0-15) の逆引きに使う
-const NOTE_TABLE_BASS  =[45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
-const NOTE_TABLE_NORMAL=[69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];
-function buildReverse(t){const m=new Map();t.forEach((n,i)=>{if(!m.has(n))m.set(n,i)});return m;}
-const PART_BY_CHANNEL={0:buildReverse(NOTE_TABLE_BASS),3:buildReverse(NOTE_TABLE_NORMAL),4:buildReverse(NOTE_TABLE_NORMAL)};
-// オクターブシフト中でも当てられるよう ±12 半音まで探す (TRANCE と同じ方式)
-function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
-  if(rev.has(note))return rev.get(note);
-  for(let d=1;d<=12;d++){if(rev.has(note-d))return rev.get(note-d);if(rev.has(note+d))return rev.get(note+d);}
-  return null;}
+// 本体が鳴らした音 (NoteOn) → 押された鍵番号 (0-15) の逆引き。表は Ponkey.PARTS / KIT_NOTES が正本。
+//   v4.6.0 でメロディが 6 パート (ch0-5、レイヤー1 は ch6,7,8,10,11,12) に増え、
+//   ドラムは ch9 の「キット16音」になった。キットは 8 種あってどれが選ばれているかで音が違うので、
+//   接続時に本体から届く CC_VOICE_SELECT (part0) で覚えておく。
+//   オクターブシフト中でも当てられるよう、メロディ側は ±12 半音まで探す (ponkey.js 側の実装)。
+let curKit=0;
+function lookupKey(ch,note){ return Ponkey.keyFromNote(ch,note,curKit); }
 
 // ============================================================ 音楽 (「倒す＝演奏」の土台)
 // 撃った音がそのまま曲になるよう、16 セルを常にスケール上の音へ写像する。
@@ -284,7 +281,9 @@ document.getElementById('btnConnect').onclick=async()=>{ try{
   pk.on('disconnect',()=>{devices=devices.filter(x=>x!==entry);renderPlayers();log(entry.name+' DISCONNECTED');});
   pk.on('note',ev=>{ if(!ev.on)return;                     // NoteOn (vel>0) → 鍵番号へ逆引き
     const k=lookupKey(ev.ch,ev.note); if(k!=null)hit(k); });
-  pk.on('cc',ev=>{ if(entry!==devices[0]||ev.ch!==0)return; // クロック/BPM は P1 に従属
+  pk.on('cc',ev=>{
+    if(ev.cc===Ponkey.CC.VOICE_SELECT && (ev.val>>4)===0) curKit=ev.val&15;   // part0 = ドラムのキット番号
+    if(entry!==devices[0]||ev.ch!==0)return;               // クロック/BPM は P1 に従属
     if(ev.cc===CC_BAR_SYNC)onStep(ev.val);
     else if(ev.cc===CC_BPM){ccBpm=ev.val+60;bpm=ccBpm;setBpmView();} });
   await pk.connect({debug:false});                          // MIDI サービスのみ

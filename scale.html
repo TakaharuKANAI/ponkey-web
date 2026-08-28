@@ -196,7 +196,10 @@ let pk=null,connected=false,gotSync=false;
 
 function keyOfRank(r){ return (3-Math.floor(r/4))*4 + (r%4); }   // 対合
 function curScale(){ return SCALES[idxOfId(store.scale)]; }
-// LEAD/PAD の音高 (ファーム rebuildSynthNoteTables と同じ算出)
+// 16キーの音高 (ファーム rebuildSynthNoteTables と同じ算出)。
+// v4.6.0 以降、スケール/キーはメロディ6パート (P2-P7) 全部に効く。ただし音域はパートの属性で、
+//   ここに出るのはシフト 0 のパート (P2 けんばん / P5 わおん / P7 こえ) の音。
+//   P3 リードは +1oct、P6 ベルは +2oct、P4 ベースは低域テーブル (音名は同じでオクターブだけ違う)。
 function pitchOfRank(r){
   const s=curScale();
   // v4.5.76〜: 白鍵モードもキー(根音)ぶんだけ平行移動する (それ以前のファームは C 固定だった)

@@ -7,6 +7,8 @@
 
    FW柔軟化メモ Phase 4 の「1本書いて100アプリ全てこれ経由」の種。
    対応 FW: v4.5.68+ (能力ネゴ)。旧 FW にも接続はできる (caps.protocol = 0 になる)。
+   v4.6.0 でパート構成が変わった (P1=ドラムキット / P2-P7=メロディ6パート、protocol 1→2)。
+   パートを扱うアプリは hasFeature('PART_REDESIGN') で分岐し、表は Ponkey.PARTS を見ること。
 
    プロトコルの正本はファームのヘッダ:
      - CC 番号 / FEAT ビット: PONKEY_V2_DATA_STRUCTURES.h
@@ -52,7 +54,80 @@ const FEAT_P1 = {
 };
 const FEAT_P2 = {   // v4.5.73 (CC_FEATURES3 0x3D)
   LED32: 1 << 0, SOL_SING: 1 << 1,
+  PART_REDESIGN: 1 << 2,   // v4.6.0: P1=ドラムキット / P2-P7=メロディ6パート。
+                           //   これが立っていない本体は旧構成 (P1-P4=ドラム4パート / P5-P7=BASS,LEAD,PAD)。
+                           //   パート番号・MIDI ch・スロット内のドラム表現が全部変わるので、
+                           //   パートを扱うアプリは必ずこのビットで分岐すること (下の PARTS 参照)。
 };
+
+// ============================================================================
+//  パート構成テーブル (v4.6.x / FEAT3_PART_REDESIGN)
+//  正本: ponkey-firmware/PONKEY_PT2_v4_5_34/PONKEY_V2_DATA_STRUCTURES.h と .ino
+//    MODE_COLORS / PART_BASE_HUE / SAM_SYNTH_CHANNELS / SYNTH_WHITE_TABLES /
+//    SYNTH_REGISTER_SHIFT / KIT_NOTES / PRESET_NAMES
+//  ここは「アプリが写経して持っていた表」を1箇所に集めたもの。ファームが変わったらここだけ直す。
+// ============================================================================
+const NOTE_TABLE_BASS   = [45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];  // C1-D3
+const NOTE_TABLE_NORMAL = [69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];  // C3-D5
+
+// index = 本体のパート番号 (CC 0-6 = P1-P7 のパート選択に送る値と同じ)。
+//   P1 だけドラムキット (16キー = 16打楽器, ch9)。P2-P7 がメロディで、synth = 0-5。
+//   ch  = レイヤー0 の MIDI ch / chL2 = 凍結レイヤー1 の ch (本体→アプリの NoteOn はこの ch で来る)
+//   shift = そのパートの音域シフト (半音)。table + shift が「白鍵モードの16キーの音高」。
+const PARTS = [
+  { part: 0, synth: null, name: 'DRUM',  ja: 'ドラム',   hue:  11, rgb: '#ff3000', ch: 9, chL2: null, table: null,              shift:  0 },
+  { part: 1, synth: 0,    name: 'KEYS',  ja: 'けんばん', hue: 108, rgb: '#30ff00', ch: 0, chL2: 6,    table: NOTE_TABLE_NORMAL, shift:  0 },
+  { part: 2, synth: 1,    name: 'LEAD',  ja: 'リード',   hue:  58, rgb: '#ffff00', ch: 1, chL2: 7,    table: NOTE_TABLE_NORMAL, shift: 12 },
+  { part: 3, synth: 2,    name: 'BASS',  ja: 'ベース',   hue: 176, rgb: '#00ffc0', ch: 2, chL2: 8,    table: NOTE_TABLE_BASS,   shift:  0 },
+  { part: 4, synth: 3,    name: 'CHORD', ja: 'わおん',   hue: 265, rgb: '#8000ff', ch: 3, chL2: 10,   table: NOTE_TABLE_NORMAL, shift:  0 },
+  { part: 5, synth: 4,    name: 'BELL',  ja: 'ベル',     hue: 220, rgb: '#0080ff', ch: 4, chL2: 11,   table: NOTE_TABLE_NORMAL, shift: 24 },
+  { part: 6, synth: 5,    name: 'VOICE', ja: 'こえ',     hue: 300, rgb: '#ff00ff', ch: 5, chL2: 12,   table: NOTE_TABLE_NORMAL, shift:  0 },
+];
+const DRUM_CH = 9, CLICK_CH = 13, PASSTHRU_CH = 15;   // ch16 パススルー = 0-origin の 15
+
+// P1 の 16キー。**列 = 系統** (列1=キック / 列2=スネア / 列3=ハット / 列4=パーカッション)。
+// 行 = バリエーション。キット番号は CC_VOICE_SELECT の part 0 で本体から届く (接続時の State Sync に含まれる)。
+const KIT_NOTES = [
+  [36,38,42,54, 41,37,44,56, 64,75,51,76, 47,39,46,80],   // 0 TOY
+  [36,38,42,54, 35,37,44,49, 41,45,51,55, 43,47,46,52],   // 1 ORCH
+  [36,40,42,54, 35,38,46,49, 41,37,44,57, 45,39,51,55],   // 2 BAND
+  [36,40,42,76, 35,39,46,75, 41,37,44,77, 45,38,51,80],   // 3 GAME
+  [41,37,51,81, 43,39,59,55, 45,38,53,52, 47,78,42,80],   // 4 SPACE
+  [64,58,69,79, 66,73,70,78, 41,74,42,71, 45,39,46,72],   // 5 WEIRD
+  [36,39,69,54, 41,37,70,56, 45,38,42,39, 47,75,46,80],   // 6 VOICE
+  [64,61,69,54, 65,60,70,56, 66,62,73,76, 47,63,74,67],   // 7 WORLD
+];
+const KIT_COL_NAMES = ['キック','スネア','ハット','パーカッション'];
+const KIT_COL_RGB   = ['#ff2020','#20ff40','#2060ff','#ff20a0'];   // 列の色 (ファーム KIT_COL_RGB)
+const PRESET_NAMES  = ['TOY','ORCH','BAND','GAME','SPACE','WEIRD','VOICE','WORLD'];
+const PRESET_HUE    = [11, 45, 0, 120, 265, 320, 190, 85];
+
+const _rev = new Map();   // ch → Map(note → key 0-15)。レイヤー1 の ch も同じ表を指す
+for (const p of PARTS) {
+  if (p.table == null) continue;
+  const m = new Map();
+  p.table.forEach((n, k) => { const v = n + p.shift; if (!m.has(v)) m.set(v, k); });
+  _rev.set(p.ch, m); if (p.chL2 != null) _rev.set(p.chL2, m);
+}
+const _kitRev = KIT_NOTES.map(kit => { const m = new Map(); kit.forEach((n, k) => { if (!m.has(n)) m.set(n, k); }); return m; });
+
+// 本体から届いた NoteOn (ch, note) → グリッドのキー番号 0-15。当たらなければ null。
+//   ドラム (ch9) はキット依存なので kit を渡す (本体の現在キット。不明なら 0)。
+//   メロディはオクターブ設定で上下するので ±12 半音まで探す (旧アプリと同じ方式)。
+function keyFromNote(ch, note, kit = 0) {
+  if (ch === DRUM_CH) {
+    const m = _kitRev[kit & 7];
+    return m.has(note) ? m.get(note) : null;
+  }
+  const rev = _rev.get(ch);
+  if (!rev) return null;
+  if (rev.has(note)) return rev.get(note);
+  for (let d = 1; d <= 12; d++) {
+    if (rev.has(note - d)) return rev.get(note - d);
+    if (rev.has(note + d)) return rev.get(note + d);
+  }
+  return null;
+}
 
 // ---- デバッグサービスのパケット/コマンド (正本: PONKEY_V2_DEBUG.h) ----
 const DBG_PACKET_MAGIC = 0xa5, DBG_PACKET_HEADER_LEN = 11;
@@ -294,8 +369,14 @@ class Ponkey {
     return this._song(SONG_CMD.PASSTHRU, [m & 0xff, (m >> 8) & 0xff]);
   }
 
-  // テーブル持ち込み (Phase 3)。part: 'BASS'|'LEAD'|'PAD' または 0-2 / P1-P3 は 3-5
-  _partIdx(part) { return typeof part === 'number' ? part : { BASS: 0, LEAD: 1, PAD: 2, P1: 3, P2: 4, P3: 5 }[part]; }
+  // テーブル持ち込み (Phase 3)。part: 0-5 = メロディ P2-P7 (名前でも可)。
+  //   v4.6.0 で意味が変わった: 旧 FW は 0-2=P5-P7 シンセ / 3-5=P1-P3 のスケールモードだった
+  //   (スケールモードは廃止)。旧 FW へ送るときは PART_REDESIGN が無いことを見て呼び分ける。
+  _partIdx(part) {
+    if (typeof part === 'number') return part;
+    return { KEYS: 0, LEAD: 1, BASS: 2, CHORD: 3, BELL: 4, VOICE: 5,
+             P2: 0, P3: 1, P4: 2, P5: 3, P6: 4, P7: 5 }[part];
+  }
   uploadNoteTable(part, notes16) { return this._song(SONG_CMD.TABLE, [0, this._partIdx(part), ...notes16.slice(0, 16).map(n => n & 0x7f)]); }
   clearNoteTable(part)           { return this._song(SONG_CMD.TABLE, [0, this._partIdx(part)]); }
   uploadVelocityTable(pct16)     { return this._song(SONG_CMD.TABLE, [1, 0, ...pct16.slice(0, 16).map(v => Math.min(200, v) & 0xff)]); }
@@ -325,6 +406,11 @@ class Ponkey {
 }
 
 Ponkey.CC = CC; Ponkey.FEAT_P0 = FEAT_P0; Ponkey.FEAT_P1 = FEAT_P1; Ponkey.FEAT_P2 = FEAT_P2;
+// v4.6.x パート構成 (FEAT3_PART_REDESIGN が立っている本体向け)
+Ponkey.PARTS = PARTS; Ponkey.NOTE_TABLE_BASS = NOTE_TABLE_BASS; Ponkey.NOTE_TABLE_NORMAL = NOTE_TABLE_NORMAL;
+Ponkey.DRUM_CH = DRUM_CH; Ponkey.CLICK_CH = CLICK_CH; Ponkey.PASSTHRU_CH = PASSTHRU_CH;
+Ponkey.KIT_NOTES = KIT_NOTES; Ponkey.KIT_COL_NAMES = KIT_COL_NAMES; Ponkey.KIT_COL_RGB = KIT_COL_RGB;
+Ponkey.PRESET_NAMES = PRESET_NAMES; Ponkey.PRESET_HUE = PRESET_HUE; Ponkey.keyFromNote = keyFromNote;
 Ponkey.SONG_CMD = SONG_CMD; Ponkey.DBG_CAT = DBG_CAT;
 global.Ponkey = Ponkey;
 })(typeof window !== 'undefined' ? window : globalThis);

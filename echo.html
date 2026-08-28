@@ -175,8 +175,13 @@ const DUMP_ALL=0xFE;                                    // 0xFE = 中身のあ�
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;
 const SLOT_FMT_V2=0xF2;                                 // serializeSlotV2 の形式識別
 const SLOT_COUNT=16, MAX_SUBSTEPS=64, QUANTIZE_RATIO=4, MAX_DUR=64;
-const PARTS=['KICK','SNARE','HAT','TOM','BASS','LEAD','PAD'];
-const ECHO_MAGIC=0xE1;                                  // 共有リンクの形式識別 (ECHO v1)
+// v4.6.0 のパート再編で「1ドラム + 6メロディ」になった (旧: 4ドラム + 3メロディ)。
+//   スロットの形も変わる (オクターブ欄 3→6要素 / ドラムの1件がパートでなくサウンドを指す) ので、
+//   取り込み時に本体の FEAT3_PART_REDESIGN を見て記録に印を付け、表示・書き戻し・共有リンクを出し分ける。
+//   印が無い記録 = 旧ファームで取った過去の日記。読めなくしないこと。
+const nDrum=p2=>p2?1:4, nSynth=p2=>p2?6:3;              // ドラム/メロディのパート数
+const ECHO_MAGIC=0xE1;                                  // 共有リンクの形式識別 (ECHO v1 = 旧パート構成)
+const ECHO_MAGIC_V46=0xE2;                              // ECHO v2 = v4.6 パート構成 (オクターブ欄が6要素)
 const LS='ponkey_echo_v01';
 
 // ============================================================ 状態
@@ -185,6 +190,7 @@ let pk=null,connected=false;
 let store={entries:[],lastExport:0,deleted:{}};
 let capture=null;                                       // 取り込み中/取り込み済みの内容
 let dumpAsm={}, dumpPending=null, dumpTimer=null;
+let fwParts2=false;                                     // 接続中の本体が v4.6 パート構成か
 let selId=null;
 
 function log(m){const e=document.getElementById('log');
@@ -205,7 +211,8 @@ document.getElementById('btnConnect').onclick=async()=>{ try{
   // SONG カテゴリだけ通す。全カテゴリを開けるとダンプのチャンクが他のログに押し出される。
   await pk.dbgRaw(CMD_LOG_DISABLE_CAT,[CAT_SYSTEM]).catch(()=>{});
   await pk.dbgRaw(CMD_LOG_DISABLE_CAT,[CAT_MODE]).catch(()=>{});
-  setConn(true); log('接続完了 (SONG ログのみ有効化)');
+  fwParts2=pk.hasFeature('PART_REDESIGN');
+  setConn(true); log('接続完了 (SONG ログのみ有効化) / パート構成: '+(fwParts2?'v4.6 (ドラム1+メロディ6)':'v4.5 以前 (ドラム4+メロディ3)'));
 }catch(e){log('接続エラー: '+e);} };
 
 function setConn(c){connected=c;
@@ -251,7 +258,7 @@ function onSlotDump(d){
   const full=new Uint8Array(tot);
   let off=0;for(let c=0;c<cnt;c++){full.set(a.parts[c],off);off+=a.parts[c].length;}
   delete dumpAsm[gen];
-  const slot=parseSlotV2(full);
+  const slot=parseSlotV2(full,fwParts2);
   if(!slot){log('⚠ 未知の形式のスロットを無視しました');return;}
   dumpPending.slots=dumpPending.slots.filter(s=>s.slot!==slot.slot);
   dumpPending.slots.push(slot); dumpPending.slots.sort((a,b)=>a.slot-b.slot);
@@ -260,11 +267,14 @@ function onSlotDump(d){
   if(need&&need.every(s=>dumpPending.slots.some(x=>x.slot===s)))finishDump();
 }
 
-// V2: [0xF2][slot][loopLen][oct×3][rectRow][rectCol][drumCnt]{(p<<4)|step,maskLo,maskHi}[synCnt]{(l<<4)|key,sub,raw}
-function parseSlotV2(d){
+// V2: [0xF2][slot][loopLen][oct×N][rectRow][rectCol][drumCnt]{(p<<4)|step,maskLo,maskHi}[synCnt]{(l<<4)|key,sub,raw}
+//   N = メロディパート数 (v4.5 以前=3 / v4.6=6)。ここを間違えると以降が全部ずれるので本体の申告で決める。
+//   drums の 1 件 = 「そのステップで鳴るグリッドセルのビットマスク」。v4.6 では p は常に 0 で、
+//   マスクのビット k = キット音 k (= キー k)。
+function parseSlotV2(d,parts2){
   let i=0; if(d[i++]!==SLOT_FMT_V2)return null;
   const slot=d[i++],loopLen=d[i++];
-  const oct=[d[i++],d[i++],d[i++]].map(v=>(v<<24)>>24);
+  const oct=[]; for(let n=0;n<nSynth(parts2);n++) oct.push((d[i++]<<24)>>24);
   const rectRow=d[i++],rectCol=d[i++];
   const dc=d[i++],drums=[];
   for(let n=0;n<dc&&i+2<d.length;n++){const b=d[i++],lo=d[i++],hi=d[i++];
@@ -278,7 +288,7 @@ function parseSlotV2(d){
 // ============================================================ 取り込み
 document.getElementById('btnCapture').onclick=async()=>{
   if(!connected)return;
-  dumpAsm={}; dumpPending={meta:null,expect:null,slots:[]};
+  dumpAsm={}; dumpPending={meta:null,expect:null,slots:[],parts2:fwParts2};
   capture=null; renderSlots(); setCapUI(false);
   log('読み出し要求を送信…');
   await pk.dumpSlot(DUMP_ALL).catch(()=>{});
@@ -290,7 +300,7 @@ function finishDump(msg){
   if(!dumpPending)return;
   const p=dumpPending; dumpPending=null;
   if(!p.slots.length){capture=null;renderSlots();setCapUI(false);log(msg||'取り込めるスロットがありませんでした');return;}
-  capture={meta:p.meta,slots:p.slots};
+  capture={meta:p.meta,slots:p.slots,parts2:p.parts2};
   setDirty(false);
   renderSlots(); setCapUI(true);
   const notes=p.slots.reduce((a,s)=>a+s.drums.length+s.synth.length,0);
@@ -327,14 +337,16 @@ function renderSlots(){
 }
 
 // ============================================================ ミニ図 (7パート×16ステップ)
-function miniHTML(slot){
+//   行数はどちらの構成でも 7 (v4.5: ドラム4+メロディ3 / v4.6: ドラム1+メロディ6)
+function miniHTML(slot,parts2){
+  const nd=nDrum(parts2);
   const on=Array.from({length:7},()=>new Array(16).fill(false));
   // ドラム: V2 は「そのステップで鳴るグリッドセルのビットマスク」。1つでも立っていれば発音あり。
-  for(const [p,step,mask] of slot.drums) if(mask&&p<4&&step<16) on[p][step]=true;
+  for(const [p,step,mask] of slot.drums) if(mask&&p<nd&&step<16) on[p][step]=true;
   // シンセ: サブステップ(0-63) を 16 ステップへ丸める
-  for(const [l,,sub] of slot.synth){ const st=Math.floor(sub/QUANTIZE_RATIO); if(l<3&&st<16) on[4+l][st]=true; }
+  for(const [l,,sub] of slot.synth){ const st=Math.floor(sub/QUANTIZE_RATIO); if(l<nSynth(parts2)&&st<16) on[nd+l][st]=true; }
   let h='';
-  for(let r=0;r<7;r++)for(let s=0;s<16;s++)h+=`<i class="${on[r][s]?(r<4?'d':'s'):''}"></i>`;
+  for(let r=0;r<7;r++)for(let s=0;s<16;s++)h+=`<i class="${on[r][s]?(r<nd?'d':'s'):''}"></i>`;
   return h;
 }
 
@@ -374,7 +386,7 @@ function entryEl(e){
   const minis=document.createElement('div'); minis.className='minis';
   for(const s of e.data.slots){
     const w=document.createElement('div'); w.className='mwrap';
-    w.innerHTML=`<div class="mini">${miniHTML(s)}</div><div class="mlab">${s.slot+1}</div>`;
+    w.innerHTML=`<div class="mini">${miniHTML(s,e.data.parts2)}</div><div class="mlab">${s.slot+1}</div>`;
     minis.appendChild(w);
   }
   d.appendChild(minis);
@@ -400,22 +412,36 @@ function entryEl(e){
 function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 // ============================================================ 本体へ戻す
-// 注意: ファームの LOAD_SLOT (parseSlotPayload) は V1 形式しか受けない。V2 で保存した情報のうち
-//   ・ドラムの「ステップと違うセル」(= SCALE 化したドラムパート) と矩形設定
-//   ・シンセの重ね録りレイヤー(dur の bit7。ファームが dur>64 を 64 に丸める過程で消える)
-//   は書き戻せない。保存データ側は無傷なので、ファームが対応すれば後から完全復元できる。
+// 注意: ファームの LOAD_SLOT (parseSlotPayload) は V1 形式しか受けない。落ちるものは構成で違う:
+//   ・v4.5 以前の記録: ドラムの「ステップと違うセル」(= SCALE 化したドラムパート) と矩形設定。
+//     V1 のドラム1バイトが (パート<<4)|ステップ なので、対角のヒットしか表現できない。
+//   ・v4.6 の記録: ドラムは全ビット書き戻せる。V1 の1バイトが (サウンド<<4)|ステップ に
+//     意味変更されたため、マスクの立っているビットをそのまま並べれば復元できる。
+//   ・共通: シンセの重ね録りレイヤー(raw の bit7。ファームが dur を 64 に丸める過程で消える)。
+//   保存データ側は無傷なので、ファームが V2 受信に対応すれば後から完全復元できる。
 async function sendToDevice(e){
   if(!connected){log('未接続です');return;}
-  const slots=e.data.slots;
+  const slots=e.data.slots, parts2=!!e.data.parts2;
+  if(parts2!==fwParts2){
+    if(!confirm('この記録は'+(parts2?'v4.6 (ドラム1+メロディ6)':'v4.5 以前 (ドラム4+メロディ3)')+
+      ' の構成で取ったものですが、つないでいる本体は'+(fwParts2?'v4.6':'v4.5 以前')+
+      ' です。パート番号の意味が違うので、別のパート・別の音で鳴ります。それでも書き戻しますか。'))return;
+  }
   if(!confirm(`本体のスロット ${slots.map(s=>s.slot+1).join(',')} を、この記録で上書きします。よろしいですか。`))return;
   let lostDrum=0,lostLayer=0;
   await pk.songEnter().catch(()=>{});
   for(const s of slots){
-    const body=[s.loopLen||MAX_SUBSTEPS,s.oct[0]&0xff,s.oct[1]&0xff,s.oct[2]&0xff];
+    const oct=[]; for(let n=0;n<nSynth(fwParts2);n++) oct.push((s.oct[n]|0)&0xff);   // 欄の数は「送り先の本体」に合わせる
+    const body=[s.loopLen||MAX_SUBSTEPS,...oct];
     const dr=[];
     for(const [p,step,mask] of s.drums){
-      if((mask>>step)&1) dr.push(((p&0xf)<<4)|(step&0xf));   // 対角のみ V1 で表現できる
-      for(let b=0;b<16;b++) if(b!==step&&((mask>>b)&1)) lostDrum++;
+      if(parts2){
+        // v4.6: 1バイト = (サウンド<<4)|ステップ。マスクの立っているビットを全部並べる (欠落なし)
+        for(let b=0;b<16;b++) if((mask>>b)&1) dr.push(((b&0xf)<<4)|(step&0xf));
+      }else{
+        if((mask>>step)&1) dr.push(((p&0xf)<<4)|(step&0xf));   // 対角のみ V1 で表現できる
+        for(let b=0;b<16;b++) if(b!==step&&((mask>>b)&1)) lostDrum++;
+      }
     }
     body.push(dr.length&0xff,...dr);
     // 件数は「ノート数」であってバイト数ではない (ファームは synCount 回だけ 3 バイトずつ読む)
@@ -449,18 +475,23 @@ async function sendToDevice(e){
 }
 
 // ============================================================ 共有リンク (base64url)
-// [0xE1][bpm-60][swing][accent][root][scaleEn][scale×3][voices 7×4bit=4B][slotCount]
-//   slot: [idx][loopLen][oct×3][rectRow][rectCol][dCnt]{b,lo,hi}[sCnt]{b,sub,raw}
+// [magic][bpm-60][swing][accent][root][scaleEn][scale×3][voices 7×4bit=4B][slotCount]
+//   slot: [idx][loopLen][oct×N][rectRow][rectCol][dCnt]{b,lo,hi}[sCnt]{b,sub,raw}
 //   末尾: [nameLen][UTF-8]
+//   magic 0xE1 = 旧パート構成 (N=3) / 0xE2 = v4.6 パート構成 (N=6)。
+//   古いリンクを読めなくしないため、0xE1 は残して読めるようにしてある。
 function encodeEntry(e){
+  const parts2=!!e.data.parts2, nS=nSynth(parts2);
   const m=e.data.meta||{bpm:120,swing:0,accent:0,root:0,scaleEn:0,scale:[0,0,0],voices:[0,0,0,0,0,0,0]};
-  const b=[ECHO_MAGIC,Math.max(0,Math.min(127,m.bpm-60)),m.swing&0x7f,m.accent&0x7f,
+  const b=[parts2?ECHO_MAGIC_V46:ECHO_MAGIC,Math.max(0,Math.min(127,m.bpm-60)),m.swing&0x7f,m.accent&0x7f,
            m.root&0xff,m.scaleEn&0xff,m.scale[0]&0xff,m.scale[1]&0xff,m.scale[2]&0xff];
   const v=m.voices;                                     // 7 ニブル → 4 バイト (末尾ニブルは未使用)
   b.push(((v[0]&15)<<4)|(v[1]&15),((v[2]&15)<<4)|(v[3]&15),((v[4]&15)<<4)|(v[5]&15),(v[6]&15)<<4);
   b.push(e.data.slots.length&0xff);
   for(const s of e.data.slots){
-    b.push(s.slot&0xf,s.loopLen&0xff,s.oct[0]&0xff,s.oct[1]&0xff,s.oct[2]&0xff,s.rectRow&0xff,s.rectCol&0xff);
+    b.push(s.slot&0xf,s.loopLen&0xff);
+    for(let n=0;n<nS;n++) b.push((s.oct[n]|0)&0xff);
+    b.push(s.rectRow&0xff,s.rectCol&0xff);
     b.push(s.drums.length&0xff);
     for(const [p,st,mask] of s.drums) b.push(((p&0xf)<<4)|(st&0xf),mask&0xff,(mask>>8)&0xff);
     b.push(s.synth.length&0xff);
@@ -471,7 +502,8 @@ function encodeEntry(e){
   return b64uEnc(Uint8Array.from(b));
 }
 function decodeEntry(str){
-  const d=b64uDec(str); if(!d||d[0]!==ECHO_MAGIC)return null;
+  const d=b64uDec(str); if(!d||(d[0]!==ECHO_MAGIC&&d[0]!==ECHO_MAGIC_V46))return null;
+  const parts2=d[0]===ECHO_MAGIC_V46, nS=nSynth(parts2);
   let i=1;
   const meta={bpm:d[i++]+60,swing:d[i++],accent:d[i++],root:d[i++],scaleEn:d[i++],
               scale:[d[i++],d[i++],d[i++]],voices:[]};
@@ -480,7 +512,7 @@ function decodeEntry(str){
   const n=d[i++],slots=[];
   for(let s=0;s<n&&i<d.length;s++){
     const slot=d[i++],loopLen=d[i++];
-    const oct=[d[i++],d[i++],d[i++]].map(x=>(x<<24)>>24);
+    const oct=[]; for(let n=0;n<nS;n++) oct.push((d[i++]<<24)>>24);
     const rectRow=d[i++],rectCol=d[i++];
     const dc=d[i++],drums=[];
     for(let k=0;k<dc&&i+2<d.length;k++){const b=d[i++],lo=d[i++],hi=d[i++];drums.push([(b>>4)&0xf,b&0xf,lo|(hi<<8)]);}
@@ -490,7 +522,7 @@ function decodeEntry(str){
   }
   let name='';
   if(i<d.length){const nl=d[i++]; if(nl&&i+nl<=d.length)name=new TextDecoder().decode(d.slice(i,i+nl));}
-  return {name,data:{meta,slots}};
+  return {name,data:{meta,slots,parts2}};
 }
 function b64uEnc(u8){let s='';for(const b of u8)s+=String.fromCharCode(b);
   return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}

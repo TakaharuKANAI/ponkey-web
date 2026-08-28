@@ -96,31 +96,30 @@
 
 <script src="./ponkey.js"></script>
 <script>
-// ============================================================ 定数 (ファーム PT2 v4.5.x)
+// ============================================================ 定数 (ファーム PT2 v4.6.x)
 // BLE NoteOn(0-15) → 本体はその鍵のソレノイドを叩き LED を光らせる (録音も音源も動かない、副作用なし)。
 // CC 0-6 → パート選択 (P1〜P7 を押すのと同じ)。LED の色相がそのパートの色になる。
-// BLE 層は ponkey.js (v4.5.73 プロトコル) 経由
-// パート色。色相はファームの PART_BASE_HUE と同じ (KICK 11 / SNARE 108 / HAT 220 / TOM 300 / BASS 176 / LEAD 58 / PAD 265)
+// BLE 層は ponkey.js 経由。パート名・色相・MIDI ch の表は Ponkey.PARTS (ファームの正本を写したもの)。
+// v4.6.0 の再編で P1=ドラムキット / P2-P7=メロディ6パート になった。ここは「7色のパレット」としてしか
+// 使っていないので、色と名前が付いてくるだけで描き心地は変わらない。
 // voice = その色でなぞったときに鳴る内蔵音源 (SAM2695, GM プログラム番号 0 始まり)。どれもアンビエント寄りのパッド/FX
-const PARTS=[
-  {cc:0,name:'KICK', hue:11,  voice:89, vname:'Warm Pad'   },
-  {cc:1,name:'SNARE',hue:108, voice:88, vname:'New Age Pad'},
-  {cc:2,name:'HAT',  hue:220, voice:92, vname:'Bowed Glass'},
-  {cc:3,name:'TOM',  hue:300, voice:94, vname:'Halo Pad'   },
-  {cc:4,name:'BASS', hue:176, voice:95, vname:'Sweep Pad'  },
-  {cc:5,name:'LEAD', hue:58,  voice:91, vname:'Choir Pad'  },
-  {cc:6,name:'PAD',  hue:265, voice:100,vname:'Brightness' },
+const PAINT_VOICES=[
+  {voice:89, vname:'Warm Pad'   },   // P1 DRUM
+  {voice:88, vname:'New Age Pad'},   // P2 KEYS
+  {voice:91, vname:'Choir Pad'  },   // P3 LEAD
+  {voice:95, vname:'Sweep Pad'  },   // P4 BASS
+  {voice:94, vname:'Halo Pad'   },   // P5 CHORD
+  {voice:92, vname:'Bowed Glass'},   // P6 BELL
+  {voice:100,vname:'Brightness' },   // P7 VOICE
 ];
-PARTS.forEach(p=>{p.color=`hsl(${p.hue} 95% 62%)`;p.glow=`hsl(${p.hue} 100% 70% / .6)`;});
-// 本体 → アプリ: 物理キーを押すと NoteOn が来る。音高 → 鍵番号 の逆引き (INVADERS と同じ表)
-const NOTE_TABLE_BASS  =[45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
-const NOTE_TABLE_NORMAL=[69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];
-function buildReverse(t){const m=new Map();t.forEach((n,i)=>{if(!m.has(n))m.set(n,i)});return m;}
-const PART_BY_CHANNEL={0:buildReverse(NOTE_TABLE_BASS),3:buildReverse(NOTE_TABLE_NORMAL),4:buildReverse(NOTE_TABLE_NORMAL)};
-function lookupKey(ch,note){const rev=PART_BY_CHANNEL[ch];if(!rev)return null;
-  if(rev.has(note))return rev.get(note);
-  for(let d=1;d<=12;d++){if(rev.has(note-d))return rev.get(note-d);if(rev.has(note+d))return rev.get(note+d);}
-  return null;}
+const PARTS=Ponkey.PARTS.map((p,i)=>({
+  cc:p.part, name:p.name, ja:p.ja, hue:p.hue, ...PAINT_VOICES[i],
+  color:`hsl(${p.hue} 95% 62%)`, glow:`hsl(${p.hue} 100% 70% / .6)`,
+}));
+// 本体 → アプリ: 物理キーを押すと NoteOn が来る。音高 → 鍵番号 の逆引きは Ponkey.keyFromNote。
+//   ドラム (ch9) はキット依存なので、本体が接続時に送ってくる CC_VOICE_SELECT の part0 = キット番号を覚えておく。
+let curKit=0;
+function lookupKey(ch,note){ return Ponkey.keyFromNote(ch,note,curKit); }
 
 const REPEAT_MS=140;     // 連打の最短間隔 (ソレノイドのパルス幅 ≒ 60000/BPM/4 より少し長め)
 const FLASH_MS=260;      // マスの光り
@@ -141,7 +140,7 @@ const RELEASE_MS=650;    // マスを離れてから NoteOff するまで (隣�
 
 // ============================================================ 状態
 let pk=null;
-let part=5;              // 現在の色 (index into PARTS)。既定 LEAD=黄
+let part=2;              // 現在の色 (index into PARTS)。既定 P3 LEAD=黄
 let brush=14, repeat=true, fade=false, sound=true;
 const paintLevel=new Uint8Array(16);   // cell → 本体 LED の明るさ 0-7 (こちらが正、本体へ差分送信)
 const holdCount=new Uint8Array(16), releaseTimer=new Array(16).fill(null);   // cell → 押えているポインタ数 / 離す予約
@@ -159,6 +158,9 @@ document.getElementById('btnConnect').onclick=async()=>{
   try{
     const p=new Ponkey();
     p.on('disconnect',()=>{pk=null;setConn(false);});
+    p.on('cc',({cc,val})=>{                            // 音色通知 (part<<4|voice)。part0 = ドラムのキット番号
+      if(cc===Ponkey.CC.VOICE_SELECT && (val>>4)===0) curKit=val&15;
+    });
     p.on('note',({on,ch,note})=>{
       if(!on)return;                                   // 本体の鍵が押された → そのマスに今の色で点を打つ
       const k=lookupKey(ch,note);
@@ -319,7 +321,7 @@ board.addEventListener('pointerup',up); board.addEventListener('pointercancel',u
 // ── UI
 const pal=document.getElementById('pal');
 PARTS.forEach((p,i)=>{const d=document.createElement('div');d.className='sw'+(i===part?' on':'');
-  d.style.background=p.color; d.style.setProperty('--c',p.glow); d.textContent='P'+(i+1); d.dataset.k=i+1; d.title=p.name+' (キー '+(i+1)+') ・ 音色 '+p.vname;
+  d.style.background=p.color; d.style.setProperty('--c',p.glow); d.textContent='P'+(i+1); d.dataset.k=i+1; d.title=p.name+' '+p.ja+' (キー '+(i+1)+') ・ 音色 '+p.vname;
   d.onclick=()=>selectPart(i); pal.appendChild(d);});
 document.getElementById('size').oninput=e=>brush=+e.target.value;
 document.getElementById('btnRepeat').onclick=e=>{repeat=!repeat;e.target.classList.toggle('on',repeat);};
