@@ -98,9 +98,8 @@
   .rc.b4{background:#f1ede2}                 /* 拍アタマの列は少し濃く */
   .rc.out{background:#e3ded2}                /* スケール外の行は地に沈める */
   .rc.out.b4{background:#dad5c7}
+  /* 置いた音の色 = そのパートのファーム LED と同じ色相 (renderRoll が直接指定する) */
   .rc.on{background:var(--red)}
-  .rc.on.p0{background:var(--teal)}
-  .rc.on.p2{background:var(--amber)}
   .rc.head{box-shadow:inset 0 0 0 1px rgba(42,44,48,.42)}
   .rgrid.mute .rc.on{opacity:.34}          /* 音を切ったパートは打ち込みも沈める */
   /* ── パート表: 音の ON/OFF と「ソレノイドを動かす1パート」 ── */
@@ -218,10 +217,12 @@
       <span class="hint" id="fitInfo"></span>
     </div>
     <div class="hint" style="margin:-2px 0 12px">
-      <b>ソレノイドが動くのは1パートだけ</b>。内蔵シンセは3パートとも鳴るが、鍵を叩くのは
-      本体でいま選ばれているパートの音だけ、というのが本体の仕様。電源を入れた直後の選択は KICK なので、
+      <b>ソレノイドが動くのは1パートだけ</b>。内蔵シンセは6パートとも鳴るが、鍵を叩くのは
+      本体でいま選ばれているパートの音だけ、というのが本体の仕様。電源を入れた直後の選択は P1（ドラム）なので、
       指定しないとシンセの音は鳴っていてもソレノイドが1本も動かない。ここで選ぶと本体に伝わる
-      （本体の P5・P6・P7 を押すのと同じ。本体側の選択パートも変わる）。
+      （本体の P2〜P7 を押すのと同じ。本体側の選択パートも変わる）。<br>
+      パートによって<b>内蔵シンセの音域が違う</b>（ベースは2オクターブ下、リードは1つ上、ベルは2つ上）。
+      音名は同じでオクターブだけが違うので、下の「高さ」はどのパートも同じ値で揃えてよい。
     </div>
     <div class="tabs" id="tabs"></div>
     <div class="row" style="margin-top:0">
@@ -229,27 +230,22 @@
       <select id="gateSel"></select>
       <span style="width:1px;height:20px;background:var(--line)"></span>
       <button id="btnGen">このパートを作りなおす</button>
-      <button id="btnGenAll" class="primary">3パートまとめて作る</button>
+      <button id="btnGenAll" class="primary">6パートまとめて作る</button>
       <button id="btnClear">このパートを消す</button>
     </div>
     <div class="roll" id="roll">
       <div class="rlab" id="rlab"></div>
       <div class="rgrid" id="rgrid"></div>
     </div>
-    <div class="lg">
-      <span><span style="color:var(--teal)">■</span> BASS</span>
-      <span><span style="color:var(--red)">■</span> LEAD</span>
-      <span><span style="color:var(--amber)">■</span> PAD</span>
-      <span>左の音名をクリック＝その鍵を1本叩く</span>
-    </div>
+    <div class="lg" id="legend"></div>
   </div>
 
   <div class="panel">
     <h2>ログ</h2>
     <div class="log" id="log"></div>
     <div class="hint" style="margin-top:8px">
-      ドラムはこのアプリでは扱わない（本体のドラムはステップ位置の鍵を叩くので、音階の話と噛み合わない）。
-      リズムを足すなら <a href="sequence.html" style="color:var(--teal)">SEQUENCE</a> へ。
+      ドラムはこのアプリでは扱わない（本体の P1 は16キー＝16打楽器のキットで、音階の話と噛み合わない）。
+      リズムを足すときは本体の P1 を選んで、長押ししながら叩いて録る。
     </div>
   </div>
 </div>
@@ -257,18 +253,25 @@
 <!-- BLE 層は ponkey.js (v4.5.73 プロトコル) 経由 -->
 <script src="./ponkey.js"></script>
 <script>
-// ════════════════════════════════════════════════ ファーム側の契約 (PT2 v4.5.x)
+// ════════════════════════════════════════════════ ファーム側の契約 (PT2 v4.6.x)
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_BAR_SYNC=0x54, CC_SAM_MUTE=0x55;
 const STEPS=16, SUB=4;                 // 1小節16ステップ / 1ステップ=4サブステップ (QUANTIZE_RATIO)
 const LOOP_SUBSTEPS=STEPS*SUB;         // 64 = MAX_SUBSTEPS
 const MAX_NOTES=150;                   // 1回の LOAD_SLOT に載せるノート数の上限 (BLE の書き込みサイズを守る)
-const PARTS=['BASS','LEAD','PAD'];     // synthSteps のレイヤー 0/1/2
-// 本体のパート番号は 0-3=ドラム / 4-6=BASS,LEAD,PAD。CC(パート番号) を送ると本体の選択パートが変わり、
-// **そのパートだけがソレノイドを動かす** (ファーム: solenoidPartMode == p+4 の判定)。
-// ミュート/ソロのビットも同じ並びなので、シンセパート p のビットは p+4。
-const PART_BIT=[4,5,6];
-// 内蔵シンセ(SAM2695)の音高はファームの音階テーブル固定。LEAD/PAD は NOTE_TABLE_NORMAL、
-// BASS は NOTE_TABLE_BASS で、両者はちょうど 24 半音(2オクターブ)違うだけなので音名は同じ。
+// v4.6.0 のパート再編で、メロディは P2-P7 の6パートになった (synthSteps のレイヤー 0-5)。
+// 表の正本は ponkey.js の Ponkey.PARTS (ファームの MODE_COLORS / PART_BASE_HUE / SYNTH_* を写したもの)。
+const MELODY=Ponkey.PARTS.slice(1);          // P2-P7
+const NP=MELODY.length;                      // 6
+const PARTS=MELODY.map(p=>p.name);           // 表示名 KEYS/LEAD/BASS/CHORD/BELL/VOICE
+// 本体のパート番号は 0=ドラムキット / 1-6=メロディ。CC(パート番号) を送ると本体の選択パートが変わり、
+// **そのパートだけがソレノイドを動かす** (ファーム: solenoidPartMode == p の判定)。
+// ミュート/ソロのビットも同じ並びなので、メロディパート i のビットは i+1。
+const PART_BIT=MELODY.map(p=>p.part);        // [1,2,3,4,5,6]
+// パートの色。ファームの LED と同じ色相を、明るい地でも読める彩度・明度に落として使う。
+const PART_COL=MELODY.map(p=>`hsl(${p.hue} 42% 46%)`);
+// 内蔵シンセ(SAM2695)の音高はファームの音階テーブル固定。**音域はパートの属性**で、
+// ベースは専用の低域テーブル(-24半音)、リードは +12、ベルは +24 (Ponkey.PARTS の shift)。
+// どれも 12 の倍数なので、**どのパートでも音名は同じ**でオクターブだけが違う。
 // そこに slot の octaveOffset が加算される (applyOctaveOffset)。名前はオクターブだが単位は半音。
 // 本体の Fn×P4 が扱う範囲は -4〜+11 (FN_OCTAVE_MIN/MAX)。同じ範囲に揃える。
 const OCT_MIN=-4, OCT_MAX=11;
@@ -331,22 +334,30 @@ const MOODS=[
 const LS='ponkey_mood_v01';
 const store={
   layout:'white', anchor:48, scale:'majpenta', root:0, bpm:104, moodIdx:0,
-  gate:[4,2,8],                                   // パートごとの音の長さ (ステップ数)
-  pat:[mkPat(),mkPat(),mkPat()],                  // pat[part][step] = key の配列
-  on:[true,true,true],                            // パートの音の ON/OFF (本体は SET_MUTE)
-  oct:[0,0,0],                                    // 内蔵シンセの高さ (半音, パート別)
+  gate:[3,2,4,8,2,6],                             // パートごとの音の長さ (ステップ数)
+  pat:Array.from({length:6},()=>mkPat()),         // pat[part][step] = key の配列
+  on:[true,true,true,true,true,true],             // パートの音の ON/OFF (本体は SET_MUTE)
+  oct:[0,0,0,0,0,0],                              // 内蔵シンセの高さ (半音, パート別)
   solPart:1,                                      // ソレノイドを動かすパート (既定 LEAD)
   snap:true, hide:false, sam:false, preview:false,
 };
 function mkPat(){ return Array.from({length:STEPS},()=>[]); }
 function save(){ try{localStorage.setItem(LS,JSON.stringify(store));}catch(e){} }
 function load(){ try{const o=JSON.parse(localStorage.getItem(LS)); if(o) Object.assign(store,o);}catch(e){}
-  if(!Array.isArray(store.pat)||store.pat.length!==3) store.pat=[mkPat(),mkPat(),mkPat()];
-  store.pat=store.pat.map(p=>Array.isArray(p)&&p.length===STEPS?p.map(c=>Array.isArray(c)?c:[]):mkPat());
-  if(!Array.isArray(store.on)||store.on.length!==3) store.on=[true,true,true];
-  if(!Array.isArray(store.oct)||store.oct.length!==3) store.oct=[0,0,0];
-  store.oct=store.oct.map(v=>Math.max(OCT_MIN,Math.min(OCT_MAX,(v|0))));
-  if(!(store.solPart>=0&&store.solPart<3)) store.solPart=1;
+  // v4.5 以前 (BASS/LEAD/PAD の3パート) で保存した内容は、同じ役の新パートへ移す。
+  //   旧0 BASS → 新2 BASS / 旧1 LEAD → 新1 LEAD / 旧2 PAD → 新3 CHORD
+  const OLD2NEW=[2,1,3];
+  const grow=(a,def)=>{
+    if(Array.isArray(a)&&a.length===NP) return a.slice();
+    const out=Array.from({length:NP},(_,i)=>def(i));
+    if(Array.isArray(a)&&a.length===3) a.forEach((v,i)=>{ out[OLD2NEW[i]]=v; });
+    return out; };
+  store.pat=grow(store.pat,()=>mkPat())
+    .map(p=>Array.isArray(p)&&p.length===STEPS?p.map(c=>Array.isArray(c)?c:[]):mkPat());
+  store.on  = grow(store.on ,()=>true);
+  store.oct = grow(store.oct,()=>0).map(v=>Math.max(OCT_MIN,Math.min(OCT_MAX,(v|0))));
+  store.gate= grow(store.gate,i=>[3,2,4,8,2,6][i]).map(v=>Math.max(1,Math.min(16,(v|0)||1)));
+  if(!(store.solPart>=0&&store.solPart<NP)) store.solPart=1;
   if(!SCALE_BY_ID[store.scale]) store.scale='majpenta';
 }
 let tab=1;                      // 表示中のパート (初期 LEAD)
@@ -367,7 +378,7 @@ function snapRank(r){
 }
 function snapAll(){
   let moved=0;
-  for(let p=0;p<3;p++) for(let s=0;s<STEPS;s++){
+  for(let p=0;p<NP;p++) for(let s=0;s<STEPS;s++){
     const next=new Set();
     for(const k of store.pat[p][s]){ const r=rankOfKey(k), nr=snapRank(r); if(nr!==r)moved++; next.add(keyOfRank(nr)); }
     store.pat[p][s]=[...next];
@@ -404,7 +415,8 @@ function onCC(e){
 }
 
 // ════════════════════════════════════════════════ 送信
-// LOAD_SLOT の形式: [loopLen][oct0][oct1][oct2][drumCount][drum...][synCount][(layer<<4)|key, startSub, dur ...]
+// LOAD_SLOT の形式: [loopLen][oct×6][drumCount][drum...][synCount][(パート<<4)|key, startSub, dur ...]
+//   v4.6.0 でオクターブ欄が 3→6 要素 (メロディ6パート分) になった。ここを間違えると以降が全部ずれる。
 // 音の長さは「設定値」と「同じパートの次の音までの距離」の短い方。
 // 同じ鍵で音が重なると本体側で NoteOn/NoteOff が入れ子になり、音が残ることがあるため。
 function noteDurSteps(p,s){
@@ -412,9 +424,9 @@ function noteDurSteps(p,s){
   return store.gate[p];
 }
 function encodeSlot(){
-  const b=[LOOP_SUBSTEPS, store.oct[0]&0xff, store.oct[1]&0xff, store.oct[2]&0xff, 0];  // 末尾0=ドラム無し
+  const b=[LOOP_SUBSTEPS, ...store.oct.map(o=>o&0xff), 0];  // 末尾0=ドラム無し
   const notes=[];
-  for(let p=0;p<3;p++){
+  for(let p=0;p<NP;p++){
     for(let s=0;s<STEPS;s++){
       if(!store.pat[p][s].length) continue;
       const dur=Math.min(64,Math.max(1,noteDurSteps(p,s)*SUB));
@@ -441,30 +453,41 @@ async function sendBpm(){ if(connected) await pk.sendCC(CC_BPM,Math.max(0,Math.m
 async function sendMute(){ if(!connected)return;
   let m=0; store.on.forEach((v,i)=>{ if(!v) m|=1<<PART_BIT[i]; });
   await pk.setMute(m&0x7f,0).catch(()=>{}); }
-// ソレノイドを動かすパートを本体に伝える (CC = パート番号)。本体で P5-P7 を押すのと同じ。
+// ソレノイドを動かすパートを本体に伝える (CC = パート番号)。本体で P2-P7 を押すのと同じ。
 async function sendSolPart(){ if(connected) await pk.sendCC(PART_BIT[store.solPart],127).catch(()=>{}); }
 async function sendSam(){ if(connected) await pk.sendCC(CC_SAM_MUTE,store.sam?127:0).catch(()=>{}); }
 // 鍵を1本その場で叩く。ノート番号 0-15 は本体が「鍵番号そのもの」として受ける。
-async function strike(k){ if(connected) await pk.noteOn(0,k&0x0f,100).catch(()=>{}); previewNote(pitchOfKey(k),.5,'triangle',.28); }
+async function strike(k){ if(connected) await pk.noteOn(0,k&0x0f,100).catch(()=>{}); previewNote(pitchOfKey(k),.5,'triangle',.28,true); }
 
 // ════════════════════════════════════════════════ 試聴 (アプリ内 WebAudio)
 // 鳴らすのは「ソレノイドが叩く生の鍵盤の音高」。本体の内蔵シンセの音高ではない。
 let ac=null;
 function actx(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended')ac.resume(); return ac; }
-function previewNote(midi,dur,wave,gain){
-  if(!store.preview && wave!=='triangle') return;
+// force=true (鍵や升のタップ) は常に鳴らす。再生に乗せる試聴は「試聴」ON のときだけ。
+function previewNote(midi,dur,wave,gain,force){
+  if(!store.preview && !force) return;
   const c=actx(), t=c.currentTime, o=c.createOscillator(), g=c.createGain();
   o.type=wave; o.frequency.value=440*Math.pow(2,(midi-69)/12);
   g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+.008);
   g.gain.exponentialRampToValueAtTime(.0008,t+dur);
   o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur+.02);
 }
-const WAVE=['triangle','square','sine'], GAIN=[.30,.16,.09];
+// パートごとの試聴の音 (聴き分けのための味付け。o = 試聴だけの高さずらし。
+//   本体では音域はパートの属性なので、ここも同じ向きにずらすと本体の聞こえ方に近くなる)
+const PREVIEW=[
+  {w:'triangle',g:.24,o:  0},   // KEYS
+  {w:'square',  g:.16,o:  0},   // LEAD
+  {w:'triangle',g:.30,o:-12},   // BASS
+  {w:'sine',    g:.10,o:  0},   // CHORD
+  {w:'sine',    g:.12,o: 12},   // BELL
+  {w:'sawtooth',g:.08,o:  0},   // VOICE
+];
 function previewStep(s){
-  for(let p=0;p<3;p++){ if(!store.on[p]) continue;
+  for(let p=0;p<NP;p++){ if(!store.on[p]) continue;
     for(const k of store.pat[p][s]){
     const secs=(60/store.bpm/4)*noteDurSteps(p,s);
-    previewNote(pitchOfKey(k)-(p===0?12:0), Math.min(2,secs), WAVE[p], GAIN[p]);
+    const pv=PREVIEW[p];
+    previewNote(pitchOfKey(k)+pv.o, Math.min(2,secs), pv.w, pv.g);
   } }
 }
 
@@ -495,12 +518,23 @@ function fitLabel(){
 }
 
 // ════════════════════════════════════════════════ フレーズ生成
-// スケール内の鍵だけを使い、パートごとに音域と密度を変える。
+// スケール内の鍵だけを使い、パートごとに音域と密度と役を変える。
+//   range: lo=下半分 / mid=まんなか / hi=上半分 / all=全部
+//   chord: 和音を2回置くだけ (伴奏)。head: 1拍目を必ず鳴らす
+const GEN=[
+  {range:'mid',density:.34},              // KEYS  けんばん: まんなかを普通の密度で
+  {range:'hi' ,density:.44},              // LEAD  リード  : 上を細かく
+  {range:'lo' ,density:.30,head:true},    // BASS  ベース  : 下を、頭は必ず
+  {range:'all',density:0,  chord:true},   // CHORD わおん  : 和音を2回
+  {range:'hi' ,density:.14},              // BELL  ベル    : 上をまばらに
+  {range:'mid',density:.10},              // VOICE こえ    : ときどき
+];
 function generate(p){
   const ok=inScaleRanks(); if(!ok.length){ log('⚠ いまの配置では、このスケールの音が1つも出せません'); return; }
-  const lo=ok.filter(r=>r<8), hi=ok.filter(r=>r>=6);
-  const pool=(p===0?(lo.length?lo:ok):(p===1?(hi.length?hi:ok):ok));
-  const density=[0.30,0.44,0.16][p];
+  const g=GEN[p]||GEN[0];
+  const sub={lo:ok.filter(r=>r<8), mid:ok.filter(r=>r>=4&&r<12), hi:ok.filter(r=>r>=6), all:ok}[g.range];
+  const pool=sub.length?sub:ok;
+  const density=g.density;
   const pat=mkPat();
   let cur=pool[Math.floor(Math.random()*pool.length)];
   for(let s=0;s<STEPS;s++){
@@ -515,9 +549,9 @@ function generate(p){
     }
   }
   if(!pat.some(c=>c.length)) pat[0]=[keyOfRank(pool[0])];
-  if(p===0) pat[0]=[keyOfRank(pool[0])];                       // ベースは頭を鳴らす
-  if(p===2){ const c=[]; for(let n=0;n<Math.min(3,ok.length);n++) c.push(keyOfRank(ok[Math.min(ok.length-1,n*2)]));
-             pat.forEach((_,s)=>pat[s]=[]); pat[0]=c; pat[8]=c.slice(); }   // パッドは和音を2回
+  if(g.head) pat[0]=[keyOfRank(pool[0])];
+  if(g.chord){ const c=[]; for(let n=0;n<Math.min(3,ok.length);n++) c.push(keyOfRank(ok[Math.min(ok.length-1,n*2)]));
+               pat.forEach((_,s)=>pat[s]=[]); pat[0]=c; pat[8]=c.slice(); }   // 和音を2回
   store.pat[p]=pat;
 }
 
@@ -583,7 +617,7 @@ function renderParts(){
   PARTS.forEach((n,i)=>{
     const c=document.createElement('div');
     c.className='pcard'+(store.on[i]?'':' off')+(store.solPart===i?' solact':'');
-    c.innerHTML=`<div class="pn">${n}</div>
+    c.innerHTML=`<div class="pn" style="color:${PART_COL[i]}">${n} <span style="color:var(--dim);font-size:10.5px">${MELODY[i].ja}</span></div>
       <div class="prow">
         <button class="ptog${store.on[i]?' on':''}">${store.on[i]?'音 ON':'音 OFF'}</button>
         <label class="sol"><input type="radio" name="solpart"${store.solPart===i?' checked':''}>ソレノイド</label>
@@ -606,11 +640,15 @@ function renderParts(){
     el.appendChild(c);
   });
   document.getElementById('fitInfo').textContent=fitLabel();
+  document.getElementById('legend').innerHTML=
+    PARTS.map((n,i)=>`<span><span style="color:${PART_COL[i]}">■</span> ${n}</span>`).join('')
+    +'<span>左の音名をクリック＝その鍵を1本叩く</span>';
 }
 function renderTabs(){
   const el=document.getElementById('tabs'); el.innerHTML='';
   PARTS.forEach((n,i)=>{ const b=document.createElement('button'); b.className='tab'+(i===tab?' act':'');
     const cnt=store.pat[i].reduce((a,c)=>a+c.length,0);
+    b.style.color=PART_COL[i]; if(i===tab) b.style.borderColor=PART_COL[i];
     b.textContent=`${n}${cnt?' ('+cnt+')':''}`; b.onclick=()=>{tab=i;renderTabs();renderRoll();renderGate();}; el.appendChild(b); });
 }
 function renderGate(){
@@ -636,8 +674,9 @@ function renderRoll(){
     const k=keyOfRank(r), ok=rankInScale(r);
     for(let s=0;s<STEPS;s++){
       const c=document.createElement('div');
-      c.className='rc'+(s%4===0?' b4':'')+(ok?'':' out')+(store.pat[tab][s].includes(k)?' on p'+tab:'')
-        +(s===playhead?' head':'');
+      const on=store.pat[tab][s].includes(k);
+      c.className='rc'+(s%4===0?' b4':'')+(ok?'':' out')+(on?' on':'')+(s===playhead?' head':'');
+      if(on) c.style.background=PART_COL[tab];
       c.dataset.s=s; c.dataset.k=k;
       c.onclick=()=>toggle(s,k);
       grid.appendChild(c);
@@ -657,7 +696,8 @@ function paintHead(){
 }
 function toggle(s,k){
   const cell=store.pat[tab][s], i=cell.indexOf(k);
-  if(i>=0) cell.splice(i,1); else { cell.push(k); previewNote(pitchOfKey(k)-(tab===0?12:0),.35,WAVE[tab],GAIN[tab]); }
+  if(i>=0) cell.splice(i,1);
+  else { cell.push(k); const pv=PREVIEW[tab]; previewNote(pitchOfKey(k)+pv.o,.35,pv.w,pv.g,true); }
   renderTabs(); renderRoll(); scheduleSync();
 }
 function renderAll(){ renderMoods(); renderAnchor(); renderKeys(); renderScale(); renderParts(); renderTabs(); renderGate(); renderRoll();
@@ -692,12 +732,12 @@ document.getElementById('ckSam').onchange=e=>{ store.sam=e.target.checked; save(
   log('本体の内蔵シンセ: '+(store.sam?'消音':'鳴らす')); };
 document.getElementById('ckPreview').onchange=e=>{ store.preview=e.target.checked; save(); if(store.preview)actx(); };
 document.getElementById('btnFit').onclick=()=>{
-  const o=fitOffset(); store.oct=[o,o,o]; save(); scheduleSync(); renderParts();
+  const o=fitOffset(); store.oct=Array.from({length:NP},()=>o); save(); scheduleSync(); renderParts();
   const e=fitError(o);
   log(`内蔵シンセの高さ: ${o>0?'+':''}${o} 半音`+(e===0?'（生の鍵盤とぴったり）':`（最大 ${e} 半音のずれが残る）`));
 };
 document.getElementById('btnGen').onclick=()=>{ generate(tab); renderAll(); scheduleSync(); log(PARTS[tab]+' を作りなおしました'); };
-document.getElementById('btnGenAll').onclick=()=>{ for(let p=0;p<3;p++)generate(p); renderAll(); scheduleSync(); log('3パートを作りました'); };
+document.getElementById('btnGenAll').onclick=()=>{ for(let p=0;p<NP;p++)generate(p); renderAll(); scheduleSync(); log(NP+'パートを作りました'); };
 document.getElementById('btnClear').onclick=()=>{ store.pat[tab]=mkPat(); renderAll(); scheduleSync(); log(PARTS[tab]+' を消しました'); };
 document.getElementById('btnPlay').onclick=()=>{ actx(); if(connected)pk.sendCC(CC_PLAY_STOP,1).catch(()=>{}); };
 document.getElementById('btnStop').onclick=()=>{ if(connected)pk.sendCC(CC_PLAY_STOP,0).catch(()=>{}); playhead=-1; paintHead();
@@ -715,7 +755,7 @@ document.getElementById('ckHide').checked=store.hide;
 document.getElementById('ckSam').checked=store.sam;
 document.getElementById('ckPreview').checked=store.preview;
 renderAll();
-if(!store.pat.some(p=>p.some(c=>c.length))){ for(let p=0;p<3;p++)generate(p); renderAll(); }
+if(!store.pat.some(p=>p.some(c=>c.length))){ for(let p=0;p<NP;p++)generate(p); renderAll(); }
 if(!navigator.bluetooth) log('⚠ このブラウザは Web Bluetooth 非対応です（Edge / Chrome で開いてください）');
 else log('「接続」を押すと、入場 → フレーズ送信まで自動で行います。▶ で本体が鳴ります。');
 </script>
