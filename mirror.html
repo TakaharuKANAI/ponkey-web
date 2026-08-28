@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIRROR</title>
+<meta name="theme-color" content="#0b0c0f">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY MIRROR">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  ═══════════════════════════════════════════════════════════════
+  PONKEY MIRROR — いまの盤面を、そのまま大きく映す
+  ═══════════════════════════════════════════════════════════════
+  「本体で今なにができるか」を、真上から見た16キーの図で見せるだけのアプリ。
+  **読むだけ。本体には一切書き込まない** (claim もしない / モードも変えない)。
+  唯一送るのは SONG_CMD_DUMP_SLOT (ループの中身の読み出し。副作用なし)。
+
+  本体は自分の状態をこう教えてくれる:
+    ・DBG_EV_MODE_UI (v4.5.72+) … いまのモード / サブモード / 直前パート /
+                                   録音中・FX・インテリア・テスト・静音  ← **これが正**
+    ・CC 通知            … BPM / 音色 / スロット / スケール / キー / 音量 / グルーブ / 再生位置
+    ・DBG_EV_KEY_*       … 押されたキー (MODE_UI が持たない インスタントFX と
+                            スロットコンボ は、これから組み立てる)
+    ・SONG_CMD_DUMP_SLOT … ループの中身 (どのパートに何音入っているか)
+
+  変わった瞬間は画面全面で大きく知らせる (スケール/キー/プリセット/BPM/音量/
+  スロット/録音/消去)。子どもが本体だけ見ていても、隣の画面で何が起きたか分かるように。
+  ═══════════════════════════════════════════════════════════════
+-->
+<style>
+  :root{
+    --bg:#0b0c0f; --panel:#14161b; --panel2:#1a1d23; --line:#282c33;
+    --txt:#e6e9ee; --dim:#7d838d; --accent:#6fb0b8; --warn:#c96a5e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--txt);
+       min-height:100vh;font-weight:400;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);
+         position:sticky;top:0;background:var(--bg);z-index:30}
+  header a{color:var(--dim);text-decoration:none;font-size:13px}
+  h1{font-size:17px;font-weight:500;letter-spacing:.14em}
+  .sub{font-size:11px;color:var(--dim);letter-spacing:.04em}
+  .pill{font-size:11px;padding:3px 9px;border:1px solid var(--line);color:var(--dim)}
+  .pill.ok{border-color:var(--accent);color:var(--accent)}
+  button{font:inherit;font-size:13px;padding:7px 14px;border:1px solid var(--accent);
+         background:transparent;color:var(--accent);cursor:pointer}
+  button:hover{background:rgba(111,176,184,.12)}
+
+  .wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;padding:16px;align-items:start}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+
+  /* ── モード帯: いま何のモードか ── */
+  .mode{padding:12px 16px;border:1px solid var(--line);background:var(--panel);margin-bottom:12px}
+  .mode .m1{font-size:26px;font-weight:600;letter-spacing:.02em;line-height:1.15}
+  .mode .m2{font-size:13px;color:var(--dim);margin-top:5px;line-height:1.6}
+
+  /* ── 盤面: 真上から見た16キー ── */
+  .board{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .key{position:relative;aspect-ratio:1;border:1px solid var(--line);background:var(--panel);
+       display:flex;flex-direction:column;align-items:center;justify-content:center;
+       padding:8px;text-align:center;overflow:hidden;transition:background .08s,border-color .08s}
+  .key .n{position:absolute;top:5px;left:7px;font-size:10px;color:var(--dim)}
+  .key .big{font-size:clamp(15px,2.4vw,26px);font-weight:600;line-height:1.12;word-break:break-word}
+  .key .small{font-size:clamp(9px,1.05vw,12px);color:var(--dim);margin-top:5px;line-height:1.3}
+  .key.on{background:var(--panel2)}
+  .key.dim{opacity:.3}
+  .key.press{border-color:#fff;background:#2a2f37}
+  .key.head::after{content:'';position:absolute;inset:0;border:2px solid var(--warn);pointer-events:none}
+
+  /* ── P キーの列 ── */
+  .pkeys{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:12px}
+  .pk{border:1px solid var(--line);background:var(--panel);padding:8px 4px;text-align:center}
+  .pk .pn{font-size:13px;font-weight:600}
+  .pk .pr{font-size:9.5px;color:var(--dim);margin-top:3px;line-height:1.25;min-height:24px}
+  .pk.sel{border-color:#fff}
+  .pk.held{background:#2a2f37;border-color:#fff}
+
+  /* ── 右カラム: いまの設定 ── */
+  .card{border:1px solid var(--line);background:var(--panel);padding:12px 14px;margin-bottom:12px}
+  .card h2{font-size:10.5px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;
+           font-weight:500;margin-bottom:9px}
+  .kv{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:4px 0;
+      border-bottom:1px solid rgba(40,44,51,.6);font-size:12.5px}
+  .kv:last-child{border-bottom:none}
+  .kv span:first-child{color:var(--dim)}
+  .kv b{font-weight:600;font-size:14px}
+  .kv .unk{color:#4d525a;font-weight:400}
+
+  /* ── ルーパー ── */
+  .lp{display:flex;align-items:center;gap:7px;padding:3px 0}
+  .lp .nm{width:62px;font-size:11px;flex:none}
+  .lp .bar{flex:1;display:grid;grid-template-columns:repeat(16,1fr);gap:1px;height:12px}
+  .lp .bar i{background:#1f2229}
+  .lp .cnt{width:34px;text-align:right;font-size:10.5px;color:var(--dim);flex:none}
+  .rec{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--warn);
+       margin-right:6px;animation:blink .9s steps(2) infinite}
+  @keyframes blink{50%{opacity:.15}}
+
+  /* ── 全面トースト: 変わった瞬間を大きく ── */
+  /* 盤面が透けるくらいにしておく (連続で変えるとき、下の16キーを見失わないように) */
+  #toast{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+         background:rgba(11,12,15,.86);backdrop-filter:blur(2px);z-index:60;opacity:0;
+         pointer-events:none;transition:opacity .12s}
+  #toast.on{opacity:1}
+  #toast .tk{font-size:clamp(13px,1.8vw,17px);color:var(--dim);letter-spacing:.24em;text-transform:uppercase}
+  #toast .tv{font-size:clamp(46px,11vw,140px);font-weight:700;line-height:1.05;margin-top:10px;text-align:center}
+  #toast .ts{font-size:clamp(13px,2vw,20px);color:var(--dim);margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" title="アプリ一覧へ">‹</a>
+  <h1>MIRROR</h1>
+  <span class="sub">いまの盤面をそのまま映す・読むだけ</span>
+  <span style="flex:1"></span>
+  <span class="pill ng" id="conn">未接続</span>
+  <button id="btnConnect">接続</button>
+</header>
+
+<div class="wrap">
+  <div>
+    <div class="mode">
+      <div class="m1" id="modeName">未接続</div>
+      <div class="m2" id="modeHow">本体とつなぐと、16キーがいま何になっているかをここに映します。</div>
+    </div>
+    <div class="board" id="board"></div>
+    <div class="pkeys" id="pkeys"></div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>いまの設定</h2>
+      <div class="kv"><span>パート</span><b id="vPart">—</b></div>
+      <div class="kv"><span>スロット</span><b id="vSlot">—</b></div>
+      <div class="kv"><span>BPM</span><b id="vBpm">—</b></div>
+      <div class="kv"><span>スケール</span><b id="vScale">—</b></div>
+      <div class="kv"><span>キー</span><b id="vKey">—</b></div>
+      <div class="kv"><span>プリセット</span><b id="vPreset">—</b></div>
+      <div class="kv"><span>ドラムキット</span><b id="vKit">—</b></div>
+      <div class="kv"><span>再生</span><b id="vPlay">—</b></div>
+      <div class="kv"><span>小節 / ステップ</span><b id="vBar">—</b></div>
+    </div>
+    <div class="card">
+      <h2>ルーパー</h2>
+      <div id="looper"></div>
+      <div class="sub" id="lpNote" style="margin-top:8px">つなぐと読み込みます</div>
+    </div>
+    <div class="card">
+      <h2>ログ</h2>
+      <div id="log" style="font-size:11px;color:var(--dim);max-height:150px;overflow:auto;line-height:1.6"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"><div class="tk" id="tk"></div><div class="tv" id="tv"></div><div class="ts" id="ts"></div></div>
+
+<script src="./ponkey.js"></script>
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════
+   ファーム由来の表 (正本は ponkey.js の Ponkey.PARTS とファームのヘッダ)
+   ════════════════════════════════════════════════════════════ */
+const PARTS = Ponkey.PARTS;                       // 0 = P1 ドラム / 1-6 = P2-P7 メロディ
+const MEL   = PARTS.slice(1);
+const KIT_SOUNDS = ['バスドラ','スネア','クローズHH','タンバリン',
+                    '低フロアタム','リムショット','ペダルHH','カウベル',
+                    '低コンガ','クラベス','ライド','木ブロック高',
+                    '中低タム','クラップ','オープンHH','ﾑｰﾄﾄﾗｲｱﾝｸﾞﾙ'];
+const VOICE_NAMES=[
+  // P1 は**キット**なので Fn×P7 では選べない (キー位置で打楽器が決まる)。表示用に既定キット「トイ」の中身
+  ['バスドラ','スネア','クローズHH','タンバリン','低フロアタム','リムショット','ペダルHH','カウベル',
+   '低コンガ','クラベス','ライド','木ブロック高','中低タム','クラップ','オープンHH','ﾑｰﾄﾄﾗｲｱﾝｸﾞﾙ'],
+  // 以下 P2-P7。**行 = 系統** (1段目=トイ/既定, 2段目=生, 3段目=エレキ, 4段目=シンセ・世界)
+  ['マリンバ','シロフォン','カリンバ','ホンキートンク','ピアノ','ヴォイス・ウー','ハープ','ナイロンG',
+   'エレピ','クラビ','ジャズG','クリスタル','シタール','バンジョー','三味線','琴'],                        // P2 けんばん
+  ['オカリナ','リコーダー','くちぶえ','パンフルート','フルート','トランペット','クラリネット','バイオリン',
+   'アルトサックス','テナーサックス','ボイスリード','ディストーションG','スクエア','ノコギリ','チフ','チャラン'], // P3 リード
+  ['チューバ','ファゴット','ウッドベース','ドローバー','コントラバス','チェロ','クワイア低','ティンパニ',
+   'エレベ指','エレベピック','フレットレス','スラップ','シンセベース1','シンセベース2','ベース＋リード','スクエア低'], // P4 ベース
+  ['アコーディオン','足踏みオルガン','ハーモニカ','ヴォイス・ウー','ストリングス','トレモロ弦','クワイア','チャーチオルガン',
+   'ドローバー','ロックオルガン','パーカッシブ','シンセブラス','ニューエイジ','ウォーム','ポリシンセ','ヘイロー'],   // P5 わおん
+  ['チェレスタ','オルゴール','グロッケン','ティンクルベル','チューブラーベル','ビブラフォン','シンセボイス','ボトル',
+   'クリスタル','アトモス','ブライトネス','エコー','スチールドラム','アゴゴ','ダルシマー','カリオペ'],           // P6 ベル
+  ['シャナイ','バグパイプ','ボイスリード','シンセボイス','波','鳥','電話','ヘリコプター',
+   '拍手','太鼓','メロディックタム','逆シンバル','ブレス','オケヒット','ゴブリン','サウンドトラック'],           // P7 こえ
+];
+const PRESET = Ponkey.PRESET_NAMES;               // TOY/ORCH/BAND/GAME/SPACE/WEIRD/VOICE/WORLD
+const KIT_COL = Ponkey.KIT_COL_NAMES;
+const KIT_COL_C = ['hsl(2 45% 55%)','hsl(130 40% 50%)','hsl(220 45% 58%)','hsl(325 42% 58%)'];
+
+// ファーム SCALE_DEFS / SCALE_NAMES と同じ順・同じ音程
+const SCALE_IV = [[0,2,4,7,9],[0,3,5,7,10],[0,4,5,7,11],[0,1,5,7,8],
+                  [0,2,4,5,7,9,11],[0,2,3,5,7,9,10],[0,3,5,6,7,10],[0,2,4,6,8,10]];
+const SCALE_JP = ['メジャーペンタ','マイナーペンタ','琉球','都節','メジャー','ドリアン','ブルース','ホールトーン'];
+const PC = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const SCALE_ROOT_DEFAULT = 48;                     // C3
+const SCALE_OFF = 0x7F, SCALE_CHROMATIC = 8;
+
+// ファーム FN_SUBMODE_* と同じ番号
+const SUB = { NONE:0, BPM:1, VOICE:2, LOOP:3, PVOL:4, STEPPER:5, MASTER:6 };
+const FN_ROLE = ['再生/停止','BPM','ループの長さ','ステッパ','ぜんたい音量','パート音量','音色','—'];
+const BPM_PRESETS = [60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210];
+const VOL_LEVEL_OF_KEY = [-1,-1,-1,9, -1,-1,5,8, -1,2,4,7, 0,1,3,6];   // 階段ゲージ
+const SWING_JP = ['OFF','53%','56%','59%','62%','66%','70%','75%'];
+const ACCENT_JP = ['OFF','拍頭(弱)','拍頭(強)','裏拍押し','2と4','ゴースト16','うねり','ゆらぎ'];
+const SCALE10 = ['白鍵',...['メジャーペンタ','マイナーペンタ','ブルース','ドリアン','琉球','都節','メジャー','ホールトーン'],'半音階'];
+// v4.6.2/4.6.17: インスタントFX は錨 P7 + 相方 P2-P6
+const IFX = [null,'スタッター','テープ速度','リバース','エコー連打','リバーブ'];
+const IFX_HINT = [null,'刻み幅 1拍→1/64','50%…等速…200%','逆走 50-200%','深さ 1-12','深さ 1-12'];
+const FX_NAMES = ['リバーブ','コーラス','フィルター','ディレイ'];
+
+/* ════════════════════════════════════════════════════════════
+   本体の状態 (すべて本体の申告 or 通知から。推定はコンボ2種だけ)
+   ════════════════════════════════════════════════════════════ */
+const D = {
+  fn:false, sub:SUB.NONE, mode:0, prev:1,
+  rec:false, fx:false, interior:false, test:false, silent:false,
+  bpm:null, slot:null, scale:null, key:null, playing:null,
+  voice:[null,null,null,null,null,null,null], pvol:[null,null,null,null,null,null,null],
+  preset:null, master:null, swing:null, accent:null, rect:[4,4],
+  step:-1, bar:0, held:new Set(), pressed:new Set(),
+  ifx:0, ifxLv:8, slotCombo:0,
+  loop:{drums:[],synth:[]},
+};
+let pk=null, connected=false;
+
+const $ = id => document.getElementById(id);
+function log(m){ const e=$('log'); e.innerHTML = `<div>${m}</div>` + e.innerHTML;
+                 while(e.children.length>60) e.lastChild.remove(); }
+
+/* ── 16キーが弾く音高 (ファーム rebuildSynthNoteTables と同じ算出) ── */
+function melodyNote(part, k){
+  const p = PARTS[part]; if(!p || p.synth===null) return null;
+  const rank = (3 - (k>>2))*4 + (k&3);
+  const shift = p.shift;
+  const sc = D.scale;
+  if(sc===null || sc===SCALE_OFF)
+    return p.table[k] + shift + ((D.key===null?0:D.key) + SCALE_ROOT_DEFAULT - SCALE_ROOT_DEFAULT);
+  const low = (p.table===Ponkey.NOTE_TABLE_BASS) ? -24 : 0;
+  const root = SCALE_ROOT_DEFAULT + (D.key||0);
+  if(sc===SCALE_CHROMATIC) return root + rank + shift + low;
+  const iv = SCALE_IV[sc&7], L = iv.length;
+  return root + Math.floor(rank/L)*12 + iv[rank%L] + shift + low;
+}
+const noteName = n => n==null ? '' : PC[((n%12)+12)%12] + (Math.floor(n/12)-1);
+
+/* ════════════════════════════════════════════════════════════
+   いまのモードを決める。**本体の申告 (MODE_UI) が正**。
+   MODE_UI が持たない2つ (インスタントFX / スロットコンボ) だけキーイベントから組み立てる。
+   ════════════════════════════════════════════════════════════ */
+function modeOf(){
+  if(D.test) return 'test';
+  if(D.interior) return D.fn ? 'interiorFn' : 'interior';
+  if(D.fx) return 'fx';
+  if(D.ifx) return 'ifx';
+  if(D.fn) return D.sub===SUB.NONE ? 'quick' : D.sub;
+  if(D.slotCombo) return 'slot';
+  return 'normal';
+}
+const MODE_TITLE = {
+  normal:'ふつう — 演奏と録音', quick:'Fn ＋ グリッド — クイックページ',
+  slot:'P1 ＋ Pキー — 曲のスロット', ifx:'P7 ＋ Pキー — インスタントFX',
+  fx:'P5+P6+P7 — エフェクト', interior:'インテリア (自動演奏)',
+  interiorFn:'インテリア ＋ Fn — 曲えらび', test:'テストモード (開発用)',
+  [SUB.BPM]:'Fn × P2 — BPM', [SUB.LOOP]:'Fn × P3 — ループの長さ',
+  [SUB.STEPPER]:'Fn × P4 — ステッパ', [SUB.MASTER]:'Fn × P5 — ぜんたいの音量',
+  [SUB.PVOL]:'Fn × P6 — パートの音量', [SUB.VOICE]:'Fn × P7 — 音色',
+};
+const MODE_HOW = {
+  normal:'グリッドを押すと鳴る。<b>Pキーを押さえている間が録音</b>。ダブルタップでそのパートを消去、Fn を3回たたくと全部消去。',
+  quick:'Fn を押している間、グリッドはこの1枚だけ。押した瞬間に効きます（階層はありません）。',
+  slot:'P1 と一緒に押したパートキーがそのままスロット番号。離すと元のパートに戻ります。',
+  ifx:'押している間だけかかります。離すと全部もとどおり（録音は壊れません）。グリッドが効きの強さ。',
+  fx:'押している間。G1〜G4 で種類、G5〜G16 で深さ。もう一度押すと OFF ⇄ 戻す。',
+  interior:'内蔵曲の自動演奏。Fn＋グリッドで曲えらび、Fn×P1 で終了。',
+  interiorFn:'グリッドで内蔵曲を選びます。',
+  test:'開発用。バーが全部上がります。',
+  [SUB.BPM]:'左上がおそい・右下がはやい。同じキーをもう一度で録音クリックの ON/OFF。',
+  [SUB.LOOP]:'押したキーを右下の角とした四角の中だけが鳴ります。録音中は変えられません。',
+  [SUB.STEPPER]:'上段は「−／＋」のペア。下段はいま選んでいるパートのオクターブ。',
+  [SUB.MASTER]:'階段の形がそのまま音量ゲージ。使うのはその10個だけ。',
+  [SUB.PVOL]:'対象は Fn を押す直前のパート。G1 を長押しすると静音モード。',
+  [SUB.VOICE]:'対象は Fn を押す直前のパート。行が系統（トイ／生／エレキ／シンセ）。',
+};
+
+/* ── 16キーそれぞれが「いま何なのか」 ── */
+function keyRoles(){
+  const m = modeOf();
+  const g = Array.from({length:16},()=>({big:'',small:'',on:false,dim:false,color:''}));
+  const tp = D.prev;                                   // Fn×P4/P6/P7 の対象 = Fn 直前のパート
+  const set=(i,big,small,on,dim,color)=>{g[i]={big:big||'',small:small||'',on:!!on,dim:!!dim,color:color||''};};
+
+  if(m==='normal' || m==='slot'){
+    if(D.mode===0){                                    // P1 = ドラムキット
+      for(let i=0;i<16;i++) set(i, KIT_SOUNDS[i], KIT_COL[i%4]+'系', false, false, KIT_COL_C[i%4]);
+    }else{
+      const p = PARTS[D.mode] || PARTS[1];
+      for(let i=0;i<16;i++){ const n=melodyNote(D.mode,i);
+        set(i, noteName(n), n==null?'':('note '+n), false, false, p.rgb); }
+    }
+    if(m==='slot') for(let i=0;i<16;i++) g[i].dim=true;   // コンボ中はグリッドを使わない
+    return g;
+  }
+  if(m==='quick'){
+    for(let i=0;i<8;i++) set(i, PRESET[i], 'プリセット', D.preset===i, false, `hsl(${Ponkey.PRESET_HUE[i]} 45% 58%)`);
+    const q=[[8,'スケール ←',()=>scaleLabel()],[9,'スケール →',()=>scaleLabel()],
+             [10,'BPM ＋5',()=>D.bpm??'?'],[11,'音量 ＋12',()=>D.master??'?'],
+             [12,'キー ←',()=>keyLabel()],[13,'キー →',()=>keyLabel()],
+             [14,'BPM −5',()=>D.bpm??'?'],[15,'音量 −12',()=>D.master??'?']];
+    q.forEach(([k,lbl,val])=>set(k,lbl,String(val()),false,false,''));
+    return g;
+  }
+  if(m===SUB.BPM){
+    BPM_PRESETS.forEach((b,i)=>set(i,String(b), D.bpm===b?'いまここ':'', D.bpm===b));
+    return g;
+  }
+  if(m===SUB.LOOP){
+    for(let i=0;i<16;i++){ const r=(i>>2)+1,c=(i&3)+1;
+      set(i, r+'×'+c, (r*c)+' ステップ', D.rect[0]===r&&D.rect[1]===c); }
+    return g;
+  }
+  if(m===SUB.STEPPER){
+    const pv=[['キー',keyLabel()],['スケール',scaleLabel()],
+              ['スイング',D.swing==null?'?':SWING_JP[D.swing]],['アクセント',D.accent==null?'?':ACCENT_JP[D.accent]]];
+    for(let p=0;p<4;p++){ set(p*2,'− '+pv[p][0],pv[p][1]); set(p*2+1,'＋ '+pv[p][0],pv[p][1]); }
+    for(let k=8;k<12;k++) set(k,'','空き',false,true);
+    const si = (tp>=1&&tp<7) ? tp-1 : null;
+    ['−1','0','+1','+2'].forEach((n,j)=>
+      set(12+j, si===null?'':n, si===null?'P1 は無効':(PARTS[tp].ja+' のオクターブ'), false, si===null,
+          si===null?'':PARTS[tp].rgb));
+    return g;
+  }
+  if(m===SUB.MASTER || m===SUB.PVOL){
+    const cur = m===SUB.MASTER ? D.master : D.pvol[tp];
+    for(let i=0;i<16;i++){ const l=VOL_LEVEL_OF_KEY[i];
+      if(l<0) set(i,'','',false,true);
+      else set(i,String(l), l===0?'ミュート':l===9?'さいだい':'', false); }
+    if(m===SUB.PVOL) g[0].small='長押しで静音';
+    return g;
+  }
+  if(m===SUB.VOICE){
+    const names = VOICE_NAMES[tp]||VOICE_NAMES[1];
+    for(let i=0;i<16;i++) set(i,names[i], tp===0?'キットは固定':'', tp>0&&D.voice[tp]===i, tp===0, PARTS[tp].rgb);
+    return g;
+  }
+  if(m==='ifx'){
+    const nm=IFX[D.ifx]||'', hint=IFX_HINT[D.ifx]||'';
+    for(let i=0;i<16;i++) set(i, String(i+1), i===D.ifxLv?(nm+'：'+hint):'', i===D.ifxLv, i>D.ifxLv);
+    return g;
+  }
+  if(m==='fx'){
+    for(let i=0;i<4;i++) set(i, FX_NAMES[i], 'えらぶ');
+    for(let i=4;i<16;i++) set(i, String(i-3), 'ふかさ');
+    return g;
+  }
+  if(m==='interior'||m==='interiorFn'){
+    for(let i=0;i<16;i++) set(i, String(i+1), m==='interiorFn'?'曲':'', false, m==='interior');
+    return g;
+  }
+  for(let i=0;i<16;i++) set(i, String(i+1), '');
+  return g;
+}
+function scaleLabel(){ return D.scale===null?'?':(D.scale===SCALE_OFF?'白鍵':
+  D.scale===SCALE_CHROMATIC?'半音階':SCALE_JP[D.scale&7]); }
+function keyLabel(){ return D.key===null?'?':PC[D.key%12]; }
+
+/* ════════════════════════════════════════════════════════════
+   描画
+   ════════════════════════════════════════════════════════════ */
+function renderBoard(){
+  const g=keyRoles(), b=$('board');
+  if(!b.children.length) for(let i=0;i<16;i++){
+    const d=document.createElement('div'); d.className='key';
+    d.innerHTML=`<span class="n">${i+1}</span><span class="big"></span><span class="small"></span>`;
+    b.appendChild(d);
+  }
+  for(let i=0;i<16;i++){
+    const c=b.children[i], r=g[i];
+    c.className='key'+(r.on?' on':'')+(r.dim?' dim':'')+(D.pressed.has(i)?' press':'')
+      +(modeOf()==='normal'&&D.step===i&&D.playing?' head':'');
+    const big=c.querySelector('.big'); big.textContent=r.big; big.style.color=r.color||'';
+    c.querySelector('.small').textContent=r.small;
+  }
+}
+function renderPkeys(){
+  const el=$('pkeys');
+  if(!el.children.length) for(let i=0;i<8;i++){
+    const d=document.createElement('div'); d.className='pk';
+    d.innerHTML='<div class="pn"></div><div class="pr"></div>'; el.appendChild(d);
+  }
+  const m=modeOf();
+  for(let i=0;i<8;i++){
+    const d=el.children[i], isFn=(i===7);
+    d.querySelector('.pn').textContent = isFn?'Fn':('P'+(i+1));
+    let role='';
+    if(D.fn && !isFn) role=FN_ROLE[i];
+    else if(m==='slot') role = i===0?'押したまま':(i>=1?'スロット'+i:'');
+    else if(m==='ifx')  role = i===6?'押したまま':(IFX[i]||'');
+    else if(!isFn)      role = PARTS[i]?PARTS[i].ja:'';
+    else                role = '押しながら';
+    d.querySelector('.pr').textContent=role;
+    d.className='pk'+(!isFn&&D.mode===i&&!D.fn?' sel':'')+(D.held.has(i)?' held':'');
+    d.querySelector('.pn').style.color = (!isFn&&PARTS[i])?PARTS[i].rgb:'';
+  }
+}
+function renderMode(){
+  const m=modeOf();
+  $('modeName').innerHTML=(D.rec?'<span class="rec"></span>':'')+(MODE_TITLE[m]||'ふつう');
+  $('modeHow').innerHTML=MODE_HOW[m]||'';
+}
+function renderStatus(){
+  const set=(id,v)=>{ const e=$(id); if(v==null||v===''){e.innerHTML='<span class="unk">—</span>';} else e.textContent=v; };
+  set('vPart', PARTS[D.mode] ? `P${D.mode+1} ${PARTS[D.mode].ja}` : null);
+  set('vSlot', D.slot==null?null:('スロット'+(D.slot+1)+`  (P1+P${D.slot+2})`));
+  set('vBpm', D.bpm);
+  set('vScale', D.scale===null?null:scaleLabel());
+  set('vKey', D.key===null?null:keyLabel());
+  set('vPreset', D.preset==null?null:PRESET[D.preset]);
+  set('vKit', D.voice[0]==null?null:(D.voice[0]+1)+' '+PRESET[D.voice[0]&7]);
+  set('vPlay', D.playing==null?null:(D.playing?'▶ 再生中':'■ 停止'));
+  set('vBar', D.step<0?null:`${D.bar+1} 小節目 / ${D.step+1}`);
+}
+function renderLooper(){
+  const el=$('looper'); el.innerHTML='';
+  const rows=[{nm:'ドラム',color:PARTS[0].rgb,steps:drumSteps(),n:D.loop.drums.length}];
+  MEL.forEach((p,i)=>rows.push({nm:p.ja,color:p.rgb,steps:melSteps(i),
+    n:D.loop.synth.filter(s=>s[0]===i).length}));
+  rows.forEach(r=>{
+    const d=document.createElement('div'); d.className='lp';
+    d.innerHTML=`<span class="nm" style="color:${r.color}">${r.nm}</span>`+
+      `<span class="bar">${r.steps.map(on=>`<i${on?` style="background:${r.color}"`:''}></i>`).join('')}</span>`+
+      `<span class="cnt">${r.n||''}</span>`;
+    el.appendChild(d);
+  });
+}
+function drumSteps(){ const a=new Array(16).fill(false);
+  D.loop.drums.forEach(([k,s])=>{ if(s<16)a[s]=true; }); return a; }
+function melSteps(i){ const a=new Array(16).fill(false);
+  D.loop.synth.forEach(([p,k,sub])=>{ if(p===i){const s=Math.floor(sub/4); if(s<16)a[s]=true;} }); return a; }
+function renderAll(){ renderMode(); renderBoard(); renderPkeys(); renderStatus(); }
+
+/* ── 全面トースト: 変わった瞬間を大きく ── */
+let toastT=null, toastKind='', toastAt=0;
+// 同じ種類を続けて変えている間 (BPM や 音量 の連打) は短くして、盤面が隠れっぱなしにならないように
+function toast(kind,value,sub,ms){
+  const now=performance.now();
+  const rapid = (kind===toastKind && now-toastAt<1600);
+  toastKind=kind; toastAt=now;
+  $('tk').textContent=kind; $('tv').textContent=value; $('ts').textContent=sub||'';
+  $('toast').classList.add('on');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>$('toast').classList.remove('on'), rapid?550:(ms||1500));
+  log(`<b>${kind}</b> ${value}${sub?' — '+sub:''}`);
+}
+
+/* ════════════════════════════════════════════════════════════
+   接続 — **読むだけ**。claim もモード変更もしない。
+   送るのは SONG_CMD_DUMP_SLOT (ループの読み出し) だけ。副作用なし。
+   ════════════════════════════════════════════════════════════ */
+const CC = Ponkey.CC;   // 番号の正本は ponkey.js (さらにその正本はファームのヘッダ)
+$('btnConnect').onclick = async () => {
+  if(pk){ try{pk.disconnect();}catch(e){} return; }
+  try{
+    log('デバイス選択…');
+    const p=new Ponkey();
+    p.on('disconnect',()=>{ pk=null; setConn(false); log('切断'); });
+    p.on('modeui', onModeUi);
+    p.on('cc',     onCC);
+    p.on('keydown',e=>{ D.pressed.add(e.key); renderBoard(); });
+    p.on('keyup',  e=>{ D.pressed.delete(e.key); renderBoard(); });
+    p.on('partdown',e=>onPart(e.key,true));
+    p.on('partup',  e=>onPart(e.key,false));
+    p.on('fndown', ()=>{ D.held.add(7); renderPkeys(); });
+    p.on('fnup',   ()=>{ D.held.delete(7); renderPkeys(); });
+    p.on('slotdump', onSlotDump);
+    await p.connect({ namePrefix:'PONKEY', debug:true, keyEvents:true });
+    pk=p; setConn(true);
+    if(!p.hasFeature('UI_STATE')) log('⚠ 古いファーム: モード通知が来ないので表示が推定になります');
+    scheduleDump(600);
+  }catch(e){ log('接続エラー: '+e); }
+};
+function setConn(c){
+  connected=c;
+  const e=$('conn'); e.textContent=c?'接続中':'未接続'; e.className='pill '+(c?'ok':'ng');
+  $('btnConnect').textContent=c?'切断':'接続';
+  if(!c){ $('modeName').textContent='未接続'; $('modeHow').textContent='本体とつなぐと、16キーがいま何になっているかをここに映します。'; }
+  renderAll();
+}
+
+/* ── 本体の申告 (これが正) ── */
+function onModeUi(m){
+  const wasRec=D.rec, wasSub=D.sub, wasFn=D.fn, wasMode=D.mode;
+  D.sub=m.fnSubmode; D.mode=m.currentMode<7?m.currentMode:D.mode;
+  D.prev=m.previousMode<7?m.previousMode:D.prev;
+  D.fn=(m.currentMode===7);
+  D.fx=m.fx; D.interior=m.interior; D.test=m.test; D.silent=m.silent; D.rec=m.recording;
+  if(D.rec&&!wasRec) toast('ろくおん', '● REC', PARTS[D.mode]?`P${D.mode+1} ${PARTS[D.mode].ja}`:'', 1200);
+  if(!D.rec&&wasRec){ toast('ろくおん おわり','■', 'ループになりました', 1100); scheduleDump(500); }
+  if(D.mode!==wasMode && !D.fn) toast('パート', `P${D.mode+1}`, PARTS[D.mode]?PARTS[D.mode].ja:'', 900);
+  if(D.sub!==wasSub || D.fn!==wasFn) renderAll();
+  renderAll();
+}
+
+/* ── CC 通知 ── */
+function onCC({cc,val}){
+  switch(cc){
+    case CC.BPM:        if(D.bpm!==val+60){ D.bpm=val+60; toast('BPM', D.bpm, 'テンポ', 900);} break;
+    case CC.PLAY_STOP:  D.playing=val>0; if(!D.playing){D.step=-1;} break;
+    case CC.BAR_SYNC: { const s=val&0x0F;
+        if(D.step>=0 && s<D.step) D.bar++;            // 折り返し = 小節が進んだ (アプリが数える)
+        D.step=s; D.playing=true; renderStatus(); renderBoard(); return; }
+    case CC.SYNTH_SCALE: if(D.scale!==val){ D.scale=val; toast('スケール', scaleLabel(), 'メロディ6パート全部にかかります', 1700);} break;
+    case CC.KEY:        if(D.key!==val){ D.key=val; toast('キー', PC[val%12], '曲の根音', 1500);} break;
+    case CC.VOICE_SELECT: { const p=(val>>4)&15, v=val&15;
+        if(p<7){ const was=D.voice[p]; D.voice[p]=v;
+          if(was!==null&&was!==v){
+            if(p===0) toast('ドラムキット', PRESET[v&7], 'P1 の16音が入れ替わりました', 1500);
+            else toast('音色', (VOICE_NAMES[p]||[])[v]||('#'+(v+1)), `P${p+1} ${PARTS[p].ja}`, 1400);
+          } }
+        break; }
+    case CC.PART_VOLUME: { const p=(val>>4)&15, l=val&15; if(p<7) D.pvol[p]=l; break; }
+    case CC.MASTER_VOLUME: if(D.master!==val){ D.master=val; toast('ぜんたいの音量', val, '0 〜 127', 900);} break;
+    case CC.GROOVE_SWING:  D.swing=val; break;
+    case CC.GROOVE_ACCENT: D.accent=val; break;
+    case CC.LOOP_LENGTH:   D.rect=[((val>>4)&15)||4,(val&15)||4]; break;
+    case CC.SLOT_SELECT:   if(D.slot!==val){ D.slot=val;
+        toast('スロット', 'スロット'+(val+1), `本体では P1+P${val+2}`, 1300); scheduleDump(400);} break;
+  }
+  renderAll();
+}
+
+/* ── MODE_UI が持たない2つ: インスタントFX と スロットコンボ を組み立てる ── */
+function onPart(k,down){
+  if(down) D.held.add(k); else D.held.delete(k);
+  const h=x=>D.held.has(x);
+  // インスタントFX: 錨 P7 + 相方 P2-P6 がちょうど1つ (P1 が混ざったらスロット側が勝つ)
+  let ifx=0;
+  if(h(6)&&!h(0)&&!D.fn&&!D.fx&&!D.interior&&!D.test){
+    let n=0,pt=0; for(let u=1;u<6;u++) if(h(u)){pt=u;n++;}
+    if(n===1) ifx=pt;
+  }
+  if(ifx!==D.ifx){ D.ifx=ifx; D.ifxLv=8;
+    if(ifx) toast('インスタントFX', IFX[ifx], IFX_HINT[ifx], 1100); }
+  // スロットコンボ: P1 + P2..P7
+  let sc=0;
+  if(h(0)&&!D.fn&&!D.fx&&!D.interior&&!D.test&&!ifx){ for(let u=1;u<7;u++) if(h(u)){sc=u;break;} }
+  D.slotCombo=sc;
+  renderAll();
+}
+
+/* ── ループの中身 (SONG_CMD_DUMP_SLOT。ソングモード不要・副作用なし) ── */
+let dumpT=null, dumpAsm={};
+function scheduleDump(ms){ if(!pk)return; clearTimeout(dumpT);
+  dumpT=setTimeout(()=>{ dumpAsm={}; pk.dumpSlot(0xFF).catch(()=>{}); }, ms||400); }
+function onSlotDump(d){
+  if(d.length<4)return;
+  const gen=d[0],idx=d[1],cnt=d[2],part=d.slice(3);
+  let a=dumpAsm[gen]; if(!a||a.cnt!==cnt){a={cnt,parts:{}};dumpAsm[gen]=a;}
+  a.parts[idx]=part;
+  if(Object.keys(a.parts).length<cnt)return;
+  let tot=0; for(let c=0;c<cnt;c++) tot+=a.parts[c].length;
+  const full=new Uint8Array(tot); let off=0;
+  for(let c=0;c<cnt;c++){ full.set(a.parts[c],off); off+=a.parts[c].length; }
+  delete dumpAsm[gen];
+  // V2: [0xF2][slot][loopLen][oct×6][rectRow][rectCol][dCnt]{(p<<4)|step,maskLo,maskHi}[sCnt]{(part<<4)|key,sub,raw}
+  let i=0; if(full[i++]!==0xF2) return;
+  const slot=full[i++]; i++;                       // slot / loopLen
+  i += MEL.length;                                 // oct×6
+  const rr=full[i++], rc=full[i++]; if(rr&&rc) D.rect=[rr,rc];
+  const dc=full[i++], drums=[];
+  for(let n=0;n<dc&&i+2<full.length;n++){ const b=full[i++], lo=full[i++], hi=full[i++];
+    const step=b&0x0F, mask=lo|(hi<<8);
+    for(let k=0;k<16;k++) if((mask>>k)&1) drums.push([k,step]); }
+  const sc2=full[i++], synth=[];
+  for(let n=0;n<sc2&&i+2<full.length;n++){ const b=full[i++], sub=full[i++], raw=full[i++];
+    synth.push([(b>>4)&0x0F, b&0x0F, sub, raw]); }
+  const before=D.loop.drums.length+D.loop.synth.length;
+  const after=drums.length+synth.length;
+  D.loop={drums,synth};
+  if(D.slot===null) D.slot=slot;
+  if(before>0&&after===0) toast('ぜんぶ消えた','CLEAR','このスロットは空になりました',1400);
+  renderLooper(); renderStatus();
+  $('lpNote').textContent=`スロット${slot+1}: ドラム${drums.length}打 / メロディ${synth.length}音`;
+}
+
+/* ── 起動 ── */
+renderAll(); renderLooper();
+log('起動。<b>読むだけのアプリ</b>です — 本体には書き込みません。');
+</script>
+</body>
+</html>
