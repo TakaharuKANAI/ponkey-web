@@ -383,9 +383,10 @@ const L2=[
     more:'16 のままだと必ず4拍子に聞こえます。<b>12 にすると3拍子っぽく、6 にすると忙しく</b>聞こえます。<br>実機のループの長さは<b>パートごと</b>で、<b>そのパートに最初に録音したときの長さ</b>で決まります（押さえ続けるほど小節が伸びる）。長さを変えたいときは、そのパートをダブルクリックで消してから録り直します。1小節の中の区切り方を変えたいときは <b>Fn×P3</b> です。',
     loopStep:true },
 ];
-// ファームの FN_SUBMODE_* と同じ番号。7=SCALE_SETUP / 8=PATTERN_SELECT は
-//   v4.6.0 のドラムのスケールモード廃止で到達しなくなった (番号は詰めない)。
-const SUB={NONE:0,BPM:1,VOICE:2,LOOP:3,PVOL:4,STEPPER:5,MASTER:6,SLOT:9};
+// ファームの FN_SUBMODE_* と同じ番号。7=SCALE_SETUP / 8=PATTERN_SELECT は v4.6.0 の
+//   ドラムのスケールモード廃止で、9=SLOT_SELECT は v4.6.18 の「スロットは P1+PN」で
+//   到達しなくなった (番号は詰めない)。
+const SUB={NONE:0,BPM:1,VOICE:2,LOOP:3,PVOL:4,STEPPER:5,MASTER:6};
 const L3=[
   { no:'ステップ 1', key:'fn', mode:'fn', title:'Fn は「押しながら」のキー',
     one:'Fn を押したまま、離さずにいてください。',
@@ -394,11 +395,11 @@ const L3=[
   { no:'ステップ 2', key:'quick', mode:'fn', title:'Fn＋グリッド ＝ クイックページ',
     one:'Fn を押したまま、グリッドを押してみましょう。',
     todo:'Fn を押しながら G を押そう', doneTxt:'クイックページを触りました',
-    more:'Fn を押している間、<b>グリッドは常にこの1枚</b>です（階層はありません。押した瞬間に効きます）。<br><b>G1〜G8 ＝ サウンドプリセット8種</b>——トイ／オーケストラ／バンド／ゲーム／宇宙／ヘンテコ／ボイス／ワールド。<b>録音した音符はそのままで、6パートの音色が一斉に着替えます</b>。<br>右半分は <b>G9・G10 ＝ スケール ← →</b>、<b>G13・G14 ＝ キー ← →</b>、<b>G11・G15 ＝ BPM ±5</b>、<b>G12・G16 ＝ 全体の音量 ±12</b>。曲全体をここだけで整えられます。' },
-  { no:'ステップ 3', key:'slot', mode:SUB.SLOT, title:'Fn×P1 スロットと再生・停止',
-    one:'Fn を押しながら P1。そのまま G キーをひとつ押してみましょう。',
-    todo:'Fn×P1 でスロットを選ぼう', doneTxt:'スロットを切り替えました',
-    more:'押している間、G1〜G16 が<b>保存スロット</b>になります。白く光るのがいま居るスロット、薄く光るのは中身のあるスロット。<b>G を押さずに離すと再生／停止</b>。G を押した順に複数押すと、その順で続けて再生します（チェーン）。' },
+    more:'Fn を押している間、<b>グリッドは常にこの1枚</b>です（階層はありません。押した瞬間に効きます）。<br><b>G1〜G8 ＝ サウンドプリセット8種</b>——トイ／オーケストラ／バンド／ゲーム／宇宙／ヘンテコ／ボイス／ワールド。<b>録音した音符はそのままで、6パートの音色が一斉に着替えます</b>。<br>右半分は <b>G9・G10 ＝ スケール ← →</b>、<b>G13・G14 ＝ キー ← →</b>、<b>G11・G15 ＝ BPM ±5</b>、<b>G12・G16 ＝ 全体の音量 ±12</b>。曲全体をここだけで整えられます。<br>プリセットのキーを押すと、<b>その世界観の象徴フレーズがその編成の音で鳴ります</b>（今のスケールとキーに合わせて鳴るので、切り替えた結果がそのまま聞こえます）。本体の LED はプリセットのキーだけ上下の粒が別の色で入れ替わって、ふわふわ漂って見えます。' },
+  { no:'ステップ 3', key:'slot', mode:'slotcombo', offlineToggle:'slot', title:'P1＋PN ＝ 曲のスロット',
+    one:'P1 を押したまま、P2〜P7 のどれかを押しましょう。',
+    todo:'P1＋P2〜P7 でスロットを選ぼう', doneTxt:'スロットを切り替えました',
+    more:'曲の保存場所（スロット）は<b>6つ</b>で、<b>P1 と一緒に押したパートキーがそのまま番号</b>です——P2＝1、P3＝2 … P7＝6。グリッドは使いません。切り替えた瞬間、盤面がそのキーの色でフラッシュします。<b>離すと、コンボに入る前に選んでいたパートへ戻ります</b>（P1 が選ばれたままにならない）。<br>再生と停止は <b>Fn×P1</b> です（ページには入らず、押した瞬間に切り替わります）。' },
   { no:'ステップ 4', key:'bpm', mode:SUB.BPM, title:'Fn×P2 テンポ（BPM）',
     one:'Fn を押しながら P2。G キーで速さを選びましょう。',
     todo:'Fn×P2 で BPM を選ぼう', doneTxt:'BPM を変えました',
@@ -436,22 +437,22 @@ const L3=[
     one:'メロディのパートを選んでから、Fn を押しながら P7。',
     todo:'Fn×P7 で音色を選ぼう', doneTxt:'音色を変えました',
     more:'対象は Fn 直前のパート。<b>並びは行が系統です</b>——1 段目＝トイ（既定）、2 段目＝生楽器、3 段目＝エレキ、4 段目＝シンセ（P2 は世界の弦、P7 は独自の4行）。押すと 1 音鳴ります。音色を変えると<b>前の録音が残ったまま重ね録り</b>できます（レイヤー）。<br><b>P1 は対象外</b>です——ドラムは 16 キーそれぞれが打楽器なので、音色ではなく<b>キットごと</b>（8種）を選ぶ形になっていて、クイックページのプリセットと連動します。' },
-  { no:'ステップ 13', key:'ifx', mode:'ifx', offlineToggle:'ifx', title:'インスタントFX（P1＋パートキー）',
-    one:'P1 と、もうひとつ P キーを一緒に押したまま。',
-    todo:'P1＋P2〜P7 を押したまま G を押そう', doneTxt:'インスタントFX を触りました',
-    more:'<b>押している間だけ</b>かかる演奏エフェクトです（離すと全部もとどおり。録音は壊れません）。組み合わせで効果が決まります——<b>P1+P2</b> スタッター（刻む）、<b>P1+P3</b> テープ速度、<b>P1+P4</b> リバース（逆走）、<b>P1+P5</b> エコー連打、<b>P1+P6</b> リバーブ、<b>P1+P7</b> ワブル。入った瞬間に中くらいの強さでかかり、<b>G1〜G16 が強さ</b>です。録音中は入りません（録音が勝ちます）。' },
+  { no:'ステップ 13', key:'ifx', mode:'ifx', offlineToggle:'ifx', title:'インスタントFX（P7＋パートキー）',
+    one:'P7 と、もうひとつ P キーを一緒に押したまま。',
+    todo:'P7＋P2〜P6 を押したまま G を押そう', doneTxt:'インスタントFX を触りました',
+    more:'<b>押している間だけ</b>かかる演奏エフェクトです（離すと全部もとどおり。録音は壊れません）。<b>錨は P7（こえ）</b>で、相方で効果が決まります——<b>P7+P2</b> スタッター（刻む）、<b>P7+P3</b> テープ速度、<b>P7+P4</b> リバース（逆走）、<b>P7+P5</b> エコー連打、<b>P7+P6</b> リバーブ。入った瞬間に中くらいの強さでかかり、<b>G1〜G16 が強さ</b>です。<br>P1 が混ざっているときはスロット切替が優先されます。録音中は入りません（録音が勝ちます）。' },
   { no:'ステップ 14', key:'fx', mode:'fx', offlineToggle:'fx', title:'エフェクトモード（P5＋P6＋P7）',
     one:'P5・P6・P7 を 3 つ同時に押したまま。',
     todo:'P5+P6+P7 を押したまま G を押そう', doneTxt:'エフェクトを触りました',
     more:'こちらは<b>設定として残る</b>エフェクトです（インスタントFX は押している間だけ）。G1〜G4 でリバーブ／コーラス／フィルター／ディレイを選び、G5〜G16 で深さ 1〜12。選択中をもう一度押すと OFF⇔戻す（A/B 比較）。<b>バー G1〜G4 が上がって動くのは、選んでいる効果の「かかり具合」を体で見せるためです。</b>リバーブ＝4 本が一斉に沈んで戻る（深いほど余韻が長い）。コーラス＝2 本ずつ互い違い（うねり）。フィルター＝明るいほど立つ本数が増える。ディレイ＝1 本ずつ順に沈む（やまびこ）。深さ 0 は 4 本とも静止＝効いていない。' },
   { no:'ステップ 15', key:'interior', mode:'interior', offlineToggle:'interior', title:'インテリアモード',
-    one:'P1〜P4 を 4 つ同時に押して、1 秒待ちます。',
-    todo:'P1〜P4 を 1 秒押そう', doneTxt:'インテリアに入りました',
+    one:'P3〜P6 を 4 つ同時に押して、1 秒待ちます。',
+    todo:'P3〜P6 を 1 秒押そう', doneTxt:'インテリアに入りました',
     more:'内蔵曲を自動で弾き続ける「置物」モード。<b>Fn＋G で 16 曲</b>から選びます（Dr.Wily／Autobahn／Rydeen／新宝島…）。P1〜P3 は重ね弾きの音色 A／B（1 オクターブ上）／C（主旋律をもらうカラオケ）、P4〜P6 はリバーブ／コーラス／ビブラート、P7 は静音。<b>Fn×P1 で終了</b>。中では BPM（Fn×P2）と音量（Fn×P5・P6）だけ変えられます。' },
   { no:'ステップ 16', key:'always', mode:'normal', title:'まとめ：階層',
     one:'Fn を離せば、いつでも通常モードに戻ります。',
     todo:'', doneTxt:'おつかれさまでした',
-    more:'通常 → <b>Fn を押す</b> → そのまま G ならクイックページ、P1〜P7 なら Fn×Pn のページ → <b>離すと通常へ</b>。<br>特別な入口は 4 つ。<b>P1＋P2〜P7</b>＝インスタントFX、<b>P5+P6+P7</b>＝エフェクト、<b>P1〜P4 を 1 秒</b>＝インテリア、<b>P2〜P4 を 1 秒</b>＝テスト（開発用。バーが全部上がる）。<br>消すのは、<b>P キーをダブルタップ</b>＝そのパート、<b>Fn を単独で3回タップ</b>＝いま鳴っている全部。Fn を押しながら電源を入れると工場出荷リセットです。' },
+    more:'通常 → <b>Fn を押す</b> → そのまま G ならクイックページ、P2〜P7 なら Fn×Pn のページ → <b>離すと通常へ</b>（Fn×P1 だけはページを持たず、その場で再生／停止）。<br>P キーの組み合わせは 5 つ。<b>P1＋P2〜P7</b>＝曲のスロット6つ、<b>P7＋P2〜P6</b>＝インスタントFX、<b>P5+P6+P7</b>＝エフェクト、<b>P3〜P6 を 1 秒</b>＝インテリア、<b>P2〜P4 を 1 秒</b>＝テスト（開発用。バーが全部上がる）。<br>消すのは、<b>P キーをダブルタップ</b>＝そのパート、<b>Fn を単独で3回タップ</b>＝いま鳴っている全部。Fn を押しながら電源を入れると工場出荷リセットです。' },
 ];
 const LESSONS=[{name:'つかいかた',steps:L1},{name:'つくりかた',steps:L2},{name:'しくみ',steps:L3}];
 
@@ -465,16 +466,18 @@ const PARTS=[
 //   行はバリエーション。実機もこの列で色分けして光る (KIT_COL_RGB)。
 const KIT_COL=['キック','スネア','ハット','パーカッション'];
 const KIT_ONOM=['ドン','タン','チッ','コン'];
-const LED=[
-  {hex:'#BA523B',tint:'#F3E4DF',line:'#7E3524',ink:'#FFFFFF'},   // P1 ドラム   (hue 11 橙)
-  {hex:'#4C913B',tint:'#E4EFE0',line:'#33612A',ink:'#FFFFFF'},   // P2 けんばん (hue 108 葉緑)
-  {hex:'#939039',tint:'#EDECDE',line:'#625F25',ink:'#FFFFFF'},   // P3 リード   (hue 58 黄)
-  {hex:'#368C86',tint:'#DEEDEB',line:'#245D59',ink:'#FFFFFF'},   // P4 ベース   (hue 176 ティール)
-  {hex:'#7647B8',tint:'#E7E1F1',line:'#4F2E7C',ink:'#FFFFFF'},   // P5 わおん   (hue 265 紫)
-  {hex:'#4067B5',tint:'#E0E6F2',line:'#2B457A',ink:'#FFFFFF'},   // P6 ベル     (hue 220 アズール)
-  {hex:'#9E479E',tint:'#F0E4F0',line:'#6B2F6B',ink:'#FFFFFF'},   // P7 こえ     (hue 300 マゼンタ)
-  {hex:'#8A8A8F',tint:'#EEEEF0',line:'#5C5C60',ink:'#FFFFFF'},   // Fn
-];
+// パート色。**正本はファームの PART_BASE_HUE** (v4.6.20 で見分けやすさのFBを受けて再配色済み)。
+//   紙の上のアクセント色は色相から導出する — ファームが色を変えたらこの表だけ直せばよい。
+const PART_HUE=[11,108,176,38,265,228,335];   // ドラム/けんばん/リード/ベース/わおん/ベル/こえ
+function hsl2hex(h,sa,l){
+  const a=sa*Math.min(l,1-l), f=n=>{const k=(n+h/30)%12;
+    const c=l-a*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));
+    return Math.round(255*c).toString(16).padStart(2,'0');};
+  return '#'+f(0)+f(8)+f(4);
+}
+const LED=[...PART_HUE.map(h=>({
+  hex:hsl2hex(h,.42,.42), tint:hsl2hex(h,.40,.91), line:hsl2hex(h,.52,.27), ink:'#FFFFFF',
+})),{hex:'#8A8A8F',tint:'#EEEEF0',line:'#5C5C60',ink:'#FFFFFF'}];   // 末尾 = Fn
 // v4.6.14: サウンドプリセット 8種 (実機は Fn+G1〜G8)。**録音した音符は変わらず、音色だけ全パート一斉に**。
 //   本体は GM 音色の指名だが、この画面は WebAudio なので「編成の性格」を波形で真似るだけ。
 const PRESET_NAMES=['トイ','オーケストラ','バンド','ゲーム','宇宙','ヘンテコ','ボイス','ワールド'];
@@ -1052,6 +1055,9 @@ function livePartDown(u){
     if(st.offlineToggle==='fx'&&u>=4&&u<7&&!fnMode()){
       D.fxSticky=!D.fxSticky; D.fx=D.fxSticky; if(D.fx) markSeen('fx'); paintLiveAll(); return;
     }
+    if(st.offlineToggle==='slot'&&u>=1&&u<7&&!fnMode()){
+      D.slotCombo=D.slotCombo===u?0:u; if(D.slotCombo){ D.slot=u-1; markSeen('slot'); } paintLiveAll(); return;
+    }
     if(st.offlineToggle==='ifx'&&u>=1&&u<7&&!fnMode()){
       D.ifx=D.ifx===u?0:u; if(D.ifx){ D.ifxLv=8; markSeen('ifx'); } paintLiveAll(); return;
     }
@@ -1111,7 +1117,7 @@ function demo(){
    SONG_CMD_DUMP_SLOT の応答 (META + 現在スロット) で本体から答え合わせできる。
    音量・エフェクト・静音・インテリアは本体が報告しないので、推定のまま (HUD に ? を付ける)。
    ===================================================================== */
-const SUB_OF_P=[SUB.SLOT,SUB.BPM,SUB.LOOP,SUB.STEPPER,SUB.MASTER,SUB.PVOL,SUB.VOICE];   // Fn×P1..P7
+const SUB_OF_P=[null,SUB.BPM,SUB.LOOP,SUB.STEPPER,SUB.MASTER,SUB.PVOL,SUB.VOICE];   // Fn×P1..P7 (P1 は即 再生/停止)
 const BPM_PRESETS=[60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210];
 const VOL_LEVEL_OF_KEY=[-1,-1,-1,9, -1,-1,5,8, -1,2,4,7, 0,1,3,6];   // 階段ゲージ (G13=0 … G4=9)
 const VOL_VALUES=[0,40,51,62,73,84,95,106,117,127];
@@ -1148,15 +1154,16 @@ const VOICE_NAMES=[
 ];
 // v4.6.14: サウンドプリセット (Fn+G1〜G8)。各パートのパレット内インデックスを指名する方式
 const QP_PRESETS=['トイ','オーケストラ','バンド','ゲーム','宇宙','ヘンテコ','ボイス','ワールド'];
-// v4.6.2: インスタントエフェクト = P1 と一緒にどのパートキーを押すか (index 1-6 = P2-P7)
+// v4.6.2 → v4.6.17 で錨を P1 から **P7** へ移設 (P1+PN がスロット切替になったため)。
+//   相方は P2-P6 の5つ。index = 相方のパートキー番号 (1=P2 … 5=P6)
 const IFX=[null,
   {n:'スタッター',s:'刻み幅 1拍→1/64'},
   {n:'テープ速度',s:'50%…等速…200%'},
   {n:'リバース',  s:'逆走 50-200%'},
   {n:'エコー連打',s:'深さ 1-12'},
   {n:'リバーブ',  s:'深さ 1-12'},
-  {n:'ワブル',    s:'深さ 8-127'},
 ];
+const SLOT_COUNT=6;                 // v4.6.18: P1+P2〜P7 の6コンボと1対1
 
 
 /* ステッパページ (v4.5.67+): pair=key/2、偶数=下げ/前、奇数=上げ/次。
@@ -1201,7 +1208,7 @@ const D={};                       // 推定した本体の状態
 function devReset(){
   Object.assign(D,{
     fn:false, sub:SUB.NONE, prev:0, sel:0, held:new Set(), heldAt:{},
-    playing:null, slot:0, slotHas:0, p1Grid:false,
+    playing:null, slot:0, slotHas:0, slotCombo:0,
     bpm:null, click:null, rect:[4,4], oct:[null,null,null,null,null,null],   // v4.6.0: メロディ6パート
     root:null, scale10:null, swing:null, accent:null,
     proto:null, feat:0, feat2:0,
@@ -1226,14 +1233,16 @@ function devKey(t,i){
   const now=performance.now();
   if(t==='pd'){
     D.held.add(i); D.heldAt[i]=now;
-    if(i===7){ D.fn=true; D.prev=D.sel; D.sub=SUB.NONE; D.p1Grid=false; markSeen('fn'); }
+    if(i===7){ D.fn=true; D.prev=D.sel; D.sub=SUB.NONE; markSeen('fn'); }
     else if(D.fn){
       // Fn×Pn = サブモードへ。P4 は押すたびにページが巡る
       if(D.interior){
         if(i===0){ D.interior=false; markSeen('interior'); }
         else if(i===4) D.sub=SUB.MASTER; else if(i===5) D.sub=SUB.PVOL;
+      } else if(i===0){
+        // v4.6.18: Fn×P1 はページを持たない。押した瞬間に再生/停止
+        D.playing=D.playing===null?true:!D.playing; D.sub=SUB.NONE; markSeen('play');
       } else D.sub=SUB_OF_P[i];
-      if(D.sub===SUB.SLOT){ D.p1Grid=false; markSeen('slot'); }
     } else if(D.interior){
       if(i<3) D.iPreset=i; else if(i<6) D.iFx[i-3]=!D.iFx[i-3]; else if(i===6) D.iQuiet=!D.iQuiet;
       markSeen('interior');
@@ -1245,9 +1254,7 @@ function devKey(t,i){
     D.held.delete(i);
     if(i===7){
       D.fn=false; D.sub=SUB.NONE;
-    } else if(D.fn&&i===0&&D.sub===SUB.SLOT&&!D.p1Grid&&!D.interior){
-      D.playing=D.playing===null?true:!D.playing; D.sub=SUB.NONE; markSeen('slot');   // 何も押さず離す = 再生/停止
-    } else if(D.fn&&SUB_OF_P[i]===D.sub){ D.sub=SUB.NONE; }
+    } else if(D.fn&&SUB_OF_P[i]&&SUB_OF_P[i]===D.sub){ D.sub=SUB.NONE; }
     if(D.fromDev&&S.connected) queueMeta();                // 答え合わせ
   }
   // 同時押しコンボ:
@@ -1258,15 +1265,23 @@ function devKey(t,i){
   const h=k=>D.held.has(k);
   const fxNow=D.fxSticky||(h(4)&&h(5)&&h(6)&&!D.fn&&!D.interior&&!D.test);
   if(fxNow!==D.fx){ D.fx=fxNow; if(fxNow) markSeen('fx'); }
+  // v4.6.17/18: インスタントFX の錨は P7、相方は P2-P6 のちょうど1つ (P1 が混ざったらスロット側に譲る)
   let ifxNow=0;
-  if(h(0)&&!D.fn&&!D.fx&&!D.interior&&!D.test) for(let u=1;u<7;u++) if(h(u)){ ifxNow=u; break; }
+  if(h(6)&&!h(0)&&!D.fn&&!D.fx&&!D.interior&&!D.test){
+    let n=0,pt=0; for(let u=1;u<6;u++) if(h(u)){ pt=u; n++; }
+    if(n===1) ifxNow=pt;
+  }
   if(ifxNow!==D.ifx){ D.ifx=ifxNow; if(ifxNow){ D.ifxLv=8; markSeen('ifx'); } }
+  // v4.6.18: P1 + P2..P7 = ソングスロット切替 (P2→スロット1 … P7→スロット6)
+  if(!D.fn&&!D.fx&&!D.interior&&!D.test&&!D.ifx&&h(0)){
+    for(let u=1;u<7;u++) if(h(u)){ D.slotCombo=u; if(D.slot!==u-1){ D.slot=u-1; } markSeen('slot'); break; }
+  } else if(D.slotCombo&&!(h(0)&&h(D.slotCombo))) D.slotCombo=0;
   clearTimeout(D.comboT);
-  if((h(0)&&h(1)&&h(2))||(!h(0)&&h(1)&&h(2)&&h(3))){
+  if((h(2)&&h(3)&&h(4)&&h(5))||(!h(0)&&h(1)&&h(2)&&h(3))){
     D.comboT=setTimeout(()=>{
-      if(h(0)&&h(1)&&h(2)&&h(3)){ D.interior=!D.interior; if(D.interior){D.song=D.song??6;} D.ifx=0; markSeen('interior'); }
+      if(h(2)&&h(3)&&h(4)&&h(5)){ D.interior=!D.interior; if(D.interior){D.song=D.song??6;} D.ifx=0; markSeen('interior'); }
       else if(!h(0)&&h(1)&&h(2)&&h(3)){ D.test=!D.test; D.ifx=0; }
-      D.held.clear(); paintLiveAll();
+      D.held.clear(); D.slotCombo=0; paintLiveAll();
     },1000);
   }
   if(t==='gd'){
@@ -1280,7 +1295,6 @@ function devKey(t,i){
     else if(D.interior&&D.fn){ D.song=i; markSeen('interior'); }
     else if(D.fn){
       switch(D.sub){
-        case SUB.SLOT: D.p1Grid=true; D.slot=i; markSeen('slot'); break;
         case SUB.BPM:  if(D.bpm===BPM_PRESETS[i]) D.click=!(D.click??false); else D.bpm=BPM_PRESETS[i]; markSeen('bpm'); break;
         case SUB.LOOP: D.rect=[(i>>2)+1,(i&3)+1]; markSeen('loop'); break;
         case SUB.STEPPER: stepperTap(i); break;
@@ -1316,7 +1330,7 @@ function onModeUi(m){
   if(D.fx) markSeen('fx');
   if(D.interior) markSeen('interior');
   if(D.quiet) markSeen('quiet');
-  const SEEN={[SUB.SLOT]:'slot',[SUB.BPM]:'bpm',[SUB.LOOP]:'loop',[SUB.STEPPER]:'stepper',
+  const SEEN={[SUB.BPM]:'bpm',[SUB.LOOP]:'loop',[SUB.STEPPER]:'stepper',
     [SUB.MASTER]:'master',[SUB.PVOL]:'pvol',[SUB.VOICE]:'voice',
   };
   if(SEEN[m.fnSubmode]) markSeen(SEEN[m.fnSubmode]);
@@ -1378,14 +1392,16 @@ function onSlotDump(d){
 }
 
 /* ---- 表示: いまの状態から「盤面の意味」を組み立てる ---- */
-const modeOf=()=>D.test?'test':D.ifx?'ifx':D.fx?'fx':D.interior?(D.fn?'interiorFn':'interior'):D.fn?(D.sub===SUB.NONE?'fn':D.sub):'normal';
+const modeOf=()=>D.test?'test':D.ifx?'ifx':D.fx?'fx':D.interior?(D.fn?'interiorFn':'interior'):
+  D.fn?(D.sub===SUB.NONE?'fn':D.sub):(D.slotCombo?'slotcombo':'normal');
 const MODE_LABEL={normal:'通常（演奏・打ち込み）',fn:'Fn を押している（クイックページ）',fx:'エフェクトモード（P5+P6+P7）',
   interior:'インテリアモード',interiorFn:'インテリア + Fn（曲選び）',test:'テストモード（開発用）',
-  [SUB.SLOT]:'Fn×P1 スロット / 再生・停止',[SUB.BPM]:'Fn×P2 BPM',[SUB.LOOP]:'Fn×P3 ループの長さ',
+  slotcombo:'P1＋PN 曲のスロット',[SUB.BPM]:'Fn×P2 BPM',[SUB.LOOP]:'Fn×P3 ループの長さ',
   [SUB.STEPPER]:'Fn×P4 ステッパ（キー/スケール/グルーブ/オクターブ）',
   [SUB.MASTER]:'Fn×P5 マスター音量',[SUB.PVOL]:'Fn×P6 パート音量',[SUB.VOICE]:'Fn×P7 音色',
   ifx:'インスタントFX（P1＋パートキー）'};
-const FN_P_ROLES=['スロット','BPM','ループ長','ステッパ','マスター','パート音量','音色','Fn'];
+// v4.6.18: Fn×P1 はサブモードに入らず即 再生/停止 (スロットは P1+PN へ移った)
+const FN_P_ROLES=['再生/停止','BPM','ループ長','ステッパ','マスター','パート音量','音色','Fn'];
 const NUM=i=>String(i+1);
 function roles(mode){
   const g=[],pk=new Array(8).fill(''),tp=target();
@@ -1405,8 +1421,12 @@ function roles(mode){
                  11:D.mvol===null?'?':String(D.mvol),15:D.mvol===null?'?':String(D.mvol)};
       q.forEach(([k,n])=>set(k,n,now[k],false,false));
       break; }
-    case SUB.SLOT: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
-      for(let i=0;i<16;i++) set(i,NUM(i),(D.slotHas>>i)&1?'中身あり':'',D.slot===i,false); break;
+    case 'slotcombo': {
+      // v4.6.18: P1 を押しながら P2〜P7。グリッドは使わない (2キーだけで切り替わる)
+      pk[0]='押したまま';
+      for(let u=1;u<7;u++) pk[u]='スロット'+u+((D.slotHas>>(u-1))&1?'（中身あり）':'');
+      for(let i=0;i<16;i++) set(i,NUM(i),'',false,true);
+      break; }
     case SUB.BPM: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
       BPM_PRESETS.forEach((b,i)=>set(i,String(b),D.bpm===b?(D.click===null?'クリック?':(D.click?'クリックON':'クリックOFF')):'',D.bpm===b,false)); break;
     case SUB.LOOP: FN_P_ROLES.forEach((r,u)=>pk[u]=r);
@@ -1443,7 +1463,8 @@ function roles(mode){
       // v4.6.0: P1 はキット (キー位置で打楽器が決まる) なので音色選択の対象外
       for(let i=0;i<16;i++) set(i,NUM(i),VOICE_NAMES[tp][i],tp>0&&D.voice[tp]===i,tp===0); break;
     case 'ifx': {
-      pk[0]='押したまま'; for(let u=1;u<7;u++) pk[u]=IFX[u].n;
+      // v4.6.17/18: 錨は P7、相方は P2-P6
+      pk[6]='押したまま'; for(let u=1;u<6;u++) pk[u]=IFX[u].n;
       const e=IFX[D.ifx]||IFX[1];
       for(let i=0;i<16;i++) set(i,NUM(i),i===D.ifxLv?e.n+'：'+e.s:'',i===D.ifxLv,i>D.ifxLv);
       break; }
@@ -1467,7 +1488,6 @@ function roles(mode){
    本体の RGB (黒地に光る) をそのまま計算し、ledCss() で紙の上の色へ変換する:
    色相・彩度は保ち、「明るさ」だけを「濃さ」に読み替える (明るい LED = 濃い色)。消灯 = 白いキー。
    点滅は静止画で近似 (点滅の明るい側を出す)。 */
-const PART_HUE=[11,108,58,176,265,220,300];   // v4.6.0: ドラム/けんばん/リード/ベース/わおん/ベル/こえ
 const ADV=[255,48,0];                          // ADVERTISE_COLOR 0xFF3000 (設定モードのオレンジ)
 function hsv255(h,s,v){                        // ファーム hsvToRgb と同じ引数系 (h0-359, s/v 0-255)
   const S=s/255,V=v/255,C=V*S,X=C*(1-Math.abs((h/60)%2-1)),m=V-C;
@@ -1526,11 +1546,9 @@ function applyLeds(mode,g){
         for(let j=0;j<4;j++) put(12+j,...hsv255(hue,255,(j-1)===oct?BRIGHT:DIM));
       }
       break; }
-    case SUB.SLOT:
-      for(let i=0;i<16;i++){
-        if(g[i].on) put(i,220,220,220);
-        else if((D.slotHas>>i)&1) put(i,45,45,45);
-      }
+    case 'slotcombo':
+      // 切替の瞬間はパート切替フラッシュ (相方パートの色) が全面に走る。静止画では薄く敷いて示す
+      for(let i=0;i<16;i++) put(i,...hsv255(PART_HUE[D.slotCombo]??11,255,70));
       break;
     case SUB.VOICE:{
       // ピッカー色: 色相 ±21°(列)・彩度4段(行)。非選択は 70% (選択中は本来白点滅 → フル色で近似)

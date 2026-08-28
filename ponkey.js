@@ -74,14 +74,15 @@ const NOTE_TABLE_NORMAL = [69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53]; 
 //   P1 だけドラムキット (16キー = 16打楽器, ch9)。P2-P7 がメロディで、synth = 0-5。
 //   ch  = レイヤー0 の MIDI ch / chL2 = 凍結レイヤー1 の ch (本体→アプリの NoteOn はこの ch で来る)
 //   shift = そのパートの音域シフト (半音)。table + shift が「白鍵モードの16キーの音高」。
+//   色は v4.6.20 で見分けやすさのFBを受けて再配色されている (P3 が水色、P4 がオレンジ…)
 const PARTS = [
   { part: 0, synth: null, name: 'DRUM',  ja: 'ドラム',   hue:  11, rgb: '#ff3000', ch: 9, chL2: null, table: null,              shift:  0 },
   { part: 1, synth: 0,    name: 'KEYS',  ja: 'けんばん', hue: 108, rgb: '#30ff00', ch: 0, chL2: 6,    table: NOTE_TABLE_NORMAL, shift:  0 },
-  { part: 2, synth: 1,    name: 'LEAD',  ja: 'リード',   hue:  58, rgb: '#ffff00', ch: 1, chL2: 7,    table: NOTE_TABLE_NORMAL, shift: 12 },
-  { part: 3, synth: 2,    name: 'BASS',  ja: 'ベース',   hue: 176, rgb: '#00ffc0', ch: 2, chL2: 8,    table: NOTE_TABLE_BASS,   shift:  0 },
+  { part: 2, synth: 1,    name: 'LEAD',  ja: 'リード',   hue: 176, rgb: '#00ffc0', ch: 1, chL2: 7,    table: NOTE_TABLE_NORMAL, shift: 12 },
+  { part: 3, synth: 2,    name: 'BASS',  ja: 'ベース',   hue:  38, rgb: '#ffa000', ch: 2, chL2: 8,    table: NOTE_TABLE_BASS,   shift:  0 },
   { part: 4, synth: 3,    name: 'CHORD', ja: 'わおん',   hue: 265, rgb: '#8000ff', ch: 3, chL2: 10,   table: NOTE_TABLE_NORMAL, shift:  0 },
-  { part: 5, synth: 4,    name: 'BELL',  ja: 'ベル',     hue: 220, rgb: '#0080ff', ch: 4, chL2: 11,   table: NOTE_TABLE_NORMAL, shift: 24 },
-  { part: 6, synth: 5,    name: 'VOICE', ja: 'こえ',     hue: 300, rgb: '#ff00ff', ch: 5, chL2: 12,   table: NOTE_TABLE_NORMAL, shift:  0 },
+  { part: 5, synth: 4,    name: 'BELL',  ja: 'ベル',     hue: 228, rgb: '#2050ff', ch: 4, chL2: 11,   table: NOTE_TABLE_NORMAL, shift: 24 },
+  { part: 6, synth: 5,    name: 'VOICE', ja: 'こえ',     hue: 335, rgb: '#ff0060', ch: 5, chL2: 12,   table: NOTE_TABLE_NORMAL, shift:  0 },
 ];
 const DRUM_CH = 9, CLICK_CH = 13, PASSTHRU_CH = 15;   // ch16 パススルー = 0-origin の 15
 

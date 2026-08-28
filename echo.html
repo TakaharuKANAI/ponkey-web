@@ -174,7 +174,9 @@ const EV_SLOT_EDIT=0x08, EV_SLOT_DUMP=0x09, EV_SONG_META=0x0A;
 const DUMP_ALL=0xFE;                                    // 0xFE = 中身のある全スロット
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;
 const SLOT_FMT_V2=0xF2;                                 // serializeSlotV2 の形式識別
-const SLOT_COUNT=16, MAX_SUBSTEPS=64, QUANTIZE_RATIO=4, MAX_DUR=64;
+// v4.6.18: スロットは 16→6 (本体の P1+P2〜P7 の6コンボと1対1)。
+//   取り込み画面のマス数だけの話で、旧ファームで取った記録 (スロット7以降) の表示は影響を受けない。
+const SLOT_COUNT=6, MAX_SUBSTEPS=64, QUANTIZE_RATIO=4, MAX_DUR=64;
 // v4.6.0 のパート再編で「1ドラム + 6メロディ」になった (旧: 4ドラム + 3メロディ)。
 //   スロットの形も変わる (オクターブ欄 3→6要素 / ドラムの1件がパートでなくサウンドを指す) ので、
 //   取り込み時に本体の FEAT3_PART_REDESIGN を見て記録に印を付け、表示・書き戻し・共有リンクを出し分ける。
