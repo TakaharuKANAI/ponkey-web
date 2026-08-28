@@ -59,9 +59,11 @@
          background:transparent;color:var(--accent);cursor:pointer}
   button:hover{background:rgba(111,176,184,.12)}
 
+  /* grid-template-rows を明示しないと行が auto (=中身の高さ) になり、
+     盤面が大きい → 行が伸びる → もっと大きく測る、というループになる。必ず 1fr で閉じる。 */
   .wrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(170px,24vw,300px);
-        gap:12px;padding:12px;align-items:stretch}
-  .main{display:flex;flex-direction:column;min-height:0;min-width:0}
+        grid-template-rows:minmax(0,1fr);gap:12px;padding:12px;align-items:stretch}
+  .main{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
   .side{min-height:0;overflow:auto}
   #boardWrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
   /* 横に余裕が無いときだけ縦積み。横に広ければ (低い窓でも) 2カラムのままの方が盤面が大きい */
@@ -94,11 +96,14 @@
        display:flex;flex-direction:column;align-items:center;justify-content:center;
        padding:calc(var(--cell,90px)*.07);text-align:center;overflow:hidden;
        transition:background .08s,border-color .08s;min-width:0;min-height:0}
-  .key .n{position:absolute;top:4%;left:6%;font-size:calc(var(--cell,90px)*.11);color:var(--dim)}
-  .key .big{font-size:calc(var(--cell,90px)*.20);font-weight:600;line-height:1.1;
+  .key .n{position:absolute;top:4%;left:6%;font-size:calc(var(--cell,90px)*.085);color:var(--dim);opacity:.7}
+  /* 文字の大きさは**文字数で決める** (renderBoard が --f を入れる)。
+     「C4」のような短い名前は大きく、「ムートトライアングル」のような長い名前は小さく。
+     1つの倍率では両方を満たせないので、キーごとに決める。 */
+  .key .big{font-size:calc(var(--cell,90px)*var(--f,.14));font-weight:600;line-height:1.15;
             word-break:break-word;max-width:100%}
-  .key .small{font-size:calc(var(--cell,90px)*.115);color:var(--dim);
-              margin-top:calc(var(--cell,90px)*.05);line-height:1.25;max-width:100%}
+  .key .small{font-size:calc(var(--cell,90px)*.082);color:var(--dim);
+              margin-top:calc(var(--cell,90px)*.045);line-height:1.25;max-width:100%}
   .key.on{background:var(--panel2)}
   .key.dim{opacity:.3}
   .key.press{border-color:#fff;background:#2a2f37}
@@ -418,8 +423,20 @@ function renderBoard(){
     c.className='key'+(r.on?' on':'')+(r.dim?' dim':'')+(D.pressed.has(i)?' press':'')
       +(modeOf()==='normal'&&D.step===i&&D.playing?' head':'');
     const big=c.querySelector('.big'); big.textContent=r.big; big.style.color=r.color||'';
+    c.style.setProperty('--f', fontRatio(r.big));
     c.querySelector('.small').textContent=r.small;
   }
+}
+// 文字数 → セルの一辺に対する文字サイズの倍率
+function fontRatio(t){
+  const n=(t||'').length;
+  if(n<=2) return .26;
+  if(n<=3) return .22;
+  if(n<=4) return .18;
+  if(n<=5) return .155;
+  if(n<=7) return .125;
+  if(n<=9) return .105;
+  return .092;
 }
 function renderPkeys(){
   const el=$('pkeys');
@@ -635,16 +652,22 @@ function fit(){
   if(fitQ) return;
   fitQ=setTimeout(()=>{ fitQ=null; doFit(); },0);
 }
+let fitPass=0;
 function doFit(){
   const w=$('boardWrap');
   const aw=w.clientWidth, ah=w.clientHeight;
   if(aw<20||ah<20){ setTimeout(fit,120); return; }   // まだ組み上がっていない → 少し待って測り直す
-  // 盤面に回せる高さが足りないときは説明文を畳む。畳んだら測り直し (次フレーム)
-  const tight = (ah < 300);
-  if(tight !== document.body.classList.contains('tight')){
+  // 盤面に回せる高さが足りないときは説明文を畳む。畳んだら測り直す。
+  //   ⚠ 閾値が1つだと「畳む→高さが増える→畳まない→高さが減る→畳む」で**振動**し、
+  //     --bs が一度も入らないまま既定値のまま残る (実際にそうなった)。ヒステリシスで止める。
+  const has = document.body.classList.contains('tight');
+  const tight = has ? (ah < 340) : (ah < 280);
+  if(tight !== has && fitPass < 3){
+    fitPass++;
     document.body.classList.toggle('tight', tight);
     fit(); return;
   }
+  fitPass = 0;
   const gap = aw<420 ? 4 : (aw<700 ? 6 : 8);
   const side = Math.max(120, Math.floor(Math.min(aw,ah)));
   const cell = Math.floor((side - gap*3)/4);
