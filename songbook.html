@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SONGBOOK</title>
+<meta name="theme-color" content="#f4f1ea">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SONGBOOK">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ライトテーマ (SCALE / GROOVE と同じ骨格)。
+     左 = うたのほん、右 = 選んだ曲の演奏台。 */
+  :root{
+    --bg:#f4f1ea; --panel:#fbfaf6; --panel2:#efece4; --line:#d9d4c8; --txt:#2a2c30; --dim:#8a8d93;
+    --teal:#3f8f98; --red:#b8574b; --amber:#c98a2e; --tint:rgba(63,143,152,.13);
+  }
+  *{box-sizing:border-box;border-radius:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif;margin:0;
+       background:var(--bg);color:var(--txt);font-size:13px;font-weight:300;letter-spacing:.01em;
+       -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+  header{flex:none;background:var(--panel);border-bottom:1px solid var(--line);
+         padding:8px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 10px 0 0;font-weight:400;letter-spacing:.08em}
+  button{font:inherit;font-weight:400;font-size:12.5px;letter-spacing:.04em;padding:7px 12px;
+         border:1px solid var(--line);background:var(--panel);color:var(--txt);cursor:pointer;
+         transition:background .12s,border-color .12s}
+  button:hover{background:var(--panel2);border-color:#bdb7a8}
+  button:disabled{opacity:.4;cursor:default}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.on{border-color:var(--teal);color:var(--teal);background:var(--tint)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim)}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .sep{width:1px;height:22px;background:var(--line)}
+  .hint{font-size:11px;color:var(--dim);line-height:1.5}
+  .how{margin-left:auto}
+  @media(max-width:1100px){.how{display:none}}
+
+  main{flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr}
+  @media(max-width:760px){main{grid-template-columns:1fr;grid-template-rows:auto 1fr}}
+
+  /* ── 左: うたのほん ─────────────────────────────── */
+  aside{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+  #q{font:inherit;font-size:13px;padding:9px 11px;border:0;border-bottom:1px solid var(--line);
+     background:var(--panel2);color:var(--txt);outline:none;width:100%}
+  #songs{flex:1;overflow-y:auto;min-height:0}
+  .grp{font-size:10px;letter-spacing:.16em;color:var(--dim);padding:12px 12px 5px;text-transform:none}
+  .song{padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(217,212,200,.5);display:flex;
+        align-items:baseline;gap:7px}
+  .song:hover{background:var(--panel2)}
+  .song.sel{background:var(--tint);box-shadow:inset 3px 0 0 var(--teal)}
+  .song .t{font-size:14px;font-weight:400}
+  .song .e{font-size:10px;color:var(--dim);margin-left:auto;white-space:nowrap;overflow:hidden;
+           text-overflow:ellipsis;max-width:110px}
+  .song .ck{color:var(--teal);font-size:11px}
+  .song.mine .t::after{content:' ＋';color:var(--amber);font-size:10px}
+
+  /* ── 右: 演奏台 ─────────────────────────────────── */
+  #stage{overflow-y:auto;padding:18px 22px 40px;min-height:0}
+  h2{font-size:26px;font-weight:400;margin:0 0 2px;letter-spacing:.02em}
+  .sub{font-size:11.5px;color:var(--dim);margin-bottom:16px;line-height:1.7}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+  .bar .lb{font-size:11px;color:var(--dim);letter-spacing:.06em}
+  #btnPlay{font-size:14px;padding:9px 22px;border-color:var(--teal);color:var(--teal);background:var(--tint)}
+  input[type=range]{accent-color:var(--teal);vertical-align:middle;width:120px}
+
+  /* 4×4 = 本体の鍵。いま叩いている鍵が光る */
+  #keys{display:grid;grid-template-columns:repeat(4,54px);gap:5px;margin-bottom:16px}
+  .k{height:44px;border:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;
+     align-items:center;justify-content:center;gap:1px;transition:background .06s,border-color .06s}
+  .k .n{font-size:13px;font-weight:400}
+  .k .a{font-size:9px;color:var(--dim)}
+  .k.hit{background:var(--teal);border-color:var(--teal);color:#fff}
+  .k.hit .a{color:rgba(255,255,255,.7)}
+
+  #roll{width:100%;max-width:920px;height:190px;border:1px solid var(--line);background:var(--panel);display:block}
+  .memo{max-width:920px;font-size:12px;color:var(--dim);line-height:1.9;margin-top:14px}
+  .memo b{font-weight:500;color:var(--txt)}
+  .warn{border-left:2px solid var(--amber);padding:8px 12px;background:rgba(201,138,46,.07);
+        font-size:11.5px;line-height:1.8;max-width:920px;margin-top:14px}
+
+  /* ── MIDI 取り込み ──────────────────────────────── */
+  #imp{border-top:1px solid var(--line);padding:12px;background:var(--panel2)}
+  #drop{border:1px dashed #c3bcab;padding:16px 10px;text-align:center;font-size:11.5px;color:var(--dim);
+        cursor:pointer;line-height:1.7}
+  #drop.over{border-color:var(--teal);color:var(--teal);background:var(--tint)}
+  #impBody{display:none;margin-top:10px;font-size:11.5px;color:var(--dim);line-height:1.9}
+  #impBody select,#impBody input[type=text]{font:inherit;font-size:12px;width:100%;padding:5px 7px;
+        border:1px solid var(--line);background:var(--panel);color:var(--txt);margin-top:3px}
+  #impBody .row{margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
+  <h1>SONGBOOK</h1>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <span class="sep"></span>
+  <button id="btnSam" class="on" title="PONKEY の内蔵音源でも鳴らす (要ファーム v4.5.65+。古いファームだと鍵が余計に動くので OFF に)">本体の音</button>
+  <button id="btnPrev" class="on" title="パソコン/スマホのスピーカーから音を出す。本体が無くても曲を確かめられる">試聴</button>
+  <span class="hint how">えらぶ → ▶ で PONKEY が弾く ・ 本体が無くても「試聴」で音は出ます</span>
+</header>
+
+<main>
+  <aside>
+    <input id="q" type="text" placeholder="きらきら星、jingle、どうよう…" autocomplete="off">
+    <div id="songs"></div>
+    <div id="imp">
+      <div id="drop">MIDI を ここに落とす<br><span style="font-size:10.5px">白鍵16音に作りなおして、うたのほんに足します</span></div>
+      <input type="file" id="file" accept=".mid,.midi,audio/midi" style="display:none">
+      <div id="impBody">
+        <div class="row">曲の名前<input type="text" id="impName"></div>
+        <div class="row">どのパートを弾く？<select id="impPart"></select></div>
+        <div class="row" id="impRep"></div>
+        <button id="impAdd" class="primary" style="width:100%">うたのほんに入れる</button>
+      </div>
+    </div>
+  </aside>
+
+  <section id="stage">
+    <h2 id="ttl">—</h2>
+    <div class="sub" id="sub"></div>
+
+    <div class="bar">
+      <button id="btnPlay">▶ さいしょから</button>
+      <button id="btnStop">■ とめる</button>
+      <button id="btnLoop">くりかえし</button>
+      <span class="sep"></span>
+      <span class="lb">はやさ</span><input type="range" id="bpm" min="40" max="200" value="112">
+      <span class="lb" id="bpmV" style="width:52px">112</span>
+      <span class="sep"></span>
+      <span class="lb">たかさ</span>
+      <button id="trDn">−</button><span class="lb" id="trV" style="width:34px;text-align:center">0</span><button id="trUp">＋</button>
+      <span class="sep"></span>
+      <button id="btnOk">みみで たしかめた</button>
+      <button id="btnDel" style="display:none">この曲をけす</button>
+    </div>
+
+    <div id="keys"></div>
+    <canvas id="roll"></canvas>
+    <div class="memo" id="memo"></div>
+    <div class="warn" id="warn" style="display:none"></div>
+  </section>
+</main>
+
+<script src="ponkey.js"></script>
+<script src="songbook.js"></script>
+<script>
+'use strict';
+const SB = window.Songbook;
+const DEG_KEY = SB.degKeyTable();        // 度数0-15 → 本体の鍵番号0-15 (正本は ponkey.js の表)
+const LIVE_CH = (window.Ponkey && Ponkey.PASSTHRU_CH) || 15;   // ch16 パススルー = 内蔵音源
+
+let pk = null, sam = true, prev = true;
+let cur = null, curEv = null, transpose = 0, bpm = 112, loop = false;
+let timers = [], raf = 0, playT0 = 0, playing = false;
+
+// 「みみで たしかめた」印 と、取り込んだ曲は端末に残す
+const OK_KEY = 'ponkey_songbook_ok_v01', ADD_KEY = 'ponkey_songbook_add_v01';
+const okSet = load(OK_KEY, {}), mine = load(ADD_KEY, []);
+function load(k, def) { try { return JSON.parse(localStorage.getItem(k)) || def; } catch (_) { return def; } }
+function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+
+// ============================================================ BLE
+function writeMIDI(s, d1, d2) { if (!pk || !pk.midiChar) return; return pk.sendMIDI(s, d1, d2).catch(() => {}); }
+function setConn(ok) {
+  const e = document.getElementById('conn');
+  e.className = 'pill ' + (ok ? 'ok' : 'ng'); e.textContent = ok ? '接続中' : '未接続';
+  document.getElementById('btnConnect').textContent = ok ? '切断' : '接続';
+}
+document.getElementById('btnConnect').onclick = async () => {
+  if (pk) { try { pk.disconnect(); } catch (_) {} return; }
+  try {
+    const p = new Ponkey();
+    p.on('disconnect', () => { pk = null; setConn(false); });
+    await p.connect({ debug: false });        // MIDI だけでよい (鍵を叩くのと内蔵音源のパススルー)
+    pk = p; setConn(true); setupSam();
+  } catch (e) { console.warn(e); }
+};
+// 内蔵音源 (ch16 パススルー) の下ごしらえ。DRAWING と同じ窓口
+function setupSam() {
+  if (!pk || !sam) return;
+  writeMIDI(0xC0 | LIVE_CH, 11, 0);      // Vibraphone: 減衰する音なので旋律が追いやすい
+  writeMIDI(0xB0 | LIVE_CH, 7, 105);
+  writeMIDI(0xB0 | LIVE_CH, 91, 90);
+  writeMIDI(0xB0 | LIVE_CH, 10, 64);
+}
+
+// ============================================================ 音 (試聴)
+let ac = null;
+function beep(deg, ms) {
+  if (!prev) return;
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === 'suspended') ac.resume();
+  const f = 440 * Math.pow(2, (SB.DEG_NOTE[deg] - 69) / 12);
+  const t = ac.currentTime, g = ac.createGain(), o = ac.createOscillator();
+  o.type = 'triangle'; o.frequency.value = f;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(.19, t + .008);
+  g.gain.exponentialRampToValueAtTime(.0001, t + Math.max(.14, ms / 1000 * .9));
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + Math.max(.2, ms / 1000 + .1));
+}
+
+// ============================================================ うたのほん
+function allSongs() { return SB.SONGS.concat(mine); }
+function compile(song) {
+  try { return SB.parseNotation(song.notes); }
+  catch (e) { console.warn(song.id, e); return { events: [], len: 0, err: e.message }; }
+}
+function renderList() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const list = allSongs().filter(s => !q ||
+    (s.ja + ' ' + (s.kana || '') + ' ' + (s.en || '') + ' ' + s.cat).toLowerCase().includes(q));
+  const cats = [];
+  for (const s of list) if (!cats.includes(s.cat)) cats.push(s.cat);
+  let h = '';
+  for (const c of cats) {
+    h += '<div class="grp">' + esc(c) + '</div>';
+    for (const s of list.filter(x => x.cat === c)) {
+      h += '<div class="song' + (cur && cur.id === s.id ? ' sel' : '') + (s.mine ? ' mine' : '') +
+           '" data-id="' + esc(s.id) + '"><span class="t">' + esc(s.ja) + '</span>' +
+           (okSet[s.id] ? '<span class="ck">✓</span>' : '') +
+           '<span class="e">' + esc(s.en || '') + '</span></div>';
+    }
+  }
+  document.getElementById('songs').innerHTML = h || '<div class="grp">みつかりません</div>';
+  document.querySelectorAll('.song').forEach(el => el.onclick = () => select(el.dataset.id));
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function select(id) {
+  stop();
+  const s = allSongs().find(x => x.id === id);
+  if (!s) return;
+  cur = s; curEv = compile(s); transpose = 0; bpm = s.bpm || 112; loop = false;
+  document.getElementById('bpm').value = bpm; document.getElementById('bpmV').textContent = bpm;
+  document.getElementById('trV').textContent = '0';
+  document.getElementById('btnLoop').classList.remove('on');
+  document.getElementById('ttl').textContent = s.ja;
+  document.getElementById('sub').innerHTML =
+    esc(s.en || '') + (s.en ? ' ・ ' : '') + '<b>' + esc(s.pd || '') + '</b>';
+  const n = curEv.events.length;
+  document.getElementById('memo').innerHTML =
+    (s.memo ? esc(s.memo) + '<br>' : '') +
+    '音の数 <b>' + n + '</b> ・ 長さ <b>' + (curEv.len / 4).toFixed(0) + '</b> 拍 ・ ' +
+    '使う鍵 <b>' + new Set(curEv.events.map(e => e.deg)).size + '</b> 本' +
+    (curEv.err ? '<br><span style="color:var(--red)">' + esc(curEv.err) + '</span>' : '');
+  document.getElementById('btnOk').classList.toggle('on', !!okSet[s.id]);
+  document.getElementById('btnOk').textContent = okSet[s.id] ? '✓ たしかめた' : 'みみで たしかめた';
+  document.getElementById('btnDel').style.display = s.mine ? '' : 'none';
+  updWarn(); renderList(); drawRoll();
+}
+
+// たかさ(移調)で16鍵からはみ出す音があれば正直に出す
+function updWarn() {
+  const w = document.getElementById('warn');
+  if (!curEv) { w.style.display = 'none'; return; }
+  const out = curEv.events.filter(e => e.deg + transpose < 0 || e.deg + transpose > 15).length;
+  if (!out) { w.style.display = 'none'; return; }
+  w.style.display = ''; w.innerHTML = 'この たかさ だと <b>' + out + '</b> 個の音が16鍵からはみ出します。' +
+    'はみ出した音はいちばん上か下の鍵で鳴ります（ちがう音になります）。';
+}
+function degOf(e) { return Math.max(0, Math.min(15, e.deg + transpose)); }
+
+// ============================================================ 演奏
+function fire(deg, durMs) {
+  const key = DEG_KEY[deg];
+  writeMIDI(0x90, key, 100);                                  // ソレノイドが鍵を叩く
+  if (sam) {                                                  // 内蔵音源でも鳴らす (ch16)
+    const n = SB.DEG_NOTE[deg];
+    writeMIDI(0x90 | LIVE_CH, n, 100);
+    setTimeout(() => writeMIDI(0x80 | LIVE_CH, n, 0), Math.max(120, durMs));
+  }
+  beep(deg, durMs);
+  const el = document.querySelector('.k[data-d="' + deg + '"]');
+  if (el) { el.classList.add('hit'); setTimeout(() => el.classList.remove('hit'), Math.min(400, Math.max(90, durMs))); }
+}
+function play() {
+  stop();
+  if (!curEv || !curEv.events.length) return;
+  playing = true; document.getElementById('btnPlay').textContent = '▶ えんそう中';
+  const unit = 60000 / bpm / 4;
+  playT0 = performance.now() + 150;
+  curEv.events.forEach(e => {
+    timers.push(setTimeout(() => fire(degOf(e), e.dur * unit), Math.max(0, playT0 + e.t * unit - performance.now())));
+  });
+  timers.push(setTimeout(() => { if (loop) play(); else stop(); },
+    Math.max(0, playT0 + (curEv.len + 4) * unit - performance.now())));
+  tick();
+}
+function stop() {
+  timers.forEach(clearTimeout); timers = [];
+  if (raf) cancelAnimationFrame(raf), raf = 0;
+  playing = false;
+  document.getElementById('btnPlay').textContent = '▶ さいしょから';
+  if (sam) writeMIDI(0xB0 | LIVE_CH, 123, 0);                 // All Notes Off
+  document.querySelectorAll('.k.hit').forEach(el => el.classList.remove('hit'));
+  drawRoll();
+}
+function tick() { drawRoll(); raf = requestAnimationFrame(tick); }
+
+// ============================================================ 画面
+function buildKeys() {
+  // 本体と同じ 4×4 の並び。左上=鍵0。上の段ほど高い音 (ファームの NOTE_TABLE_NORMAL がその並び)
+  const t = (window.Ponkey && Ponkey.NOTE_TABLE_NORMAL) || [69,71,72,74,62,64,65,67,55,57,59,60,48,50,52,53];
+  let h = '';
+  for (let k = 0; k < 16; k++) {
+    const deg = SB.DEG_NOTE.indexOf(t[k]);
+    h += '<div class="k" data-d="' + deg + '" data-k="' + k + '"><span class="n">' +
+         SB.DEG_NAME[deg] + '</span><span class="a">' + SB.DEG_ABC[deg] + '</span></div>';
+  }
+  const el = document.getElementById('keys');
+  el.innerHTML = h;
+  el.querySelectorAll('.k').forEach(e => e.onclick = () => fire(+e.dataset.d, 260));
+}
+function drawRoll() {
+  const c = document.getElementById('roll'), dpr = Math.min(2, devicePixelRatio || 1);
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
+  const x = c.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, h);
+  if (!curEv || !curEv.len) return;
+  const rowH = h / 16, sx = (w - 8) / curEv.len;
+  // 白鍵のはしご。ドの行だけ濃くする
+  for (let d = 0; d < 16; d++) {
+    x.fillStyle = (d % 7 === 0) ? '#e8e3d7' : '#f6f3ec';
+    x.fillRect(0, h - (d + 1) * rowH, w, rowH - 1);
+  }
+  for (const e of curEv.events) {
+    const d = degOf(e);
+    x.fillStyle = '#3f8f98';
+    x.fillRect(4 + e.t * sx, h - (d + 1) * rowH + 1, Math.max(2, e.dur * sx - 1), rowH - 3);
+  }
+  if (playing) {
+    const u = (performance.now() - playT0) / (60000 / bpm / 4);
+    if (u >= 0) { x.fillStyle = '#b8574b'; x.fillRect(4 + Math.min(u, curEv.len) * sx, 0, 1.5, h); }
+  }
+}
+addEventListener('resize', drawRoll);
+
+// ============================================================ そうさ
+document.getElementById('q').oninput = renderList;
+document.getElementById('btnPlay').onclick = play;
+document.getElementById('btnStop').onclick = stop;
+document.getElementById('btnLoop').onclick = e => { loop = !loop; e.target.classList.toggle('on', loop); };
+document.getElementById('bpm').oninput = e => { bpm = +e.target.value; document.getElementById('bpmV').textContent = bpm; };
+document.getElementById('trUp').onclick = () => { transpose++; afterTr(); };
+document.getElementById('trDn').onclick = () => { transpose--; afterTr(); };
+function afterTr() { document.getElementById('trV').textContent = (transpose > 0 ? '+' : '') + transpose; updWarn(); drawRoll(); }
+document.getElementById('btnSam').onclick = e => { sam = !sam; e.target.classList.toggle('on', sam); if (sam) setupSam(); };
+document.getElementById('btnPrev').onclick = e => { prev = !prev; e.target.classList.toggle('on', prev); };
+document.getElementById('btnOk').onclick = () => {
+  if (!cur) return;
+  if (okSet[cur.id]) delete okSet[cur.id]; else okSet[cur.id] = 1;
+  save(OK_KEY, okSet); select(cur.id);
+};
+document.getElementById('btnDel').onclick = () => {
+  if (!cur || !cur.mine) return;
+  const i = mine.findIndex(s => s.id === cur.id);
+  if (i >= 0) { mine.splice(i, 1); save(ADD_KEY, mine); cur = null; renderList(); location.reload(); }
+};
+
+// ============================================================ MIDI 取り込み
+let impSMF = null, impFit = null;
+const drop = document.getElementById('drop'), fileIn = document.getElementById('file');
+drop.onclick = () => fileIn.click();
+fileIn.onchange = e => { if (e.target.files[0]) readMIDI(e.target.files[0]); };
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) readMIDI(f); });
+
+function readMIDI(f) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      impSMF = SB.parseSMF(r.result);
+      const mp = SB.midiParts(impSMF);
+      if (!mp.parts.length) throw new Error('鳴らせる音が入っていません');
+      const sel = document.getElementById('impPart');
+      sel.innerHTML = mp.parts.map(p =>
+        '<option value="' + p.key + '"' + (mp.best && p.key === mp.best.key ? ' selected' : '') + '>' +
+        'トラック' + (p.track + 1) + ' ch' + (p.ch + 1) + ' — ' + p.count + '音 (たかさ平均 ' + p.avg.toFixed(0) + ')</option>').join('');
+      document.getElementById('impName').value = f.name.replace(/\.(mid|midi)$/i, '');
+      document.getElementById('impBody').style.display = 'block';
+      refit();
+    } catch (e) {
+      document.getElementById('impBody').style.display = 'none';
+      drop.innerHTML = '<span style="color:var(--red)">' + esc(e.message) + '</span><br>' +
+                       '<span style="font-size:10.5px">べつの MIDI を落としてみてください</span>';
+    }
+  };
+  r.readAsArrayBuffer(f);
+}
+document.getElementById('impPart').onchange = refit;
+function refit() {
+  try {
+    impFit = SB.fitToPonkey(impSMF, { part: document.getElementById('impPart').value });
+    const r = impFit.report;
+    document.getElementById('impRep').innerHTML =
+      '拾った音 <b>' + r.total + '</b> ／ 黒鍵を白鍵へ寄せた <b>' + r.snapped + '</b> ／ ' +
+      '16鍵の外だったので折り返した <b>' + r.folded + '</b><br>' + esc(r.key);
+  } catch (e) {
+    impFit = null;
+    document.getElementById('impRep').innerHTML = '<span style="color:var(--red)">' + esc(e.message) + '</span>';
+  }
+}
+document.getElementById('impAdd').onclick = () => {
+  if (!impFit) return;
+  const name = document.getElementById('impName').value.trim() || 'なまえのない曲';
+  const s = {
+    id: 'my_' + Date.now().toString(36), ja: name, kana: name, en: '', cat: 'いれた曲', mine: true,
+    bpm: Math.max(40, Math.min(200, impFit.report.bpm || 112)),
+    pd: '自分で入れた MIDI（著作権は自分で確かめること）',
+    memo: '取り込み: 黒鍵を寄せた ' + impFit.report.snapped + '音 / 折り返した ' + impFit.report.folded + '音',
+    notes: SB.toNotation(impFit.events),
+  };
+  mine.push(s); save(ADD_KEY, mine);
+  document.getElementById('impBody').style.display = 'none';
+  drop.innerHTML = 'MIDI を ここに落とす<br><span style="font-size:10.5px">白鍵16音に作りなおして、うたのほんに足します</span>';
+  renderList(); select(s.id);
+};
+
+// ============================================================ 起動
+buildKeys(); renderList(); select('twinkle');
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); playing ? stop() : play(); }
+});
+</script>
+</body>
+</html>
