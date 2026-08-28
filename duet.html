@@ -602,7 +602,7 @@ function initDrumInst() {
 
   const vol = new Tone.Volume(-4).toDestination();
 
-  // 0: KICK — exact v33 config
+  // 0: キック系 (列1) — exact v33 config
   drumInst[0] = new Tone.MembraneSynth({
     pitchDecay: 0.08, octaves: 6,
     oscillator: {type:'sine'},
@@ -610,7 +610,7 @@ function initDrumInst() {
   }).connect(vol);
   drumInst[0].volume.value = 6;
 
-  // 1: SNARE — NoiseSynth + tonal layer
+  // 1: スネア系 (列2) — NoiseSynth + tonal layer
   drumInst[1] = new Tone.NoiseSynth({
     noise:{type:'white'},
     envelope:{attack:.001,decay:.14,sustain:0,release:.05}
@@ -621,14 +621,14 @@ function initDrumInst() {
     envelope:{attack:.001,decay:.08,sustain:0,release:.04}
   }).connect(vol);
 
-  // 2: HAT — MetalSynth
+  // 2: ハット系 (列3) — MetalSynth
   drumInst[2] = new Tone.MetalSynth({
     frequency:400, envelope:{attack:.001,decay:.08,release:.01},
     harmonicity:5.1, modulationIndex:32, resonance:4000, octaves:1.5
   }).connect(vol);
   drumInst[2].volume.value = 2;
 
-  // 3: PERC (conga) — higher MembraneSynth
+  // 3: パーカッション系 (列4) — higher MembraneSynth
   drumInst[3] = new Tone.MembraneSynth({
     pitchDecay:.05, octaves:2,
     oscillator:{type:'sine'},
