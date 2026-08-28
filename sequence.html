@@ -71,7 +71,7 @@
   .seqslot.add{cursor:pointer;font-size:24px;color:var(--dim);flex:0 0 56px;border-style:solid;border-color:var(--line)}
   .seqslot.add:hover{color:var(--teal);border-color:var(--teal)}
   /* mini pattern monitor (7 parts × 16 steps): ティール=ドラム / レッド=シンセ on 黒 */
-  .mini{display:grid;grid-template-columns:repeat(16,1fr);grid-template-rows:repeat(7,1fr);gap:1px;
+  .mini{display:grid;grid-template-columns:repeat(16,1fr);grid-template-rows:repeat(10,1fr);gap:1px;
         width:100%;height:62px;background:#0a0b0e;padding:3px}
   .mini i{background:#23262c}
   .mini i.d{background:var(--teal)}   /* drum on */
@@ -79,6 +79,14 @@
   /* editor */
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
   .lab{font-size:11px;color:var(--dim);width:48px;flex:none}
+  /* v4.6: ドラムは16音。行を詰めて一覧できるように */
+  .drum-row{margin:1px 0}
+  .lab.kit{width:74px;font-size:10px;cursor:pointer;letter-spacing:0;overflow:hidden;
+           text-overflow:ellipsis;white-space:nowrap}
+  .lab.kit:hover{text-decoration:underline}
+  .drum-row.lane .lab.kit{font-weight:600;text-decoration:underline}
+  .drum-row .cell{aspect-ratio:auto;height:13px}
+  .cell.head{box-shadow:inset 0 0 0 2px var(--red)}
   .grid{display:grid;gap:2px}
   .cell{width:100%;aspect-ratio:1;background:var(--panel2);border:1px solid var(--line);cursor:pointer}
   .cell.on{background:var(--teal);border-color:var(--teal)}
@@ -145,21 +153,13 @@
   <button class="ghost" id="btnImport">読み込み</button>
   <input type="file" id="file" accept="application/json" style="display:none">
 </header>
-<!-- ファーム v4.6.0 のパート再編 (P1=ドラムキット / P2-P7=メロディ6パート、
-     ドラムのタイムライン編集そのものが廃止) にこのアプリはまだ追従していない。
-     何を出すかから決め直しになるので、それまでは開いた人に一言伝える。 -->
-<div style="margin:10px 12px;padding:9px 12px;border:1px solid #c96a5e;border-radius:3px;
-            background:rgba(201,106,94,.09);color:#c96a5e;font-size:11.5px;line-height:1.6">
-  <b>このアプリは今の本体 (ファーム v4.6) に未対応です。</b>
-  v4.6 で P1 がドラムキット (16音)、P2-P7 がメロディ6パートに変わり、ドラムのステップ編集も廃止されました。
-  つないでも表示と本体が食い違います。作り直すまでの間はご了承ください。
-</div>
+
 
 
 <!-- ===== TOP: library + sequence ===== -->
 <div class="pad top">
   <div class="panel" id="libPanel">
-    <h2>スロット <span style="text-transform:none">(1〜160)</span> <span class="pill" id="libCount">0</span></h2>
+    <h2>スロット <span style="text-transform:none">(1〜160 / 本体へは同時に6つまで)</span> <span class="pill" id="libCount">0</span></h2>
     <div class="libhint">クリックで下に編集。ダブルクリックでシーケンスに追加。選択して <b>Ctrl/⌘+C</b> コピー → 別スロットで <b>+V</b> で複製。</div>
     <div class="libgrid" id="libgrid"></div>
     <div class="row">
@@ -170,7 +170,9 @@
 
   <div class="panel">
     <h2>シーケンス (スロットシーケンス) <span class="pill" id="seqInfo"></span></h2>
-    <div class="libhint">スロットを<b>ダブルクリック</b>で末尾に追加。✕で削除。＋でコマを増やす。各コマ内はそのスロットのパターン(7パート×16ステップ)のモニタ。変更は自動で本体へ。</div>
+    <div class="libhint"><b>本体はチェーンを持たなくなった (v4.6.18) ので、曲の組み立てはこのアプリの担当。</b>
+      スロットを<b>ダブルクリック</b>で末尾に追加。✕で削除。＋でコマを増やす。
+      各コマ内のモニタは上4行=ドラムの系統・下6行=メロディ。変更は自動で本体へ。</div>
     <div class="seqwrap" id="seqwrap"></div>
   </div>
 </div>
@@ -189,10 +191,15 @@
       <span class="mute-seg" id="muteSeg"></span>
     </div>
 
-    <h2 style="margin-top:10px">ドラム</h2>
+    <div class="row" style="margin-top:10px">
+      <h2 style="margin:0">ドラム <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(16打楽器 × ステップ。行の名前をクリックで本体に出すレーンを選ぶ)</span></h2>
+      <span style="flex:1"></span>
+      <button id="btnLane">本体で編集</button>
+      <span class="hint" id="laneNow"></span>
+    </div>
     <div id="drumGrid"></div>
 
-    <h2 style="margin-top:14px">シンセ (バー表示・グリッド外の音もそのまま表示)</h2>
+    <h2 style="margin-top:14px">メロディ P2-P7 (バー表示・グリッド外の音もそのまま表示)</h2>
     <div class="row">
       <div class="tabs" id="synthTabs"></div>
       <label class="hint">オクターブ <input type="range" id="oct" min="-8" max="7" value="0"><b id="octv">0</b></label>
@@ -226,25 +233,60 @@
 // ============================================================ 定数 (ファーム一致)
 const CC_PLAY_STOP=0x40, CC_BPM=0x41, CC_GROOVE_SWING=0x35, CC_GROOVE_ACCENT=0x36;  // v4.5.63 グルーブ
 const CAT_SONG=0x09, EV_SLOT_EDIT=0x08;
-const DEVICE_SLOTS=16, LIB_MAX=160, PAGE_SIZE=16;
-const PARTS=['KICK','SNARE','HAT','TOM','BASS','LEAD','PAD'], SYNTH=['BASS','LEAD','PAD'];
-// ファームのパート色(KICK赤/SNARE緑/HAT青/TOMマゼンタ/BASSシアン/LEAD黄/PADオレンジ)を
-// 彩度を落とした落ち着いたトーンにしてUIへ反映。
-const PART_COLORS=['#c96a5e','#7fa06b','#5f8bbf','#a673a8','#5fb0b0','#c2a85a','#cc8a5e'];
+// v4.6.18: 本体スロットは 6 (P1+P2〜P7 の6コンボと1対1)。ライブラリはアプリ側に 160 持つ。
+const DEVICE_SLOTS=6, LIB_MAX=160, PAGE_SIZE=16;
+// v4.6.0: P1 = ドラムキット1パート (16打楽器・列=系統) / P2-P7 = メロディ6パート。
+//   表の正本は ponkey.js の Ponkey.PARTS。
+const MEL_PARTS=Ponkey.PARTS.slice(1);
+const SYNTH=MEL_PARTS.map(p=>p.name);                  // KEYS/LEAD/BASS/CHORD/BELL/VOICE
+const PARTS=['DRUM',...SYNTH];                         // ミュート/ソロの並び (index 0 = P1)
+const KIT_SOUNDS=['バスドラ','スネア','クローズHH','タンバリン',
+                  '低フロアタム','リムショット','ペダルHH','カウベル',
+                  '低コンガ','クラベス','ライド','木ブロック高',
+                  '中低タム','クラップ','オープンHH','ﾑｰﾄﾄﾗｲｱﾝｸﾞﾙ'];
+const KIT_COL=Ponkey.KIT_COL_NAMES;                    // キック/スネア/ハット/パーカッション
+// 暗い地でも読める落ち着いたトーンに落としたパート色 (色相はファームの PART_BASE_HUE)
+const dim=(h,s2=38,l=52)=>`hsl(${h} ${s2}% ${l}%)`;
+const PART_COLORS=Ponkey.PARTS.map(p=>dim(p.hue));     // index 0 = ドラム, 1-6 = メロディ
+const KIT_COL_COLORS=[dim(2),dim(130),dim(220),dim(325)];   // 列 = 系統 (キック/スネア/ハット/パーカス)
 
 // ============================================================ 状態
 const store={ loops:[], seq:[], seqCap:8, mute:0, solo:0, bpm:120 };
 let sel=0, page=0, synthTab=0;
+// ── 本体編集 (v4.6): グリッドを claim して「選んだサウンドの16ステップ」を本体に出す ──
+//   PONKEY のコンセプト「アプリによって本体の動きが大胆に変わる」の実装。ファームは無改修で、
+//   claim(grid) → 本体のグリッド処理を止める / DBG_EV_KEY_* は届く / LED_FRAME で描く、の3点だけ。
+//   claim は Fn 2秒長押しと切断でファーム側から必ず解除される。
+let laneSound=0;        // 本体グリッドに出しているキット音 (0-15)
+let laneOn=false;       // 本体編集 ON か
+let playHead=-1;        // CC_BAR_SYNC で来る再生位置
 let pk=null, connected=false;
 const chunkAsm={}; let slotMap=[];
 const LS='ponkey_song_v02';
-function emptyLoop(){return{name:'',loopLen:64,oct:[0,0,0],drums:[],synth:[]};}
+// drums = [サウンド(0-15), ステップ(0-15)] の配列 (v4.6: 1バイトが (サウンド<<4)|ステップ)
+// synth = [パート(0-5), キー(0-15), startSub, dur] の配列
+function emptyLoop(){return{name:'',loopLen:64,oct:new Array(MEL_PARTS.length).fill(0),drums:[],synth:[]};}
 function save(){try{localStorage.setItem(LS,JSON.stringify(store));}catch(e){}}
 function load(){try{const o=JSON.parse(localStorage.getItem(LS));if(o&&o.loops)Object.assign(store,o);}catch(e){}
+  // v4.6 移行: 旧データ (oct 3要素 / ドラムが4パート / シンセ3パート) は構造が違うので、
+  //   オクターブだけ広げて**ドラムとシンセは捨てる** (パート番号の意味が変わっており、
+  //   そのまま読むと別のサウンド・別のパートに化けるため)。
+  let migrated=0;
+  store.loops=(store.loops||[]).map(L=>{
+    if(!L)return L;
+    const old=(Array.isArray(L.oct)&&L.oct.length===3);
+    if(old){ migrated++; return {name:L.name||'',loopLen:L.loopLen||64,
+                                 oct:new Array(MEL_PARTS.length).fill(0),drums:[],synth:[]}; }
+    L.oct=padOct(L.oct); return L;
+  });
+  if(migrated)setTimeout(()=>log(`⚠ 旧形式のスロット ${migrated}件は中身を読み捨てました (v4.6 でドラムとパートの意味が変わったため)`),0);
   if(!store.loops.length)store.loops=[emptyLoop()]; if(!store.loops[0])store.loops[0]=emptyLoop();
   if(!store.seqCap)store.seqCap=8;
   if(!store.seq||!store.seq.length)store.seq=[0];   // 初期: スロット1 をシーケンスに入れておく
 }
+// 旧形式 (3要素) で保存されたループを 6要素へ広げる
+function padOct(o){const a=Array.isArray(o)?o.slice(0,MEL_PARTS.length):[];
+  while(a.length<MEL_PARTS.length)a.push(0); return a;}
 function log(m){const e=document.getElementById('log');e.innerHTML+=`[${new Date().toLocaleTimeString()}] ${m}<br>`;e.scrollTop=e.scrollHeight;}
 function loopHasData(L){return L&&(L.drums.length||L.synth.length);}
 function curLoop(){if(!store.loops[sel])store.loops[sel]=emptyLoop();return store.loops[sel];}
@@ -253,8 +295,14 @@ function curLoop(){if(!store.loops[sel])store.loops[sel]=emptyLoop();return stor
 document.getElementById('btnConnect').onclick=async()=>{ try{
   log('デバイス選択…');
   pk=new Ponkey();
-  pk.on('disconnect',()=>{setConn(false);log('切断 (本体は自動でソングモードを退場し、切断時のスロットを単体ループ継続)');});
+  pk.on('disconnect',()=>{setConn(false);laneOn=false;renderLaneUI();
+    log('切断 (本体は自動でソングモードを退場し、切断時のスロットを単体ループ継続)');});
   pk.on('dbg',onDbg);
+  pk.on('keydown',e=>onDeviceKey(e.key));                       // claim 中の本体キー = ステップ
+  pk.on('cc',e=>{ if(e.cc===CC_BAR_SYNC){ const h=e.val&0x0F;
+      if(h!==playHead){ playHead=h; if(laneOn)paintLane(); renderHeadCells(); } } });
+  pk.on('claim',c=>{ if(laneOn&&!c.grid){ laneOn=false; renderLaneUI();
+      log('本体編集: 本体側で解除されました (Fn 長押し)'); } });
   await pk.connect({namePrefix:'PONKEY_PT2',debug:true});
   if(!pk.dbgCmdChar) throw 'デバッグサービスに接続できません';
   setConn(true); log('接続完了');
@@ -278,7 +326,9 @@ function setConn(c){connected=c;
 function setSync(t){document.getElementById('syncPill').textContent='自動同期: '+t;}
 
 // ============================================================ エンコード
-function encodeLoop(L){const b=[L.loopLen||64,L.oct[0]&0xff,L.oct[1]&0xff,L.oct[2]&0xff];
+// LOAD_SLOT (V1): [loopLen][oct×6][drumCnt]{(サウンド<<4)|ステップ}[synCnt]{(パート<<4)|キー,sub,dur}
+//   v4.6.0 でオクターブ欄が 3→6 要素、ドラムの1バイトが (サウンド<<4)|ステップ に意味変更された。
+function encodeLoop(L){const b=[L.loopLen||64,...padOct(L.oct).map(o=>o&0xff)];
   b.push(L.drums.length); for(const[p,s]of L.drums)b.push(((p&0xf)<<4)|(s&0xf));
   b.push(L.synth.length); for(const[l,k,sub,du]of L.synth)b.push(((l&0xf)<<4)|(k&0xf),sub&0x3f,du&0x3f);
   return b;}
@@ -326,13 +376,57 @@ function onDbg({cat,ev,data}){
   applyDeviceEdit(full);
 }
 function applyDeviceEdit(d){let i=0;const slotIdx=d[i++],loopLen=d[i++];
-  const oct=[d[i++],d[i++],d[i++]].map(v=>(v<<24)>>24);
+  const oct=[];for(let n=0;n<MEL_PARTS.length;n++)oct.push((d[i++]<<24)>>24);   // v4.6: 6要素
   const dc=d[i++],drums=[];for(let n=0;n<dc;n++){const x=d[i++];drums.push([(x>>4)&0xf,x&0xf]);}
   const sc=d[i++],synth=[];for(let n=0;n<sc;n++){const x=d[i++],s=d[i++],du=d[i++];synth.push([(x>>4)&0xf,x&0xf,s,du]);}  // du: bit7=レイヤー, bit0-6=長さ (v4.5.49〜)。表示側で &0x7f する
   const li=slotMap[slotIdx]; if(li==null){log(`本体編集 slot${slotIdx}(対応ループ不明・無視)`);return;}
   const L=store.loops[li]; L.loopLen=loopLen;L.oct=oct;L.drums=drums;L.synth=synth; save(); // 後勝ち
   log(`◀ 本体編集を反映: slot${slotIdx}→#${li} (drum${dc}/syn${sc})`);
   if(li===sel)renderEditor(); renderLibrary(); renderSeq();
+}
+
+// ============================================================ 本体編集 (claim)
+const CC_BAR_SYNC=0x54;
+const LANE_OFF=[8,8,10], LANE_HEAD=[255,255,255];
+const KIT_LED=[[255,32,32],[32,255,64],[32,96,255],[255,32,160]];   // 列=系統 (ファーム KIT_COL_RGB)
+function paintLane(){
+  if(!laneOn||!pk)return;
+  const L=curLoop(), col=KIT_LED[laneSound%4], st=steps();
+  const frame=[];
+  for(let s=0;s<16;s++){
+    if(s>=st) frame.push([0,0,0]);              // ループ長の外は消灯
+    else if(s===playHead) frame.push(LANE_HEAD);
+    else if(drumHas(L,laneSound,s)) frame.push(col);
+    else frame.push(LANE_OFF);
+  }
+  pk.ledFrame(frame).catch(()=>{});
+}
+async function laneEnter(){
+  if(!connected||!pk?.dbgCmdChar){log('本体に接続してから押してください');return;}
+  laneOn=true;
+  try{ await pk.claim({grid:true}); await pk.subscribeKeys(); }
+  catch(e){ log('本体編集 開始失敗: '+e); laneOn=false; }
+  renderLaneUI(); paintLane();
+  log(`本体編集 ON — 本体のグリッド = 「${KIT_SOUNDS[laneSound]}」の16ステップ (Fn 2秒長押しで解除)`);
+}
+async function laneExit(){
+  laneOn=false;
+  try{ await pk?.release(); await pk?.ledClear(); await pk?.unsubscribeCat(0x02); }catch(e){}
+  renderLaneUI(); log('本体編集 OFF (本体を返しました)');
+}
+function renderLaneUI(){
+  const b=document.getElementById('btnLane'); if(!b)return;
+  b.textContent=laneOn?'本体編集 OFF':'本体で編集';
+  b.classList.toggle('primary',laneOn);
+  const n=document.getElementById('laneNow');
+  if(n)n.textContent=laneOn?`本体のグリッド = ${KIT_SOUNDS[laneSound]} (${KIT_COL[laneSound%4]}系) の16ステップ`:'';
+}
+// 本体のキーが押された = そのステップをトグル (claim 中なので本体側は何もしない)
+function onDeviceKey(k){
+  if(!laneOn||k<0||k>15)return;
+  if(k>=steps())return;                          // ループ長の外は無視
+  toggleDrum(curLoop(),laneSound,k);
+  renderEditor(); renderSeq(); save(); pushLoop(sel); paintLane();
 }
 
 // ============================================================ ライブラリ
@@ -355,10 +449,15 @@ document.getElementById('btnClearLoop').onclick=()=>{store.loops[sel].drums=[];s
 
 // ============================================================ シーケンス スロット
 // 各コマ内のミニパターン: 7パート(ドラム4+シンセ3)×16ステップを小さな点で描画(モニタ用)。
+// v4.6: 上4行 = ドラムの4系統 (列 サウンド%4 = キック/スネア/ハット/パーカス) /
+//        下6行 = メロディ P2-P7。小さすぎるので16サウンドは系統に束ねて見せる。
 function miniHTML(L){let h='';
-  for(let p=0;p<4;p++)for(let s=0;s<16;s++)h+=`<i${drumHas(L,p,s)?` style="background:${PART_COLORS[p]}"`:''}></i>`;            // KICK/SNARE/HAT/TOM
-  for(let l=0;l<3;l++)for(let s=0;s<16;s++){const on=L.synth.some(n=>n[0]===l&&Math.floor(n[2]/4)===s);                       // BASS/LEAD/PAD: そのステップに音があるか
-    h+=`<i${on?` style="background:${PART_COLORS[4+l]}"`:''}></i>`;}
+  for(let f=0;f<4;f++)for(let s=0;s<16;s++){
+    const on=L.drums.some(d=>d[0]%4===f&&d[1]===s);
+    h+=`<i${on?` style="background:${KIT_COL_COLORS[f]}"`:''}></i>`;}
+  for(let l=0;l<MEL_PARTS.length;l++)for(let s=0;s<16;s++){
+    const on=L.synth.some(n=>n[0]===l&&Math.floor(n[2]/4)===s);
+    h+=`<i${on?` style="background:${PART_COLORS[1+l]}"`:''}></i>`;}
   return h;}
 function addToSeq(idx){ store.seq.push(idx); if(store.seq.length>store.seqCap)store.seqCap=store.seq.length;
   renderSeq();save();scheduleSync(); }
@@ -393,6 +492,7 @@ function renderMute(){const el=document.getElementById('muteSeg');el.innerHTML='
 }
 
 // ============================================================ 編集: ドラム + シンセ(ピアノロール)
+// p = サウンド 0-15 (v4.6: ドラムは1パート16音。旧はパート 0-3 だった)
 function drumHas(L,p,s){return L.drums.some(d=>d[0]===p&&d[1]===s);}
 function toggleDrum(L,p,s){const i=L.drums.findIndex(d=>d[0]===p&&d[1]===s);if(i>=0)L.drums.splice(i,1);else L.drums.push([p,s]);}
 function steps(){return Math.max(4,Math.round((curLoop().loopLen||64)/4));}
@@ -402,19 +502,25 @@ function renderEditor(){const L=curLoop();
   document.getElementById('loopName').value=L.name||'';
   document.getElementById('loopLen').value=L.loopLen||64;
   const st=steps();
-  // drum grid
+  // drum grid: v4.6 は 16 サウンド × ステップ。行の色は**列 = 系統** (キック/スネア/ハット/パーカス)
   const dg=document.getElementById('drumGrid');dg.innerHTML='';
-  for(let p=0;p<4;p++){const r=document.createElement('div');r.className='row';r.style.margin='3px 0';
-    const lab=document.createElement('span');lab.className='lab';lab.textContent=PARTS[p];lab.style.color=PART_COLORS[p];r.appendChild(lab);
+  for(let p=0;p<16;p++){const r=document.createElement('div');r.className='row drum-row'+(p===laneSound?' lane':'');
+    const lab=document.createElement('span');lab.className='lab kit';lab.textContent=KIT_SOUNDS[p];
+    lab.style.color=KIT_COL_COLORS[p%4];
+    lab.title=`キー${p+1} / ${KIT_COL[p%4]}系 — クリックで本体に出すレーンを選ぶ`;
+    lab.onclick=()=>{laneSound=p;renderEditor();paintLane();};
+    r.appendChild(lab);
     const grid=document.createElement('div');grid.className='grid';grid.style.cssText=`grid-template-columns:repeat(${st},1fr);flex:1`;
     for(let s=0;s<st;s++){const c=document.createElement('div');c.className='cell col'+(s%16);
-      if(drumHas(L,p,s)){c.classList.add('on');c.style.background=PART_COLORS[p];c.style.borderColor=PART_COLORS[p];}
-      c.onclick=()=>{toggleDrum(L,p,s);renderEditor();renderSeq();save();pushLoop(sel);};grid.appendChild(c);}
+      if(drumHas(L,p,s)){c.classList.add('on');c.style.background=KIT_COL_COLORS[p%4];c.style.borderColor=KIT_COL_COLORS[p%4];}
+      if(s===playHead)c.classList.add('head');
+      c.onclick=()=>{toggleDrum(L,p,s);laneSound=p;renderEditor();renderSeq();save();pushLoop(sel);paintLane();};grid.appendChild(c);}
     r.appendChild(grid);dg.appendChild(r);}
-  // synth tabs
+  // synth tabs (メロディ6パート)
   const tb=document.getElementById('synthTabs');tb.innerHTML='';
-  SYNTH.forEach((nm,l)=>{const t=document.createElement('div');t.className='tab'+(l===synthTab?' act':'');t.textContent=nm;
-    const col=PART_COLORS[4+l]; t.style.color=col; if(l===synthTab)t.style.borderColor=col;
+  SYNTH.forEach((nm,l)=>{const t=document.createElement('div');t.className='tab'+(l===synthTab?' act':'');
+    t.textContent=nm; t.title=MEL_PARTS[l].ja;
+    const col=PART_COLORS[1+l]; t.style.color=col; if(l===synthTab)t.style.borderColor=col;
     t.onclick=()=>{synthTab=l;renderEditor();};tb.appendChild(t);});
   document.getElementById('oct').value=L.oct[synthTab]||0;document.getElementById('octv').textContent=L.oct[synthTab]||0;
   renderPianoRoll(L,st);
@@ -432,7 +538,7 @@ function renderPianoRoll(L,st){
     L.synth.filter(n=>n[0]===synthTab&&n[1]===k).forEach(n=>{
       const [,, sub, duRaw]=n; const du=(duRaw&0x7f)||1; const bar=document.createElement('div');bar.className='pr-note';
       bar.style.left=(sub/totalSub*100)+'%'; bar.style.width=Math.max(2,du/totalSub*100)+'%';
-      bar.style.background=PART_COLORS[4+synthTab];
+      bar.style.background=PART_COLORS[1+synthTab];
       bar.title=`sub${sub} 長さ${du}`;
       bar.onclick=(ev)=>{ev.stopPropagation();const i=L.synth.indexOf(n);if(i>=0)L.synth.splice(i,1);renderEditor();renderSeq();save();pushLoop(sel);};
       lane.appendChild(bar);
@@ -451,6 +557,7 @@ document.getElementById('loopName').oninput=e=>{curLoop().name=e.target.value;re
 document.getElementById('loopLen').onchange=e=>{curLoop().loopLen=+e.target.value;renderEditor();renderSeq();save();pushLoop(sel);};
 document.getElementById('oct').oninput=e=>{curLoop().oct[synthTab]=+e.target.value;document.getElementById('octv').textContent=e.target.value;save();pushLoop(sel);};
 document.getElementById('dur').onchange=()=>renderEditor();
+document.getElementById('btnLane').onclick=()=>{ if(laneOn)laneExit(); else laneEnter(); };
 
 // ============================================================ グルーブ (v4.5.63 ファーム: CC 0x35/0x36 = 再生時パラメータ)
 // 解析は groove-engine.js (純粋関数)。パターンは一切書き換えず、本体の再生に「かける」だけ。OFF で元通り。
@@ -515,7 +622,15 @@ document.addEventListener('keydown', e=>{
 });
 
 // ============================================================
-function renderAll(){renderLibrary();renderSeq();renderMute();renderEditor();}
+// 再生ヘッドだけ差分更新 (毎ステップ全体を描き直さない)
+function renderHeadCells(){
+  document.querySelectorAll('#drumGrid .cell.head').forEach(c=>c.classList.remove('head'));
+  if(playHead<0)return;
+  document.querySelectorAll('#drumGrid .row.drum-row').forEach(r=>{
+    const c=r.querySelectorAll('.cell')[playHead]; if(c)c.classList.add('head');
+  });
+}
+function renderAll(){renderLibrary();renderSeq();renderMute();renderEditor();renderLaneUI();}
 load();
 document.getElementById('bpm').value=store.bpm;document.getElementById('bpmv').textContent=store.bpm;
 renderAll();
