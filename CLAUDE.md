@@ -47,8 +47,16 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   接続時は `dumpSlot()` で本体パターンを読んで写す（`hasFeature()` でゲート、旧FWは CC_RESET にフォールバック）。
   BLE 層は `ponkey.js` 経由（`modeui`/`songmeta`/`slotdump`/`cc`/`keydown` 等のイベントを購読。
   円柱の動きに使う SOLENOID カテゴリだけ `dbgRaw(0x03,[0x03])` で追加購読している）
-- `duet.html` — PONKEY AI Duet
-- `dialogue.html` — DIALOGUE
+- `duet.html` — PONKEY AI Duet（Magenta MusicRNN と交互に弾く）。**v4.6 追従済み**:
+  受信 ch → パートは `Ponkey.PARTS` から作る（旧 `ch===0 ならベース` は v4.6 で誤り。
+  ベースは ch2）。レイヤー1 の ch も同じパートとして扱う。Tone.js の音色は 4→6 パート分。
+  **ドラムのステップ打ち込み（drumPat / CC 0-3 のパート選択 / CC 16-31）は撤去**した —
+  v4.6 で本体から「置いて待つ」操作が無くなり、CC 16-31 も対角しか書けなくなったため。
+  代わりに**本体で叩かれたキット音（ch9）に反応して鳴らす**（列 `key%4` = 系統）。
+  キット番号は `CC_VOICE_SELECT` の part0 で追う。
+- `dialogue.html` — DIALOGUE。**v4.6 追従済み**: ch → 音階ラダーと fam(B/N) を `Ponkey.PARTS`
+  から作る。fam は「そのパートの白鍵テーブルが低域か」で判定（パート番号で決め打ちしない）。
+  ドラムは `NoteOn(鍵番号)` でソレノイドを直接叩く方式なので、キット化の影響を受けない。
 - `sequence.html` — SEQUENCE（＋グルーブパネル）。**ファーム v4.6 未対応**（ドラム4パートのグリッドが前提。
   v4.6 で P1 は16音のキットになり、ドラムのステップ編集そのものが廃止された）。
   index のカードはグレーアウト＋バッジ、アプリ内にも赤い注意バナーを出してある。何を出すかから決め直し

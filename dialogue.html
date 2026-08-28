@@ -309,13 +309,23 @@ h1 .x{color:var(--human)}
 const VERSION='3.2.0';
 // BLE は全て ponkey.js 経由 (再接続も pk.reattach())
 const CC_STATE_SYNC=0x51,CC_HEARTBEAT=0x52,CC_BAR_SYNC=0x54,CC_SAM_MUTE=0x55;
-const NOTE_NORMAL=[69,71,72,74,62,64,65,67,55,57,59,60,48,50,52,53];
-const NOTE_BASS  =[45,47,48,50,38,40,41,43,31,33,35,36,24,26,28,29];
-const SYNTH_CH=new Set([0,2,3,4]);
+// v4.6.0: メロディは P2-P7 の6パート (レイヤー0 = ch0-5 / レイヤー1 = ch6,7,8,10,11,12)。
+//   音域はパートの属性 (ベースだけ専用の低域テーブル。リード +1oct / ベル +2oct)。
+//   表の正本は ponkey.js の Ponkey.PARTS。
+const MEL_PARTS=Ponkey.PARTS.slice(1);
+const SYNTH_CH=new Set(MEL_PARTS.flatMap(p=>[p.ch,p.chL2]));
 const DEG_TO_KI=[12,13,14,15,8,9,10,11,4,5,6,7,0,1,2,3];
 const KI_TO_DEG=(()=>{const a=new Array(16);DEG_TO_KI.forEach((ki,d)=>a[ki]=d);return a;})();
-const LADDER_N=[...NOTE_NORMAL].sort((a,b)=>a-b);
-const LADDER_B=[...NOTE_BASS  ].sort((a,b)=>a-b);
+// ch → { fam:'B'|'N', ladder }。fam は「低域テーブルのパートか」で決める
+//   (パート番号で決め打ちしないので、ファームが並びを変えても壊れない)。
+const CH_FAM={};
+MEL_PARTS.forEach(p=>{
+  const isBass=(p.table===Ponkey.NOTE_TABLE_BASS);
+  const e={fam:isBass?'B':'N', ladder:p.table.map(n=>n+p.shift).sort((a,b)=>a-b)};
+  CH_FAM[p.ch]=e; CH_FAM[p.chL2]=e;
+});
+const LADDER_N=[...Ponkey.NOTE_TABLE_NORMAL].sort((a,b)=>a-b);
+const LADDER_B=[...Ponkey.NOTE_TABLE_BASS  ].sort((a,b)=>a-b);
 
 /*ENGINE-BEGIN*/
 /* ════════════════════════════════════════════
@@ -907,10 +917,11 @@ function applyModalMute(){
 let lastFamily='N';
 const noteOnAt={};
 function resolveDegree(pitch,ch){
-  if(pitch<16)return{deg:KI_TO_DEG[pitch],fam:ch===0?'B':'N'};
+  const e=CH_FAM[ch]||{fam:'N',ladder:LADDER_N};
+  if(pitch<16)return{deg:KI_TO_DEG[pitch],fam:e.fam};
   if(cfg.parse==='ki36'&&pitch>=36&&pitch<=51)return{deg:KI_TO_DEG[pitch-36],fam:'N'};
-  const fam=ch===0?'B':'N';
-  const lad=fam==='B'?LADDER_B:LADDER_N;
+  const fam=e.fam;
+  const lad=e.ladder;
   let p=pitch;
   while(p>lad[15])p-=12;while(p<lad[0])p+=12;
   let best=0,bd=999;

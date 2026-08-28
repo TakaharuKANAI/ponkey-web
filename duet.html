@@ -330,18 +330,24 @@ const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 //  ・Note On 受信: data1<16=キー番号直送, それ以外=実ノート→現音色テーブルで変換 (ソレノイドのみ発火)
 //  ・CC_BPM(0x41) val=bpm-60 → 本体 bpm=60+val。受信で自動再生開始
 //  ・CC_PLAY_STOP(0x40) / CC_STATE_SYNC_START(0x51) / CC_BAR_SYNC(0x54 master clock) / CC_SAM_MUTE(0x55)
-const SYNTH_CHANNELS = new Set([0,2,3,4]);
-const CH_TO_MODE     = {0:4, 2:5, 3:6, 4:7};
-const CH_TO_IDX      = {0:0, 2:1, 3:2, 4:3};
-const CC_BPM         = 0x41; // bpm value = bpm - 60 (range 0-127 → 60-187)
+// v4.6.0: P2-P7 = メロディ6パート (レイヤー0 = ch0-5 / レイヤー1 = ch6,7,8,10,11,12)。
+//   P1 = ドラムキット (ch9)。表の正本は ponkey.js の Ponkey.PARTS。
+const MEL_PARTS = Ponkey.PARTS.slice(1);
+const DRUM_CH   = Ponkey.DRUM_CH;                       // 9
+const SYNTH_CHANNELS = new Set(MEL_PARTS.flatMap(p => [p.ch, p.chL2]));
+const CH_TO_PART = {};                                  // PONKEY ch → パート番号 (1-6。本体へ CC で送る値)
+const CH_TO_IDX  = {};                                  // PONKEY ch → メロディ index (0-5。Tone.js の音色選び)
+MEL_PARTS.forEach((p, i) => { CH_TO_PART[p.ch] = p.part; CH_TO_PART[p.chL2] = p.part;
+                              CH_TO_IDX[p.ch] = i;      CH_TO_IDX[p.chL2] = i; });
+const chMel = ch => MEL_PARTS[CH_TO_IDX[ch] ?? 0];      // ch → そのパートの定義
+const CC_BPM = 0x41; // bpm value = bpm - 60 (range 0-127 → 60-187)
 
-// Note tables: index 0-15 = key position in 4×4 grid (row-major, top-left=0)
-const NOTE_BASS   = [45,47,48,50, 38,40,41,43, 31,33,35,36, 24,26,28,29];
-const NOTE_NORMAL = [69,71,72,74, 62,64,65,67, 55,57,59,60, 48,50,52,53];
+// 16キーが弾く音高 = そのパートの白鍵テーブル + 音域シフト (リード +1oct / ベース 低域 / ベル +2oct)
+function tableOf(ch) { const m = chMel(ch); return m.table.map(n => n + m.shift); }
 
-// Drum: v33 DRUM_NOTE=[36,38,42,37], parts = KICK/SNARE/HAT/PERC(conga)
-const DRUM_PARTS  = ['KICK','SNARE','HAT','PERC'];
-const DRUM_COLORS = ['#ff2222','#22cc44','#2266ff','#ff22cc']; // KICK=red, SNARE=green, HAT=blue, CONGA=magenta
+// P1 のキット。**列 = 系統** (キック/スネア/ハット/パーカッション) なので key%4 で音を決める
+const DRUM_PARTS  = Ponkey.KIT_COL_NAMES;
+const DRUM_COLORS = Ponkey.KIT_COL_RGB;
 
 // ── State ──────────────────────────────────────────────────
 let pk={A:null,B:null};   // slot → Ponkey インスタンス
@@ -350,9 +356,9 @@ let inputNotes=[], noteOnTimes={}, lastHumanCh=0;
 let temperature=1.1, genSteps=16, triggerCount=4;
 let bpm=100;
 
-// Drum machine state
-let drumPat  = Array.from({length:4},()=>new Array(16).fill(false));
-let drumMode = 0;   // current drum part shown on PONKEY A (0-3)
+// ドラム (v4.6): 本体の「ステップを置いて待つ」操作は廃止され、P1 はパッドになった。
+//   なのでアプリ側のステップ打ち込み (drumPat / drumMode) もやめ、
+//   **本体で叩かれたキット音 (ch9) に合わせて鳴らす**形にした。列 (key%4) が系統。
 let drumInited = false;
 let drumInst = {}; // Tone.js instruments
 
@@ -405,7 +411,7 @@ function initGrids() {
 // よって ① data1<16 は素通し ② それ以外はオクターブ畳み込み＋最近傍 で頑健に解決する。
 function noteToKeyIndex(midi, ch) {
   if (midi < 16) return midi;                 // 直送キー番号 (data1<16)
-  const table = (ch===0) ? NOTE_BASS : NOTE_NORMAL;
+  const table = tableOf(ch);                  // v4.6: 音域はパートの属性
   const sorted = [...table].sort((a,b)=>a-b);
   let p = midi;
   while (p > sorted[15]) p -= 12;
@@ -485,22 +491,25 @@ async function loadAI() {
 
 // ── Tone.js (browser audio) ────────────────────────────────
 let toneReady=false, synthInst={};
-const SYNTH_CFG = {
-  0:{osc:'triangle',  atk:.005,dec:.3, sus:.6, rel:.15, portamento:.04},
-  1:{osc:'fatsawtooth',atk:.15, dec:.3, sus:.7, rel:.6},
-  2:{osc:'sawtooth',  atk:.4,  dec:.2, sus:.8, rel:1.2},
-  3:{osc:'triangle',  atk:.001,dec:.5, sus:0,  rel:.3}
-};
+// メロディ6パート (P2-P7) の音色。mono = ベースだけ (単音で腰を据える)
+const SYNTH_CFG = [
+  {osc:'triangle',    atk:.005,dec:.3, sus:.5, rel:.2 },   // 0 KEYS  けんばん
+  {osc:'sawtooth',    atk:.01, dec:.2, sus:.6, rel:.25},   // 1 LEAD  リード
+  {osc:'triangle',    atk:.005,dec:.3, sus:.6, rel:.15, portamento:.04, mono:true},  // 2 BASS ベース
+  {osc:'fatsawtooth', atk:.35, dec:.3, sus:.8, rel:1.0},   // 3 CHORD わおん
+  {osc:'sine',        atk:.001,dec:.6, sus:0,  rel:.5 },   // 4 BELL  ベル
+  {osc:'triangle',    atk:.12, dec:.3, sus:.7, rel:.6 },   // 5 VOICE こえ
+];
 function initTone() {
   if(toneReady)return;
   Tone.start().then(()=>{
     Tone.Destination.volume.value=-6;
-    for(let i=0;i<4;i++) {
+    for(let i=0;i<SYNTH_CFG.length;i++) {
       const c=SYNTH_CFG[i];
       const vol=new Tone.Volume(-8).toDestination();
       const cfg={oscillator:{type:c.osc},envelope:{attack:c.atk,decay:c.dec,sustain:c.sus,release:c.rel}};
       if(c.portamento)cfg.portamento=c.portamento;
-      synthInst[i]=i===0
+      synthInst[i]=c.mono
         ?new Tone.MonoSynth({...cfg,filterEnvelope:{attack:.001,decay:.1,sustain:.6,release:.2,baseFrequency:200,octaves:3}}).connect(vol)
         :new Tone.PolySynth(Tone.Synth,cfg).connect(vol);
     }
@@ -566,7 +575,6 @@ async function connectDevice(slot) {
           await new Promise(r=>setTimeout(r,80));
           await p.sendCC(CC_PLAY,127);
           log('B STATE_SYNC+SAM+BPM+PLAY sent','ok');
-          setTimeout(()=>syncDrumPatternToDevice('B'), 300);
         }catch(e){log('B init err: '+e.message,'err');}
       },500);
       log(`B "${p.device.name||'PONKEY'}" connected`,'ok');
@@ -641,21 +649,14 @@ function playDrum(part) {
     else if(part===3){ try{drumInst[3].triggerRelease();}catch(e){} drumInst[3].triggerAttackRelease('G3','8n',now); }
   } catch(e){ log('playDrum err p'+part+': '+e.message,'err'); }
 
-  // Flash grid A: use drum part color
-  const stepFlash = tempoStep; // already advanced, show current
-  flashDrumKey(part);
 }
 
-function flashDrumKey(part) {
-  // Highlight all active steps of this part in gridA momentarily
-  const color = DRUM_COLORS[part];
-  const cells = document.querySelectorAll('#gridA .key-cell');
-  drumPat[part].forEach((on,i)=>{
-    if(on && cells[i]){
-      cells[i].style.background = hexToRgba(color, 0.7);
-      setTimeout(()=>{ cells[i].style.background=''; }, 120);
-    }
-  });
+// 叩かれたキーを、その系統の色で光らせる (どの列を叩いたかが色で分かる)
+function flashDrumKey(gridId, keyIndex) {
+  const cell = document.getElementById(gridId+'_'+keyIndex);
+  if(!cell) return;
+  cell.style.background = hexToRgba(DRUM_COLORS[keyIndex % 4], 0.7);
+  setTimeout(()=>{ cell.style.background=''; }, 140);
 }
 
 function hexToRgba(hex,a){
@@ -665,67 +666,35 @@ function hexToRgba(hex,a){
 
 const CC_BAR_SYNC = 0x54; // firmware sends this with step value as master clock
 
-// Send full drum pattern to a slot
-function syncDrumPatternToDevice(slot) {
-  if(!pk[slot]) return;
-  const dev = pk[slot];
-  const send = (cc,val) => dev.sendCC(cc,val).catch(()=>{});
-  for(let p=0;p<4;p++){
-    send(p, 127);
-    for(let s=0;s<16;s++) send(16+s, drumPat[p][s]?127:0);
-  }
-  send(drumMode, 127); // restore current mode
-  log(`Pattern synced → ${slot}`,'ok');
-}
-
 function onCCFromA(d1,d2) {
-  // BAR_SYNC from firmware → drive drums + indicator + forward to B
+  // BAR_SYNC from firmware → 小節頭で B を揃える
   if(d1===CC_BAR_SYNC) { onBarSync(d2 & 0x0F); return; }
-  // Drum mode select 0-3
-  if(d1<=3 && d2>=64) {
-    drumMode = d1;
-    updateGridDrumPattern();
-    if(pk.B) pk.B.sendCC(d1,d2).catch(()=>{});
-    return;
-  }
-  if(d1<=7 && d2>=64) return; // synth mode, ignore
-  // Pattern step ON/OFF
-  if(d1>=16 && d1<=31) {
-    const step=d1-16;
-    drumPat[drumMode][step] = d2>=64;
-    updateGridDrumPattern();
-    if(pk.B) pk.B.sendCC(d1,d2).catch(()=>{});
-  }
+  // v4.6: 音色通知の part0 = ドラムのキット番号 (16音の中身が変わるので逆引きに要る)
+  if(d1===0x30) { if(((d2>>4)&0x0F)===0) drumKit = d2 & 7; return; }
+  // v4.6: パート選択 (CC 0-6) は B にも伝える。ステップトグル (CC 16-31) は本体から来なくなった
+  if(d1<=6 && d2>=64 && pk.B) pk.B.sendCC(d1,d2).catch(()=>{});
 }
 
 function onNoteFromA(e) {
+  // v4.6: ch9 = ドラムキット。叩かれたキーを逆引きして、その系統の音を鳴らす
+  if(e.ch === DRUM_CH) {
+    if(!e.on) return;
+    const k = Ponkey.keyFromNote(DRUM_CH, e.note, drumKit);
+    if(k == null) return;
+    playDrum(k % 4);                       // 列 = 系統
+    flashDrumKey('gridA', k);
+    return;
+  }
   // Synth note from A
   if(!SYNTH_CHANNELS.has(e.ch)) return;
   if(e.on) onNoteOn(e.note,e.vel,e.ch);
   else     onNoteOff(e.note,e.ch);
 }
+let drumKit = 0;                           // 本体の現在キット (CC_VOICE_SELECT の part0 で届く)
 
 function onCCFromB(d1,d2) {
   if(d1===CC_BAR_SYNC) return; // ignore echo
-  // Drum mode select
-  if(d1<=3 && d2>=64) {
-    drumMode = d1;
-    updateGridDrumPattern();
-    if(pk.A) pk.A.sendCC(d1,d2).catch(()=>{});
-    return;
-  }
-  // Pattern step ON/OFF
-  if(d1>=16 && d1<=31) {
-    const step=d1-16;
-    drumPat[drumMode][step] = d2>=64;
-    updateGridDrumPattern();
-    if(pk.A) pk.A.sendCC(d1,d2).catch(()=>{});
-  }
-}
-
-// Render drum pattern on both grids
-function updateGridDrumPattern() {
-  // No persistent pattern display on either grid
+  if(d1<=6 && d2>=64 && pk.A) pk.A.sendCC(d1,d2).catch(()=>{});   // パート選択を A へ伝える
 }
 
 function onNoteOn(pitch,vel,ch) {
@@ -793,11 +762,11 @@ async function triggerAI() {
   if(window.alienThink) alienThink(true);
 
   const analysis = analysePhrase(snapshot);
-  const isBass = (lastHumanCh === 0);
+  const isBass = (chMel(lastHumanCh).name === 'BASS');
 
-  // ── Temperature: bass=heavier, lead/pad=more adventurous ──
-  const modeTemp = { 0:0.85, 2:1.0, 3:1.25, 4:1.1 };
-  const temp = modeTemp[lastHumanCh] ?? temperature;
+  // ── Temperature: パートの性格で振る (ベース=堅め / リード・ベル=冒険的) ──
+  const MEL_TEMP = { KEYS:1.0, LEAD:1.25, BASS:0.85, CHORD:0.95, BELL:1.2, VOICE:1.3 };
+  const temp = MEL_TEMP[chMel(lastHumanCh).name] ?? temperature;
 
   // ── Steps: roughly match input count, ±25% random variation ──
   const variation = 0.75 + Math.random() * 0.5; // 0.75–1.25
@@ -834,13 +803,13 @@ function buildQNS(notes, analysis){
 }
 
 async function playAIResponse(seq, analysis){
-  const isBass=(lastHumanCh===0);
+  const isBass=(chMel(lastHumanCh).name === 'BASS');
   const dirBias = analysis ? -analysis.direction * 5 : 0;
   const stepMs = analysis ? Math.round(analysis.avgDur * 250) : 250;
 
   // Send mode-select once at start and remember it
   if(pk.B){
-    const mode=CH_TO_MODE[lastHumanCh]??6;
+    const mode=CH_TO_PART[lastHumanCh]??2;      // v4.6: パート番号 1-6
     // Re-unmute SAM (v33 mutes on connect; may have re-muted)
     pk.B.sendCC(0x55,0x00).catch(()=>{});
     await sleep(30);
@@ -861,8 +830,8 @@ async function playAIResponse(seq, analysis){
 
 function sendBLEMidiNote(pitch,durMs){
   const ch=lastHumanCh;
-  const isBass=(ch===0);
-  const table=isBass?NOTE_BASS:NOTE_NORMAL;
+  const isBass=(chMel(ch).name === 'BASS');
+  const table=tableOf(ch);
 
   // RNN output is in 48-84 range (C3-C6).
   // For bass: transpose back down to bass range (C1-D3, ~24-50) before snapping.
@@ -878,7 +847,7 @@ function sendBLEMidiNote(pitch,durMs){
   if(window.alienHit) alienHit('B');
 
   // Tone.js audio
-  playToneNote(CH_TO_IDX[ch]??2,snapped,durMs);
+  playToneNote(CH_TO_IDX[ch]??0,snapped,durMs);
 
   if(!pk.B)return;
   // 現行ファーム: data1<16 を「キー番号直送」として確実にソレノイド発火させる。
@@ -914,20 +883,13 @@ function startTempoLoop() {
   tempoStep = 0;
   tempoTimer = setInterval(() => {
     if(pk.A || pk.B) return;
-    const step = tempoStep;
-    tempoStep = (tempoStep + 1) % 16;
-    for(let p=0;p<4;p++){
-      if(drumPat[p][step]){ playDrum(p); flashDrumStep(step,p); }
-    }
+    tempoStep = (tempoStep + 1) % 16;      // v4.6: 鳴らすパターンは持たない (拍だけ進める)
   }, interval);
 }
 
 // Called when firmware sends BAR_SYNC
 function onBarSync(step) {
   tempoStep = (step + 1) % 16;
-  for(let p=0;p<4;p++){
-    if(drumPat[p][step]){ playDrum(p); flashDrumStep(step,p); }
-  }
   // At bar boundary (step=0), resync B by stop→start
   if(step === 0 && pk.B) {
     pk.B.sendCC(CC_PLAY,0).catch(()=>{});
@@ -935,21 +897,6 @@ function onBarSync(step) {
       if(pk.B) pk.B.sendCC(CC_PLAY,127).catch(()=>{});
     }, 10);
   }
-}
-
-function flashDrumStep(step, part) {
-  const color = DRUM_COLORS[part];
-  ['gridA','gridB'].forEach(gridId => {
-    drumPat[part].forEach((on, i) => {
-      if(!on) return;
-      const cell = document.getElementById(gridId+'_'+i);
-      if(!cell) return;
-      cell.style.background = color;
-      cell.style.color = '#fff';
-      cell.classList.add('lit');
-      setTimeout(()=>{ cell.classList.remove('lit'); cell.style.background=''; cell.style.color=''; }, 150);
-    });
-  });
 }
 
 function stopTempoLoop() {
