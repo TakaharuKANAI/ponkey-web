@@ -119,6 +119,12 @@ h1 .x{color:var(--human)}
 .panel.b .cell.spikeH{border-color:var(--harm);box-shadow:0 0 14px rgba(199,155,255,.6)}
 .panel.b .cell.spikeH::after{background:var(--harm);opacity:1;inset:24%}
 .hint{font-size:11px;color:var(--txt-dim)}
+/* v4.6: A がどのパート (音域) で弾いているか。6パートあるので出さないと分からない */
+.apart{font-size:11px;color:var(--txt-dim);letter-spacing:.04em;margin-top:2px}
+.apart b{color:#ff8a3c;font-weight:700}
+/* 1台でかけあいが効いているときだけ出す */
+.onenote{font-size:10.5px;color:var(--txt-dim);margin-top:4px;min-height:14px}
+.onenote.on{color:#bed2aa}
 .vocab{font-family:var(--mono);font-size:11px;color:var(--txt-dim)}
 .chip{font-size:12px;letter-spacing:.08em;color:var(--bg);background:var(--dot);border-radius:4px;padding:2px 10px;opacity:0;transition:opacity .3s;min-height:1.6em}
 .chip.show{opacity:1}
@@ -209,7 +215,9 @@ h1 .x{color:var(--human)}
       <button class="conn-btn" id="btnA" onclick="BLE.toggle('A')">つなぐ</button></div>
     <div class="avatar" id="avA"><canvas id="faceA"></canvas></div>
     <div class="grid" id="gridA"></div>
+    <div class="apart" id="aPart">パート: —</div>
     <div class="hint">タップ or qwer/asdf/zxcv でも ひける</div>
+    <div class="onenote" id="oneNote"></div>
   </div>
 
   <div class="tape-col">
@@ -289,6 +297,11 @@ h1 .x{color:var(--human)}
       <input type="checkbox" id="sRampage" checked></div>
     <div class="srow"><span class="lbl">Cの音 (ブラウザ・ドラム)</span>
       <input type="checkbox" id="sCVoice" checked></div>
+    <div class="srow"><span class="lbl">1台でかけあい</span>
+      <select id="sOne">
+        <option value="auto">Bが未接続なら Aの本体で こたえる</option>
+        <option value="off">しない (Bの本体だけ)</option>
+      </select></div>
     <div class="srow"><span class="lbl">A入力のかいしゃく</span>
       <select id="sParse">
         <option value="table">音名テーブル (v4.5標準)</option>
@@ -321,7 +334,8 @@ const KI_TO_DEG=(()=>{const a=new Array(16);DEG_TO_KI.forEach((ki,d)=>a[ki]=d);r
 const CH_FAM={};
 MEL_PARTS.forEach(p=>{
   const isBass=(p.table===Ponkey.NOTE_TABLE_BASS);
-  const e={fam:isBass?'B':'N', ladder:p.table.map(n=>n+p.shift).sort((a,b)=>a-b)};
+  const e={fam:isBass?'B':'N', shift:p.shift, part:p.part, name:p.name, ja:p.ja,
+           ladder:p.table.map(n=>n+p.shift).sort((a,b)=>a-b)};
   CH_FAM[p.ch]=e; CH_FAM[p.chL2]=e;
 });
 const LADDER_N=[...Ponkey.NOTE_TABLE_NORMAL].sort((a,b)=>a-b);
@@ -341,8 +355,11 @@ const MODES={
   aeolian:   [0,2,3,5,7,8,10],
 };
 const MODE_JP={ionian:'メジャー',dorian:'ドリアン',lydian:'リディアン',mixolydian:'ミクソリディアン',aeolian:'マイナー'};
-function modalPitch(deg,mode,fam){
-  const base=fam==='B'?24:48;
+// shift = そのパートの音域シフト (v4.6: リード +12 / ベル +24 / ベース は低域テーブル)。
+//   「モードのじゆう」ON では本体の音を消してアプリが声を出すので、
+//   **どのパートで弾いているかで声の高さも変わる**ようにしておく (弾いた実感と合わせる)。
+function modalPitch(deg,mode,fam,shift){
+  const base=(fam==='B'?24:48)+(shift|0);
   return base+12*Math.floor(deg/7)+MODES[mode][deg%7];
 }
 
@@ -782,7 +799,7 @@ function log(msg,cls=''){const el=$('log');const t=new Date().toTimeString().sli
 function setStatus(text,mode=''){const s=$('statusLine');s.textContent=text;s.className='status-line '+mode;}
 
 const cfg={mood:.55,session:'dialog',modal:true,gapMode:'auto',gapMs:800,maxLen:16,
-           voice:true,vol:.7,yield:true,rampage:true,parse:'table'};
+           voice:true,vol:.7,yield:true,rampage:true,parse:'table',one:'auto'};
 let currentMode='ionian';
 function setWorld(mode,announce){
   currentMode=mode;
@@ -806,6 +823,8 @@ $('sYield').onchange=e=>cfg.yield=e.target.checked;
 $('sParse').onchange=e=>cfg.parse=e.target.value;
 $('sRampage').onchange=e=>cfg.rampage=e.target.checked;
 $('sCVoice').onchange=e=>Drummer.voice=e.target.checked;
+$('sOne').onchange=e=>{cfg.one=e.target.value;refreshOneBox();
+  log('1台でかけあい: '+(cfg.one==='auto'?'B が未接続なら A へ':'しない'));};
 
 /* ════════════════════════════════════════════
    BLE (v2.0.1 自動再接続を継承 + SAMミュート制御)
@@ -827,6 +846,7 @@ const BLE={
       try{this.pk[slot]?.disconnect();}catch(e){}
       this.pk[slot]=null;
       btn.textContent='つなぐ';btn.classList.remove('on');
+      refreshOneBox();
       log(`${slot} disconnected (manual)`);
       return;
     }
@@ -869,6 +889,7 @@ const BLE={
     if(window.alienSetConnected)window.alienSetConnected(slot,true);
     const btn=$('btn'+slot);
     btn.textContent='せつぞく中';btn.classList.add('on');
+    refreshOneBox();
   },
 
   onDisconnect(slot){
@@ -896,14 +917,34 @@ const BLE={
     },delay);
   },
 
+  // 1台でかけあい: B 用の本体が無いとき、B の返事を A の本体で鳴らす。
+  //   かけあいは交互なので1台で成立する (B が弾いている間に割り込めば Performer が譲る)。
+  //   本体は BLE NoteOn(0-15) をソレノイド発火としてしか扱わず、鳴らした音を返してこないので、
+  //   A の入力として回り込む心配もない。C (ドラム) は鍵が競合するので回さない。
+  route(slot){
+    const live=t=>this.pk[t]&&this.pk[t].midiChar;
+    if(live(slot))return slot;
+    if(slot==='B'&&cfg.one!=='off'&&live('A'))return 'A';
+    return slot;
+  },
+  soloDevice(){ return !this.pk.B?.midiChar && !!this.pk.A?.midiChar && cfg.one!=='off'; },
+
   send(slot,bytes){
-    const p=this.pk[slot];if(!p||!p.midiChar)return;
-    this.q[slot]=this.q[slot]
+    const to=this.route(slot);
+    const p=this.pk[to];if(!p||!p.midiChar)return;
+    this.q[to]=this.q[to]
       .then(()=>p.sendMIDI(bytes[0],bytes[1],bytes[2]))
       .then(()=>new Promise(r=>setTimeout(r,12)))
-      .catch(e=>log(`TX ${slot}: ${e.message}`,'err'));
+      .catch(e=>log(`TX ${to}: ${e.message}`,'err'));
   }
 };
+// 「1台でかけあい」が効いているかを画面に出す (黙って挙動が変わるのがいちばん困る)
+function refreshOneBox(){
+  const el=$('oneNote'); if(!el)return;
+  const on=BLE.soloDevice();
+  el.textContent=on?'いま: B は A の本体で こたえます':'';
+  el.classList.toggle('on',on);
+}
 // モードのじゆうON = AのSAMをミュートし、Aの声もアプリが合成する
 function applyModalMute(){
   if(!BLE.pk.A||!BLE.pk.A.midiChar)return;
@@ -914,32 +955,43 @@ function applyModalMute(){
 /* ════════════════════════════════════════════
    A入力 → 度数 → Listener
    ════════════════════════════════════════════ */
-let lastFamily='N';
+let lastFamily='N', lastShift=0;
 const noteOnAt={};
 function resolveDegree(pitch,ch){
-  const e=CH_FAM[ch]||{fam:'N',ladder:LADDER_N};
-  if(pitch<16)return{deg:KI_TO_DEG[pitch],fam:e.fam};
-  if(cfg.parse==='ki36'&&pitch>=36&&pitch<=51)return{deg:KI_TO_DEG[pitch-36],fam:'N'};
-  const fam=e.fam;
+  const e=CH_FAM[ch]||{fam:'N',shift:0,ladder:LADDER_N};
+  if(pitch<16)return{deg:KI_TO_DEG[pitch],fam:e.fam,shift:e.shift|0};
+  if(cfg.parse==='ki36'&&pitch>=36&&pitch<=51)return{deg:KI_TO_DEG[pitch-36],fam:'N',shift:e.shift|0};
+  const fam=e.fam, shift=e.shift|0;
   const lad=e.ladder;
   let p=pitch;
   while(p>lad[15])p-=12;while(p<lad[0])p+=12;
   let best=0,bd=999;
   for(let d=0;d<16;d++){const e=Math.abs(lad[d]-p);if(e<bd){bd=e;best=d;}}
-  return{deg:best,fam};
+  return{deg:best,fam,shift};
 }
 function onCCFromA(d1,d2){
   if(d1!==CC_HEARTBEAT&&d1!==CC_BAR_SYNC)log(`A CC ${d1.toString(16)}=${d2}`,'tx');
+}
+// A がいまどのパートで弾いているか (v4.6: 6パートあり、音域もパートで違う)
+let shownPart=-1;
+function showPart(ch){
+  const e=CH_FAM[ch]; const el=$('aPart'); if(!el)return;
+  if(!e){ if(shownPart!==-2){shownPart=-2;el.innerHTML='パート: —';} return; }
+  if(shownPart===e.part)return;
+  shownPart=e.part;
+  const oct=e.shift?(e.shift>0?` +${e.shift/12}oct`:''):'';
+  el.innerHTML=`パート: <b>P${e.part+1} ${e.ja}</b>${e.fam==='B'?' 低域':oct}`;
 }
 function onNoteFromA(e){
   const{ch,note:d1,vel:d2}=e;
   if(ch===9)return;
   if(e.on){
     if(!SYNTH_CH.has(ch)&&d1>=16)return;
-    const{deg,fam}=resolveDegree(d1,ch);
-    lastFamily=fam;noteOnAt[d1]=performance.now();
+    const{deg,fam,shift}=resolveDegree(d1,ch);
+    lastFamily=fam;lastShift=shift|0;noteOnAt[d1]=performance.now();
+    showPart(ch);
     // モードのじゆうON: AのSAMは黙っているのでアプリがAの声を出す
-    if(cfg.modal&&cfg.voice){initAudio();aVoice(modalPitch(deg,currentMode,fam));}
+    if(cfg.modal&&cfg.voice){initAudio();aVoice(modalPitch(deg,currentMode,fam,lastShift));}
     Listener.noteOn(deg);
   }else{
     const t0=noteOnAt[d1];
@@ -1059,7 +1111,7 @@ const Performer={
         const ki=DEG_TO_KI[d];
         BLE.send('B',[0x90,ki,127]);    // 和音=連続write、fw側staggerが時分割
         uiFire('B',ki,note.spikeCh);
-        if(cfg.voice)setTimeout(()=>bVoice(modalPitch(d,currentMode,lastFamily),durMs,!!note.spikeCh),ci*18);
+        if(cfg.voice)setTimeout(()=>bVoice(modalPitch(d,currentMode,lastFamily,lastShift),durMs,!!note.spikeCh),ci*18);
       });
       avatarHit('B');
       played.push({deg:note.deg,dur:durMs,spike:!!note.spikeCh,chord:!!note.chord});
@@ -1298,7 +1350,7 @@ const Groove={
           const ki=DEG_TO_KI[d];
           BLE.send('B',[0x90,ki,127]);
           uiFire('B',ki);
-          if(cfg.voice)setTimeout(()=>bVoice(modalPitch(d,currentMode,'B'),160,false,true),ci*16);
+          if(cfg.voice)setTimeout(()=>bVoice(modalPitch(d,currentMode,'B',0),160,false,true),ci*16);
         });
       }
       this.step=(this.step+1)%8;
@@ -1539,7 +1591,7 @@ function avatarHit(slot){
 const demoHeld={};
 function demoOn(ki){
   if(demoHeld[ki])return;demoHeld[ki]=performance.now();
-  lastFamily='N';
+  lastFamily='N';lastShift=0;
   Listener.noteOn(KI_TO_DEG[ki]);
   initAudio();
   if(cfg.voice)aVoice(modalPitch(KI_TO_DEG[ki],currentMode,'N'));
