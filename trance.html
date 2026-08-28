@@ -561,6 +561,28 @@
   }
 
   /* Per-slot mini monitor (16 円形パッド + P1-P8 ボタン + last-hit) */
+  /* ── STEP モード (v2.1) ── */
+  .step-btn { margin-left: 4px; }
+  .step-btn.on { background: var(--ink); color: var(--paper); }
+  .step-panel {
+    padding: 6px 8px; border-top: 1px solid var(--border);
+    background: var(--paper-soft);
+  }
+  .step-lane-head { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+  .step-nav {
+    border: 1px solid var(--border); background: var(--paper); cursor: pointer;
+    font: inherit; font-size: 10px; line-height: 1; padding: 2px 6px; color: var(--ink);
+  }
+  .step-lane-name { font-size: 10px; font-weight: 700; letter-spacing: .04em; flex: 1; }
+  .step-hint { font-size: 8.5px; color: var(--muted); }
+  .step-cells { display: grid; grid-template-columns: repeat(16, 1fr); gap: 1px; }
+  .step-cell {
+    height: 18px; border: 1px solid var(--border-soft); background: var(--paper);
+    cursor: pointer; opacity: .55;
+  }
+  .step-cell.beat { background: var(--paper-deep); }
+  .step-cell.on { background: var(--ink); opacity: 1; }
+  .step-cell.head { box-shadow: inset 0 0 0 2px var(--warn); opacity: 1; }
   .slot-monitor {
     margin-top: 8px;
     padding-top: 8px;
@@ -969,6 +991,14 @@
 //           クロック同期 (BPM 配信・PLAY/STOP・位相合わせ) と拍表示はそのまま
 //         - Mute/Solo の index は 0 = P1 ドラム / 1-6 = P2-P7 へ
 //         - 旧プリセットの melodyMode / melodyMap / stepVelocity は構造が変わったため読み捨て
+//   v2.1 (2026-08-28): **STEP モード** — アプリが本体をステップシーケンサに変える
+//         「アプリによって本体の動きが大胆に変わる」を、**ファームに手を入れずに**実装したもの。
+//         claim(grid) で本体のグリッド処理を止め、キーイベントだけ受け取り、LED_FRAME で
+//         レーンを描き、編集結果を LOAD_SLOT で本体へ書く = 鳴らすのは本体のエンジン。
+//         v4.6 でドラムの1バイトが (サウンド<<4)|ステップ になったので **16打楽器 × 16ステップ**
+//         が表現できる (旧 TRANCE の 4パート × 16ステップ より広い)。
+//         入る時に現在スロットを DUMP して**メロディは保持**したまま、ドラムだけ差し替える。
+//         claim は Fn 2秒長押しと切断でファーム側から必ず解除される。
 // ════════════════════════════════════════════════════════
 
 const KEY_COUNT    = 16;
@@ -1094,6 +1124,179 @@ function lookupKey(channel, note) {
     if (m !== undefined) return { part: p.name, synth: p.synth, keyIndex: m, shifted: +delta };
   }
   return null;
+}
+
+// ════════════════════════════════════════════════════════
+// STEP モード (v2.1) — アプリが本体をステップシーケンサに変える
+// ════════════════════════════════════════════════════════
+//   PONKEY のコンセプト「アプリによって本体の動きが大胆に変わる」の実装。
+//   **ファームにモードを足していない**。v4.5.70+ の窓口だけで成立させている:
+//     1) SONG_CMD_CLAIM(grid)  … 本体のグリッド処理を止める。**キーイベントはアプリに届き続ける**
+//     2) DBG_EV_KEY_GRID_DOWN  … 押されたキーをアプリが「ステップ」として解釈する
+//     3) SONG_CMD_LED_FRAME    … 選んだサウンドの16ステップを本体に描く (床上げオーバーレイ)
+//     4) SONG_CMD_LOAD_SLOT    … 編集結果を本体スロットへ書き戻す = 鳴らすのは本体のエンジン
+//   v4.6 でドラムの LOAD_SLOT 1バイトが (サウンド<<4)|ステップ になったので、
+//   **16打楽器 × 16ステップ**のグリッドがプロトコルだけで完全に表現できる
+//   (旧 TRANCE の「4パート × 16ステップ」より広い)。
+//   claim は Fn 2秒長押しと切断で必ず解除される (ファーム側の安全弁)。
+const DBG_CAT_KEY = 0x02, DBG_CAT_SONG = 0x09, DBG_CAT_MODE = 0x01;
+const EV_SLOT_DUMP = 0x09;              // DBG_EV_SONG_SLOT_DUMP
+const SLOT_FMT_V2  = 0xF2;              // serializeSlotV2 の形式識別
+const STEP_SLOT    = 0;                 // STEP モードが使う本体スロット
+const STEP_SEND_DEBOUNCE = 220;         // 連続編集をまとめて1回書く
+
+// 本体の LED 色 (床上げオーバーレイ)。列 = 系統の色を薄く敷き、ON は明るく、再生ヘッドは白
+const STEP_LED_OFF  = [10, 10, 10];
+const STEP_LED_HEAD = [255, 255, 255];
+
+function stepInit(slot) {
+  slot.step = {
+    on: false,
+    lane: 0,                                     // 本体グリッドに出しているサウンド (0-15)
+    grid: Array.from({length:16}, () => new Array(16).fill(false)),  // [サウンド][ステップ]
+    keepSynth: [],                               // 取り込んだメロディ (書き戻しで消さないため)
+    loopLen: 64,
+    oct: new Array(MEL_PARTS.length).fill(0),
+    sendTimer: null,
+    dumpAsm: {},
+    head: -1,
+  };
+}
+
+// 本体のいまの中身を読む (メロディを消さずにドラムだけ差し替えるため)
+function stepRequestDump(slot) {
+  if (!slot.pk) return;
+  slot.step.dumpAsm = {};
+  slot.pk.subscribeCat(DBG_CAT_SONG).catch(()=>{});
+  slot.pk.dumpSlot(0xFF).catch(()=>{});          // 0xFF = 現在スロット
+}
+
+// DBG_EV_SONG_SLOT_DUMP のチャンク組み立て → V2 スロットを取り込む
+function stepOnSlotDump(slot, d) {
+  const st = slot.step;
+  if (!st || !st.on || d.length < 4) return;
+  const gen = d[0], idx = d[1], cnt = d[2], part = d.slice(3);
+  let a = st.dumpAsm[gen];
+  if (!a || a.cnt !== cnt) { a = { cnt, parts: {} }; st.dumpAsm[gen] = a; }
+  a.parts[idx] = part;
+  if (Object.keys(a.parts).length < cnt) return;
+  let tot = 0; for (let c = 0; c < cnt; c++) tot += a.parts[c].length;
+  const full = new Uint8Array(tot);
+  let off = 0; for (let c = 0; c < cnt; c++) { full.set(a.parts[c], off); off += a.parts[c].length; }
+  delete st.dumpAsm[gen];
+
+  // V2: [0xF2][slot][loopLen][oct×6][rectRow][rectCol][dCnt]{(p<<4)|step,maskLo,maskHi}[sCnt]{(part<<4)|key,sub,raw}
+  let i = 0;
+  if (full[i++] !== SLOT_FMT_V2) return;
+  i++;                                            // slot
+  st.loopLen = full[i++] || 64;
+  st.oct = [];
+  for (let n = 0; n < MEL_PARTS.length; n++) st.oct.push(full[i++]);
+  i += 2;                                         // rectRow / rectCol
+  const dc = full[i++];
+  for (let n = 0; n < dc && i + 2 < full.length; n++) {
+    const b = full[i++], lo = full[i++], hi = full[i++];
+    const step = b & 0x0F, mask = lo | (hi << 8);
+    if (step < 16) for (let k = 0; k < 16; k++) if ((mask >> k) & 1) st.grid[k][step] = true;
+  }
+  const sc = full[i++];
+  st.keepSynth = [];
+  for (let n = 0; n < sc && i + 2 < full.length; n++) {
+    st.keepSynth.push([full[i++], full[i++], full[i++]]);   // [(part<<4)|key, sub, raw]
+  }
+  log("sys", `S${slot.id} STEP: 本体から取り込み (ドラム ${dc}件 / メロディ ${sc}音は保持)`);
+  slot.pk?.unsubscribeCat(DBG_CAT_SONG).catch(()=>{});
+  stepRefreshUI(slot);
+  stepPaintDevice(slot);
+}
+
+// 編集結果を本体へ (LOAD_SLOT)。**ドラムだけ差し替え、取り込んだメロディはそのまま載せ直す**
+function stepSend(slot) {
+  const st = slot.step;
+  if (!slot.pk || !st.on) return;
+  clearTimeout(st.sendTimer);
+  st.sendTimer = setTimeout(async () => {
+    const body = [st.loopLen || 64, ...st.oct.map(o => o & 0xff)];
+    const dr = [];
+    for (let k = 0; k < 16; k++)
+      for (let step = 0; step < 16; step++)
+        if (st.grid[k][step]) dr.push(((k & 0x0F) << 4) | (step & 0x0F));   // v4.6: (サウンド<<4)|ステップ
+    body.push(dr.length & 0xff, ...dr);
+    const sy = st.keepSynth.slice(0, 200);
+    body.push(sy.length & 0xff);
+    for (const n of sy) {
+      let dur = n[2] & 0x7f; if (dur === 0) dur = 1; if (dur > 64) dur = 64;  // bit7 = レイヤー印は落ちる
+      body.push(n[0], n[1] & 0x3f, dur);
+    }
+    try {
+      await slot.pk.loadSlot(STEP_SLOT, body);
+      await slot.pk.setSequence([STEP_SLOT]);
+    } catch (e) { log("warn", `S${slot.id} STEP 書き込み失敗: ${e.message}`); }
+  }, STEP_SEND_DEBOUNCE);
+}
+
+// 本体グリッドに「選んでいるサウンドの16ステップ」を描く
+function stepPaintDevice(slot) {
+  const st = slot.step;
+  if (!slot.pk || !st.on) return;
+  const col = KIT_COL_RGB_RAW[st.lane % 4];
+  const frame = [];
+  for (let step = 0; step < 16; step++) {
+    if (step === st.head) frame.push(STEP_LED_HEAD);
+    else if (st.grid[st.lane][step]) frame.push(col);
+    else frame.push(STEP_LED_OFF);
+  }
+  slot.pk.ledFrame(frame).catch(()=>{});
+}
+// キットの列 (系統) の色。ファーム KIT_COL_RGB と同じ
+const KIT_COL_RGB_RAW = [[255,32,32],[32,255,64],[32,96,255],[255,32,160]];
+
+// 本体のキーが押された = そのステップをトグル (claim 中なので本体側は何もしない)
+function stepOnDeviceKey(slot, key) {
+  const st = slot.step;
+  if (!st || !st.on || key < 0 || key > 15) return;
+  st.grid[st.lane][key] = !st.grid[st.lane][key];
+  stepRefreshUI(slot);
+  stepPaintDevice(slot);
+  stepSend(slot);
+}
+
+async function stepEnter(slot) {
+  if (!slot.pk) { log("warn", `S${slot.id}: 接続してから STEP を押してください`); return; }
+  if (!slot.pk.dbgCmdChar) {
+    log("warn", `S${slot.id}: STEP はデバッグサービスが要ります (接続し直してください)`);
+    return;
+  }
+  slot.step.on = true;
+  try {
+    await slot.pk.songEnter();                    // LOAD_SLOT はソングモードでしか効かない
+    await slot.pk.claim({ grid: true });           // 本体のグリッド処理を止める (キーイベントは届く)
+    await slot.pk.subscribeKeys();                 // DBG_EV_KEY_* を購読
+    stepRequestDump(slot);                         // いまの中身を読んでメロディを保持
+  } catch (e) { log("warn", `S${slot.id} STEP 開始失敗: ${e.message}`); }
+  stepRefreshUI(slot);
+  log("sys", `S${slot.id} STEP モード ON — 本体のグリッドは「${KIT_SOUND_NAMES[slot.step.lane]}」の16ステップ (Fn 2秒長押しで強制解除)`);
+}
+
+async function stepExit(slot) {
+  slot.step.on = false;
+  clearTimeout(slot.step.sendTimer);
+  try {
+    await slot.pk?.release();
+    await slot.pk?.ledClear();
+    await slot.pk?.unsubscribeCat(DBG_CAT_KEY);
+    await slot.pk?.songExit();
+  } catch {}
+  stepRefreshUI(slot);
+  log("sys", `S${slot.id} STEP モード OFF (本体を返しました)`);
+}
+
+// レーン (本体に出すサウンド) を選ぶ
+function stepSetLane(slot, k) {
+  if (!slot.step.on || k < 0 || k > 15) return;
+  slot.step.lane = k;
+  stepRefreshUI(slot);
+  stepPaintDevice(slot);
 }
 
 // ── Web Audio (モニター音) ──────────────────────────────
@@ -1224,6 +1427,8 @@ function simulateMIDI(slot, status, d1, d2) {
 //   v4.6 で「ステップを置いて待つ」操作がファームから無くなったので、
 //   アプリ側にあったドラムのステップ打ち込み (drumPattern) も畳んだ。
 function onPadClick(slot, padIdx) {
+  // STEP モード中はパッドが「どのサウンドのレーンを編集するか」の選択になる
+  if (slot.step && slot.step.on) { stepSetLane(slot, padIdx); simulatePadPress(slot, padIdx); return; }
   simulatePadPress(slot, padIdx);
 }
 
@@ -1337,6 +1542,35 @@ function refreshPkeyVisuals(slot) {
         btn.classList.add(lp.recording ? "recording" : "looping");
       }
     }
+  }
+}
+
+// STEP パネルとパッドの表示を更新
+function stepRefreshUI(slot) {
+  const st = slot.step;
+  const panel = document.getElementById(`stepPanel${slot.id}`);
+  const btn   = document.getElementById(`stepBtn${slot.id}`);
+  if (!panel || !btn) return;
+  panel.style.display = st.on ? "" : "none";
+  btn.classList.toggle("on", st.on);
+  if (!st.on) {
+    for (let i = 0; i < KEY_COUNT; i++)
+      document.getElementById(`pad${slot.id}-${i}`)?.classList.remove("step-on");
+    return;
+  }
+  const nameEl = document.getElementById(`stepLane${slot.id}`);
+  if (nameEl) nameEl.textContent =
+    `${String(st.lane+1).padStart(2,'0')} ${KIT_SOUND_NAMES[st.lane]} (${KIT_COL_NAMES[st.lane % 4]})`;
+  for (let step = 0; step < 16; step++) {
+    const c = document.getElementById(`stepCell${slot.id}-${step}`);
+    if (!c) continue;
+    c.classList.toggle("on", st.grid[st.lane][step]);
+    c.classList.toggle("head", step === st.head);
+  }
+  // パッドは「そのサウンドに音があるか」+ 選択中を示す
+  for (let i = 0; i < KEY_COUNT; i++) {
+    const pad = document.getElementById(`pad${slot.id}-${i}`);
+    if (pad) pad.classList.toggle("step-on", st.grid[i].some(Boolean) || i === st.lane);
   }
 }
 
@@ -2222,6 +2456,7 @@ for (let i = 1; i <= SLOT_COUNT; i++) {
     mute: [false, false, false, false, false, false, false],
     solo: [false, false, false, false, false, false, false],
   });
+  stepInit(slots[slots.length - 1]);              // v2.1: STEP モードの状態
 }
 
 // パート名 → メロディ index (0-5 = P2-P7)
@@ -2277,6 +2512,17 @@ function buildSlots() {
           <span class="slot-sub" id="sub${slot.id}">disconnected</span>
         </div>
         <button class="slot-btn" id="btn${slot.id}">Connect</button>
+        <button class="slot-btn step-btn" id="stepBtn${slot.id}" title="本体を16打楽器×16ステップのシーケンサにする (グリッドを claim して LED を描き、押されたキーをステップとして扱う)">STEP</button>
+      </div>
+      <!-- STEP モード: 本体のグリッド = 選んでいるサウンドの16ステップ -->
+      <div class="step-panel" id="stepPanel${slot.id}" style="display:none">
+        <div class="step-lane-head">
+          <button class="step-nav" id="stepPrev${slot.id}">‹</button>
+          <span class="step-lane-name" id="stepLane${slot.id}">—</span>
+          <button class="step-nav" id="stepNext${slot.id}">›</button>
+          <span class="step-hint">パッドでも選べます</span>
+        </div>
+        <div class="step-cells" id="stepCells${slot.id}"></div>
       </div>
       <!-- v1.31(#17/#18): Out 選択と Tr(transpose) を廃止。
            出力は slot.id と同番号の IAC ポート(PONKEY{id})へ自動で送る。 -->
@@ -2481,6 +2727,27 @@ function buildSlots() {
     document.getElementById(`btn${slot.id}`).addEventListener("click", () => {
       if (slot.connected) disconnectSlot(slot); else connectSlot(slot);
     });
+
+    // ── STEP モード ──
+    const stepCells = document.getElementById(`stepCells${slot.id}`);
+    for (let step = 0; step < 16; step++) {
+      const c = document.createElement("div");
+      c.className = "step-cell" + (step % 4 === 0 ? " beat" : "");
+      c.id = `stepCell${slot.id}-${step}`;
+      c.addEventListener("click", () => {
+        const st = slot.step;
+        st.grid[st.lane][step] = !st.grid[st.lane][step];
+        stepRefreshUI(slot); stepPaintDevice(slot); stepSend(slot);
+      });
+      stepCells.appendChild(c);
+    }
+    document.getElementById(`stepBtn${slot.id}`).addEventListener("click", () => {
+      if (slot.step.on) stepExit(slot); else stepEnter(slot);
+    });
+    document.getElementById(`stepPrev${slot.id}`).addEventListener("click",
+      () => stepSetLane(slot, (slot.step.lane + 15) % 16));
+    document.getElementById(`stepNext${slot.id}`).addEventListener("click",
+      () => stepSetLane(slot, (slot.step.lane + 1) % 16));
     // v1.31(#17/#18): Out 選択 / Transpose ボタンは廃止 (出力は PONKEY{id} へ自動)
   });
 }
@@ -2678,6 +2945,7 @@ async function connectSlot(slot) {
     pk.on("disconnect", () => {
       // v1.24: 切断時は必ず全ノート停止 (押さえたまま切れた音が鳴りっぱなしになるのを防ぐ)
       panicSlot(slot);
+      if (slot.step.on) { slot.step.on = false; clearTimeout(slot.step.sendTimer); stepRefreshUI(slot); }
       slot.connected = false;
       slot.pk = null;
       slot.lastChannel = null;
@@ -2687,9 +2955,18 @@ async function connectSlot(slot) {
     // 受信は ponkey.js のイベントで受け、既存の変換ロジックへそのまま渡す
     pk.on("cc",   e => processMidiEvent(slot, e.ts13, 0xB0 | e.ch, e.cc, e.val));
     pk.on("note", e => processMidiEvent(slot, e.ts13, (e.on ? 0x90 : 0x80) | e.ch, e.note, e.vel));
-    await pk.connect({ debug: false });   // MIDI サービスのみ (デバッグサービス不使用)
+    // v2.1: STEP モード用。claim / LED / LOAD_SLOT は**デバッグサービス経由**なので開いておく。
+    //   ただしログ通知は絞る (4台同時なので、要らない通知で BLE を埋めない)。
+    pk.on("keydown",  e => { if (slot.step.on) stepOnDeviceKey(slot, e.key); });
+    pk.on("slotdump", d => stepOnSlotDump(slot, d));
+    pk.on("claim",    c => { if (slot.step.on && !c.grid) { slot.step.on = false; stepRefreshUI(slot);
+                              log("sys", `S${slot.id} STEP: 本体側で解除されました (Fn 長押し)`); } });
+    await pk.connect({ debug: true });
     slot.pk = pk;
     slot.connected = true;
+    // 通知は SYSTEM (caps/claim) だけ残す。SONG は STEP の取り込み中だけ一時的に開ける
+    pk.unsubscribeCat(DBG_CAT_SONG).catch(()=>{});
+    pk.unsubscribeCat(DBG_CAT_MODE).catch(()=>{});
     updateSlotUI(slot);
     log("sys", `スロット${slot.id}: 接続 ${pk.device.name || "(no name)"}`);
 
@@ -2779,6 +3056,11 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
     if (d1 === CC_BAR_SYNC) {
       slot.currentStep = d2 & 0x0F;
       updateStepHighlight(slot);
+      if (slot.step.on && slot.step.head !== slot.currentStep) {
+        slot.step.head = slot.currentStep;        // STEP モードの再生ヘッド (画面と本体の両方)
+        stepRefreshUI(slot);
+        stepPaintDevice(slot);
+      }
     } else if (d1 === CC_VOICE_SELECT) {
       const part = (d2 >> 4) & 0x0F;
       const voice = d2 & 0x0F;
@@ -2982,6 +3264,7 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
 buildSlots();
 log("sys", "Translator v2.0 起動 (ファーム v4.6 のパート構成に対応: P1=ドラムキット / P2-P7=メロディ6パート)");
 log("sys", "シミュレータ: パッドはどのパートでも押した瞬間に鳴る (P1=16打楽器 / P2-P7=音階)。shift+P2-P7 で 1bar ループ録音");
+log("sys", "STEP: 本体をステップシーケンサにする (グリッドを借りて16打楽器×16ステップ。パッドでレーン選択、Fn 2秒長押しで本体側から解除)");
 log("sys", "1) Web MIDI 許可 → 2) PONKEY 接続 → 3) IAC ポート割当 → 4) (任意) 各種設定 → 5) (任意) プリセットを .json で保存");
 </script>
 </body>
