@@ -221,13 +221,45 @@ body.l3 .cyl .tnum,body.l3 .cyl .tsub{paint-order:stroke;stroke-width:2.4px;stro
   color:var(--ink-3);letter-spacing:.05em;white-space:nowrap}
 .err{margin:10px 14px 0;padding:0 0 0 13px;border-left:2px solid var(--accent);
   color:var(--accent-ink);font-size:13px;line-height:1.7;display:none}
+/* --- 学び方の選択 (本体とつないで / 画面だけで) ---
+   PONKEY が手元にあるかどうかで、同じレッスンでも「何が起きているか」の見え方が変わる。
+   自動判定に任せず最初に選ばせる: つないだつもりで進んで実は未接続、を避けるため */
+body.home.mpick #lessonPick{display:none}
+body.home:not(.mpick) #modePick{display:none}
+body.home #btnPlay{display:none}
+body.msolo #btnConn,body.mpick #btnConn{display:none}
+/* 本文の一部はモードでしか意味を持たない (実機の話 / 画面だけの話)。文章ごと出し分ける */
+body.msolo .onlydev,body.mdev .onlysolo,body.mpick .onlydev,body.mpick .onlysolo{display:none}
+.mcard{display:block;width:100%;margin-top:16px;padding:20px;text-align:left;
+  background:var(--block);border-radius:var(--r);
+  transition:transform .2s var(--ease),background .2s var(--ease)}
+.mcard:active{transform:scale(.98);background:var(--fill-2)}
+.mcard b{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:700;letter-spacing:-.01em}
+.mcard b svg{width:16px;height:16px;flex:0 0 auto;color:var(--accent-ink)}
+.mcard s{display:block;text-decoration:none;margin-top:6px;font-size:13.5px;
+  line-height:1.65;color:var(--ink-2);letter-spacing:.018em}
+.mcard u{display:block;text-decoration:none;margin-top:9px;font-size:11.5px;
+  color:var(--ink-3);letter-spacing:.04em}
+.modebar{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;
+  background:var(--fill);font-size:11.5px;font-weight:600;letter-spacing:.03em;color:var(--ink-2)}
+.chip i{width:6px;height:6px;border-radius:50%;background:var(--ink-3);font-style:normal}
+body.mdev .chip i{background:var(--accent)}
+body.mdev.linked .chip i{background:#2FA84F}
+.mlink{font-size:11.5px;font-weight:500;color:var(--accent-ink);
+  text-decoration:underline;text-underline-offset:2px}
+.mlink:active{opacity:.5}
+.homenote{display:none;margin-top:16px;padding:0 0 0 13px;text-align:left;
+  border-left:1px solid var(--b70-hair);
+  font-size:12px;line-height:1.75;letter-spacing:.02em;color:var(--ink-3)}
+.homenote b{color:var(--ink-2);font-weight:600}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important;transition-duration:.01ms !important}
   .cyl{transition:none}.pushgrp{animation:none}
 }
 </style>
 </head>
-<body class="home">
+<body class="home mpick">
 
 <nav class="navbar" id="navbar">
   <a class="back" id="btnBack" href="index.html" aria-label="アプリ一覧へ">‹</a>
@@ -242,23 +274,49 @@ body.l3 .cyl .tnum,body.l3 .cyl .tsub{paint-order:stroke;stroke-width:2.4px;stro
 <div class="err jp" id="err"></div>
 
 <div class="home jp" id="home">
-  <h1>レッスン</h1>
-  <p>みっつあります。上から順番に。</p>
-  <button class="lcard" id="l0">
-    <b><i>1</i>つかいかた</b>
-    <s>P1 から順に音を重ねて、PONKEY をひととおり動かせるようになります。</s>
-    <u>11ステップ · 約10分</u>
-  </button>
-  <button class="lcard" id="l1">
-    <b><i>2</i>つくりかた</b>
-    <s>置き方・抜き方・音階の選び方。同じ機械で「自分の曲」にしていきます。</s>
-    <u>6ステップ · 約10分 · レッスン1のあとで</u>
-  </button>
-  <button class="lcard" id="l2">
-    <b><i>3</i>しくみ</b>
-    <s>Fn を押しながら何が起きているか。BPM・音色・音量・エフェクト・インテリア。本体の今の状態を映しながら、一つずつ。</s>
-    <u>16ステップ · 本体をつないで見るのがおすすめ</u>
-  </button>
+
+  <div id="modePick">
+    <h1>レッスン</h1>
+    <p>どちらで学びますか。</p>
+    <button class="mcard" id="mDev">
+      <b><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.6 11 11 8 13.5V2.5L11 5 5 11.4"/></svg>PONKEY とつないで</b>
+      <s>本体を Bluetooth でつなぎます。実物のキーを押して進み、LED の光り方もソレノイドの動きもそのまま。画面は本体の今の状態を映す鏡になります。</s>
+      <u>Chrome か Edge が必要 · 本体の電源を入れて、まだどのキーも押していない状態で</u>
+    </button>
+    <button class="mcard" id="mSolo">
+      <b><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="12.4" height="8.6" rx="1.2"/><path d="M5.6 13.8h4.8"/></svg>PONKEY なしで</b>
+      <s>画面の中の PONKEY だけで学びます。音はこの端末から鳴り、盤面の光り方も本体と同じ規則で再現します。本体が手元になくても3つとも最後まで進められます。</s>
+      <u>接続なし · スマホでもパソコンでも</u>
+    </button>
+  </div>
+
+  <div id="lessonPick">
+    <div class="modebar">
+      <span class="chip" id="modeChip"></span>
+      <button class="mlink" id="btnMode">変える</button>
+    </div>
+    <h1>レッスン</h1>
+    <p>みっつあります。上から順番に。</p>
+    <button class="lcard" id="l0">
+      <b><i>1</i>つかいかた</b>
+      <s>P1 から順に音を重ねて、PONKEY をひととおり動かせるようになります。</s>
+      <u>11ステップ · 約10分</u>
+    </button>
+    <button class="lcard" id="l1">
+      <b><i>2</i>つくりかた</b>
+      <s>置き方・抜き方・音階の選び方。同じ機械で「自分の曲」にしていきます。</s>
+      <u>6ステップ · 約10分 · レッスン1のあとで</u>
+    </button>
+    <button class="lcard" id="l2">
+      <b><i>3</i>しくみ</b>
+      <s>Fn を押しながら何が起きているか。BPM・音色・音量・エフェクト・インテリア。今の状態を映しながら、一つずつ。</s>
+      <u id="l2u">16ステップ</u>
+    </button>
+    <div class="homenote jp" id="homeNote"></div>
+  </div>
+
 </div>
 
 <div class="prog" id="prog"></div>
@@ -304,7 +362,7 @@ body.l3 .cyl .tnum,body.l3 .cyl .tsub{paint-order:stroke;stroke-width:2.4px;stro
 const L1=[
   { no:'はじめに', title:'PONKEY を起動する',
     one:'どれかのキーを押すと、演奏モードがスタートします。',
-    more:'電源を入れると、PONKEY はまず<b>アドバタイズモード</b>に入ります。アプリと接続できるのはこのあいだだけです。どれかキーを押すとアドバタイズモードを抜けて、単体での演奏モードに入ります。PONKEY が手元になくても、画面のキーをタップすれば同じように進められます。',
+    more:'電源を入れると、PONKEY はまず<b>アドバタイズモード</b>に入ります。アプリと接続できるのはこのあいだだけです。どれかキーを押すとアドバタイズモードを抜けて、単体での演奏モードに入ります。<span class="onlydev">本体のキーを押しても、画面のキーをタップしても、同じように進みます。</span><span class="onlysolo">いまは画面の中の PONKEY で進みます。画面のキーをタップしてください。</span>',
     free:0 },
   { no:'ステップ 1', part:0, title:'ドラムを叩く',
     one:'P1 を押してから、グリッドを好きに叩いてみましょう。',
@@ -312,7 +370,7 @@ const L1=[
     free:0 },
   { no:'ステップ 2', part:0, title:'ドラムを録音する',
     one:'P1 を押さえたまま、キックとスネアを叩きましょう。',
-    more:'<b>P キーを押さえている間が録音です。</b>叩いたタイミングがそのまま記録され、離すとループになって鳴り続けます。ずれても、いちばん近い 16 分に吸着してくれます。うまくいかなかったら P1 をダブルクリックで消して録り直し。（パソコンで操作している場合は、スペースキーを押している間が「P キーを押している」状態です。）',
+    more:'<b>P キーを押さえている間が録音です。</b>叩いたタイミングがそのまま記録され、離すとループになって鳴り続けます。ずれても、いちばん近い 16 分に吸着してくれます。うまくいかなかったら P1 をダブルクリックで消して録り直し。<span class="onlysolo">（パソコンなら、スペースキーを押している間が「P キーを押している」状態です。）</span>',
     rec:4 },
   { no:'ステップ 3', part:0, title:'ハットを重ねる',
     one:'もう一度 P1 を押さえたまま、ハット（3列目）を刻みましょう。',
@@ -391,7 +449,7 @@ const L3=[
   { no:'ステップ 1', key:'fn', mode:'fn', title:'Fn は「押しながら」のキー',
     one:'Fn を押したまま、離さずにいてください。',
     todo:'Fn を押してみよう', doneTxt:'Fn が押されています',
-    more:'Fn だけでは何も変わりません。<b>Fn を押している間だけ P1〜P7 が機能キーに変わり、離すと元に戻ります。</b>だから本体の LED も、Fn を押しただけでは変わりません。盤面の注記が「いま P キーが何の役目か」を示します。（アプリの Fn は、実機がつながっていないときはタップで押しっぱなし扱いになります。）' },
+    more:'Fn だけでは何も変わりません。<b>Fn を押している間だけ P1〜P7 が機能キーに変わり、離すと元に戻ります。</b>だから本体の LED も、Fn を押しただけでは変わりません。盤面の注記が「いま P キーが何の役目か」を示します。<span class="onlysolo">（画面の Fn は押しっぱなしにできないので、<b>タップで押した状態のまま</b>になります。もう一度タップで離します。）</span>' },
   { no:'ステップ 2', key:'quick', mode:'fn', title:'Fn＋グリッド ＝ クイックページ',
     one:'Fn を押したまま、グリッドを押してみましょう。',
     todo:'Fn を押しながら G を押そう', doneTxt:'クイックページを触りました',
@@ -563,6 +621,7 @@ const S={
   done:[], hitCount:0, demoIdx:-1, interacted:false, clearing:false,
   playing:false, bpm:100, cur:-1, loopLen:16, scale:0, preset:0,
   connected:false, sync:false,
+  mode:null,                     // 'dev' = 本体とつないで / 'solo' = 画面だけで
   held:new Set(), space:false, pending:null,
 };
 const prog=()=>S.lesson===null?[]:LESSONS[S.lesson].steps;
@@ -1690,7 +1749,7 @@ function paintLiveGrid(){
 }
 const fmt=(v,est)=>v===null||v===undefined?'<span class="unk">未取得</span>':(est?'<span class="est">'+v+'</span>':String(v));
 function paintHud(){
-  const tp=target(),known=S.connected;
+  const tp=target(),known=S.connected||S.mode==='solo';
   const W=(k,v)=>'<div class="wide"><span>'+k+'</span><span>'+v+'</span></div>';
   const H=(k,v)=>'<div><span>'+k+'</span><span>'+v+'</span></div>';
   // v4.6.0: メロディ6パート。単位は真のオクターブ (ステッパ下段が書くのは 12 の倍数だけ)
@@ -1711,7 +1770,8 @@ function paintHud(){
     W('音色 '+PARTS[tp].n,fmt(D.voice[tp]===null?null:(D.voice[tp]+1)+' '+VOICE_NAMES[tp][D.voice[tp]],!known))+
     W('音量',PARTS[tp].n+' '+fmt(D.pvol[tp]===null?null:'L'+D.pvol[tp],!uiKnown())+' · マスター '+fmt(D.master===null?null:'L'+D.master,!uiKnown()))+
     W('エフェクト',fmt(FX_NAMES.map((n,i)=>n+' '+D.fxLv[i]).join(' · '),!uiKnown()))+
-    W('プリセット',fmt(D.preset===null?null:QP_PRESETS[D.preset],true))+
+    // プリセットは本体が通知しないので、つないでいるときは常に推定。画面だけのときは画面が持ち主
+    W('プリセット',fmt(D.preset===null?null:QP_PRESETS[D.preset],S.mode!=='solo'))+
     (other?W('そのほか',other):'');
 }
 function paintLiveStatus(){
@@ -1728,7 +1788,8 @@ function paintLiveAll(){ if(S.lesson!==2) return; paintLiveParts(); paintLiveGri
    ===================================================================== */
 const CC_RESET=0x42;
 let pk=null;                                   // BLE 層は共通クライアント ponkey.js (window.Ponkey) 経由
-const uiKnown=()=>S.connected&&!!pk&&pk.hasFeature('UI_STATE');
+// 画面だけで学ぶときは、本体の値を「推定」しているのではなく画面が持ち主なので ? を付けない
+const uiKnown=()=>S.mode==='solo'||(S.connected&&!!pk&&pk.hasFeature('UI_STATE'));
 
 /* 盤面ロック (Push!!) を実機にも効かせる: グリッドだけ claim。P キーは押させたいので封印しない */
 let claimed=false;
@@ -1763,7 +1824,8 @@ function setSync(on){
   if(S.lesson!==null) paintStatus();
 }
 async function connect(){
-  if(!navigator.bluetooth){ showErr('このブラウザでは接続できません。Chrome を使ってください。'); return; }
+  if(!navigator.bluetooth){ showErr('このブラウザでは接続できません。Chrome か Edge を使うか、「PONKEY なしで」を選んでください。'); return; }
+  if(S.mode!=='dev') setMode('dev');
   showErr('');
   try{
     pk=new Ponkey();
@@ -1800,8 +1862,9 @@ async function connect(){
     el('connLabel').textContent='接続中'; el('btnConn').classList.add('on');
     setSync(true);
     D.sticky=false; queueMeta();
+    paintHome();
     if(S.lesson!==null) paintStep();
-  }catch(e){ showErr('接続できませんでした: '+(e.message||e)); }
+  }catch(e){ showErr('接続できませんでした: '+(e.message||e)); paintHome(); }
 }
 /* 本体→アプリの CC 通知。接続時の State Sync と、Fn 操作のたびに届く変更通知を状態に反映する */
 function onCC({cc,val:v}){
@@ -1827,6 +1890,10 @@ function onDisc(){
   S.connected=false;
   el('connLabel').textContent='接続'; el('btnConn').classList.remove('on');
   setSync(false);
+  // つないで学ぶモードのまま切れたら、画面だけで続けられることを伝える。
+  //   D は切れた瞬間の実測値のまま残す (工場出荷値に戻すと、読んだ事実を捨ててしまう)
+  if(S.mode==='dev') showErr('本体との接続が切れました。このまま画面だけで進められます。');
+  paintHome();
 }
 function showErr(m){const b=el('err');b.style.display=m?'block':'none';b.textContent=m||'';}
 
@@ -1869,11 +1936,52 @@ function say(text){
   u.lang='ja-JP'; u.rate=1.0;
   speechSynthesis.speak(u);
 }
-const readStep=()=>{const st=cur(); say(st.one+' '+(st.more||''));};
+/* 読み上げは CSS の display を知らないので、いま出していないほうの文を先に落とす */
+function modeText(html){
+  const drop=S.mode==='solo'?'onlydev':'onlysolo';
+  return html.replace(new RegExp('<span class="'+drop+'">[\\s\\S]*?<\\/span>','g'),'');
+}
+const readStep=()=>{const st=cur(); say(st.one+' '+modeText(st.more||''));};
 
 /* =====================================================================
    10. 進行
    ===================================================================== */
+/* 画面だけで学ぶときの初期値。本体の工場出荷値と同じところから始める
+   (ROM の DEFAULT_PART_VOLUME / bpm=100 / masterVolume=110 を段階に直したもの)。
+   null のままだと HUD が「未取得」だらけで、自分が何を動かしたのか読み取れない */
+function soloSeed(){
+  D.playing=false; D.bpm=100; D.click=false; D.slot=0; D.rect=[4,4];
+  D.oct=[0,0,0,0,0,0];
+  D.root=0; D.scale10=0; D.swing=0; D.accent=0;
+  D.voice=[0,0,0,0,0,0,0]; D.pvol=[6,6,5,6,4,5,6]; D.master=7;
+  D.preset=0; D.mvol=110; D.fxLv=[0,0,0,0]; D.fxKnown=true;
+}
+function setMode(m){
+  S.mode=m;
+  document.body.classList.toggle('mpick',m===null);
+  document.body.classList.toggle('mdev', m==='dev');
+  document.body.classList.toggle('msolo',m==='solo');
+  if(m==='solo'){
+    if(pk&&S.connected){ try{ pk.disconnect(); }catch(e){} }   // 本体が横から操作を送ってこないように
+    soloSeed(); setSync(false); showErr('');
+  }
+  paintHome();
+}
+function paintHome(){
+  document.body.classList.toggle('linked',S.connected);
+  const chip=el('modeChip');
+  if(S.mode==='dev') chip.innerHTML='<i></i>本体とつないで'+(S.connected?'':'（未接続）');
+  else if(S.mode==='solo') chip.innerHTML='<i></i>画面だけで';
+  el('l2u').textContent=S.mode==='dev'
+    ? '16ステップ · 本体の今の状態を映しながら'
+    : '16ステップ · 画面の中の PONKEY で';
+  const n=el('homeNote');
+  if(S.mode==='dev'&&!S.connected){
+    n.innerHTML='まだ本体につながっていません。右上の <b>接続</b> を押してください。'+
+      'つながらないままでも、画面の中の PONKEY で最後まで進められます。';
+    n.style.display='block';
+  } else n.style.display='none';
+}
 function openLesson(n){
   S.lesson=n; S.idx=0; S.demoIdx=-1; S.hitCount=0;
   S.interacted=false; S.clearing=false; S.pending=null;
@@ -1885,6 +1993,7 @@ function openLesson(n){
   document.body.classList.toggle('l3',n===2);
   clearCylLeds();
   if(n===2){ const f=D.feat,f2=D.feat2,pr=D.proto; devReset(); D.feat=f; D.feat2=f2; D.proto=pr;
+    if(S.mode==='solo') soloSeed();                      // devReset で消えた既定値を戻す
     D.seen.always=true; if(S.connected) queueMeta(); }
   else if(S.connected&&pk&&pk.hasFeature('SONG_DUMP')) pk.dumpSlot();
   el('wmSub').textContent='レッスン'+(n+1);
@@ -1901,6 +2010,7 @@ function goHome(){
   el('wmSub').textContent='レッスン';
   el('clearBox').classList.remove('on');
   window.speechSynthesis&&speechSynthesis.cancel();
+  paintHome();
   scrollTo(0,0);
 }
 function go(d){
@@ -1913,6 +2023,9 @@ function go(d){
 }
 buildPanel();
 el('playIcon').innerHTML=ICON.play;
+el('mDev').onclick=()=>{ setMode('dev'); connect(); };
+el('mSolo').onclick=()=>setMode('solo');
+el('btnMode').onclick=()=>setMode(null);
 el('l0').onclick=()=>openLesson(0);
 el('l1').onclick=()=>openLesson(1);
 el('l2').onclick=()=>openLesson(2);

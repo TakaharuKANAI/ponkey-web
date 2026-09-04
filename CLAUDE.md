@@ -47,6 +47,15 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   接続時は `dumpSlot()` で本体パターンを読んで写す（`hasFeature()` でゲート、旧FWは CC_RESET にフォールバック）。
   BLE 層は `ponkey.js` 経由（`modeui`/`songmeta`/`slotdump`/`cc`/`keydown` 等のイベントを購読。
   円柱の動きに使う SOLENOID カテゴリだけ `dbgRaw(0x03,[0x03])` で追加購読している）
+  **入口で学び方を2つから選ばせる**（`S.mode`）。以前は接続の有無で暗黙に切り替わっていたが、
+  つないだつもりで未接続のまま進む事故があるので明示的にした。
+  `'dev'` = 本体とつないで（`connect()` を即呼ぶ。BLE が使えない/断られたら「画面だけで続けられる」と案内して続行）、
+  `'solo'` = 画面だけで（接続中なら `pk.disconnect()`。本体が横から `keydown` を送ってこないように切る）。
+  solo では `soloSeed()` が `D` にファームの工場出荷値（bpm=100 / masterVolume=110 / `DEFAULT_PART_VOLUME`
+  を段階に直したもの）を入れ、HUD の「未取得」と推定の `?` を消す（画面が値の持ち主なので推定ではない）。
+  `openLesson(2)` の `devReset()` で消えるため、そこで seed し直している。切断時は seed し直さない
+  （切れた瞬間の実測値のほうが正しい）。本文中のモード限定の一文は `<span class="onlydev">` /
+  `<span class="onlysolo">` で出し分け、読み上げは `modeText()` が出していない側を先に落とす。
 - `duet.html` — PONKEY AI Duet（Magenta MusicRNN と交互に弾く）。**v4.6 追従済み**:
   受信 ch → パートは `Ponkey.PARTS` から作る（旧 `ch===0 ならベース` は v4.6 で誤り。
   ベースは ch2）。レイヤー1 の ch も同じパートとして扱う。Tone.js の音色は 4→6 パート分。
