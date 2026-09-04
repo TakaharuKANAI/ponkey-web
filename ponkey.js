@@ -13,7 +13,7 @@
    プロトコルの正本はファームのヘッダ:
      - CC 番号 / FEAT ビット: PONKEY_V2_DATA_STRUCTURES.h
      - デバッグサービス / SONG_CMD: PONKEY_V2_DEBUG.h と .ino の SONG_CMD_* 定義
-   人間向けの説明: PONKEY_CONTROL_PROTOCOL.md
+   人間向けの説明: ponkey-midi の docs/PONKEY_CONTROL_PROTOCOL.md
 
    使い方 (プレーンな <script src="../ponkey.js"> で window.Ponkey が生える):
      const p = new Ponkey();

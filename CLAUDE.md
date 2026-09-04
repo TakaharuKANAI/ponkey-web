@@ -7,7 +7,7 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 - `ponkey.js` — **全アプリ共通の BLE クライアント**（2026-08-22 に全アプリの BLE 層をこれ経由に移行済み。
   lesson.html を含め未移行なし）。**正本は ponkey-midi リポジトリの `devtools/ponkey.js`** — 修正は必ず正本に
   入れてからここへコピーで同期する（直接編集しない）。プロトコル仕様は ponkey-midi の
-  `PONKEY_CONTROL_PROTOCOL.md`。
+  `docs/PONKEY_CONTROL_PROTOCOL.md`。
   **パート構成の表もここにある** — `Ponkey.PARTS`（パート番号・名前・色相・MIDI ch・音階テーブル・音域シフト）/
   `Ponkey.KIT_NOTES`（ドラム8キット）/ `Ponkey.keyFromNote(ch,note,kit)`（本体の NoteOn → 鍵番号の逆引き）。
   各アプリが写経して持っていた表はここへ集約したので、ファームが変わったらここだけ直す。

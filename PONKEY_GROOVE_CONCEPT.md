@@ -90,7 +90,7 @@ Phase 1（現在）は A のみ。B はファームに「ソングモード外�
 - スイングは名目時計を触らず発火時刻だけ遅らせる（BPM・多台同期・録音位置に影響なし）
 - アクセントは自動演奏 NoteOn（SAM+BLE）とソレノイド 3 段階パルスにかかる
 - `SONG_CMD_DUMP_SLOT 0x07` → `DBG_EV_SONG_META 0x0A` + `DBG_EV_SONG_SLOT_DUMP 0x09`（ソングモード不要・副作用なし）
-- 詳細は `../ponkey-midi/PONKEY_ファーム仕様.md` §7b と `PONKEY_V2_DEBUG.h`
+- 詳細は `../ponkey-midi/docs/PONKEY_ファーム仕様.md` §7b と `PONKEY_V2_DEBUG.h`
 
 ## 5. 次にやること（優先順）
 
