@@ -5,7 +5,7 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 ## 構成
 
 - `ponkey.js` — **全アプリ共通の BLE クライアント**（2026-08-22 に全アプリの BLE 層をこれ経由に移行済み。
-  lesson.html を含め未移行なし）。**正本は ponkey-midi リポジトリの `web/ponkey.js`** — 修正は必ず正本に
+  lesson.html を含め未移行なし）。**正本は ponkey-midi リポジトリの `devtools/ponkey.js`** — 修正は必ず正本に
   入れてからここへコピーで同期する（直接編集しない）。プロトコル仕様は ponkey-midi の
   `PONKEY_CONTROL_PROTOCOL.md`。
   **パート構成の表もここにある** — `Ponkey.PARTS`（パート番号・名前・色相・MIDI ch・音階テーブル・音域シフト）/
@@ -214,7 +214,7 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 - アプリを追加したら **`index.html` のハブに導線を追加**し、`sw.js` のキャッシュ対象も更新する。
   そのとき **`sw.js` の `CACHE` バージョンも上げる**（上げないと利用者に古い版が残る）。
   全アプリにホーム導線がある設計なので、新規ページも同じ導線を持たせる。
-- **エンドユーザーが触るページはここが正。** `../ponkey-midi/web/apps/` は開発・デバッグ専用。
+- **エンドユーザーが触るページはここが正。** `../ponkey-midi/devtools/apps/` は開発・デバッグ専用。
   向こうで作ったものを公開するときは「移す」（コピーを残さない）。二重管理になると、
   こちらにしかない PWA ヘッダとホーム導線が上書きで消える。
 - 挙動の「なぜ」を変える変更をする前に `PONKEY_SESSION_CONCEPT.md` を読む。

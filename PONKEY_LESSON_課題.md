@@ -1,7 +1,7 @@
 # PONKEY LESSON 課題リスト
 
 対象: `lesson.html`（レッスン1: つかいかた / レッスン2: つくりかた / レッスン3: しくみ）
-（旧 `ponkey-midi/web/apps/ponkey-guide.html` は 2026-08-21 に廃止。役目はレッスン3が引き継いだ）
+（旧 `ponkey-midi/devtools/apps/ponkey-guide.html` は 2026-08-21 に廃止。役目はレッスン3が引き継いだ）
 
 **このリポジトリの `lesson.html` が唯一の正。** 開発用のコピーを ponkey-midi 側に置き直さないこと
 （PWA ヘッダとホーム導線がこちらにしかないため、上書きコピーで消える）。
