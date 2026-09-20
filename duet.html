@@ -199,6 +199,19 @@ body {
 .sname { font-size:.78rem;font-weight:600;color:var(--cream);opacity:.8; }
 .sctrl { display:flex;align-items:center;gap:8px; }
 .sval  { font-size:.75rem;font-weight:700;color:var(--orange);min-width:32px;text-align:right; }
+select.sel {
+  font-family:'Be Vietnam Pro',sans-serif;font-size:.7rem;font-weight:600;
+  background:var(--dark);color:var(--cream);
+  border:1px solid var(--mid);border-radius:6px;padding:4px 6px;outline:none;cursor:pointer;
+  max-width:200px;
+}
+/* 1台でかけあいが効いているときだけ出す (黙って挙動が変わるのがいちばん困る) */
+.onenote {
+  font-size:.68rem;font-weight:600;letter-spacing:.04em;
+  text-align:center;color:var(--muted);
+  min-height:1.1em;margin:-12px 0 16px;
+}
+.onenote.on { color:var(--orange-bright); }
 input[type=range] {
   -webkit-appearance:none;appearance:none;width:100px;height:3px;
   background:var(--mid);border-radius:2px;outline:none;
@@ -275,6 +288,9 @@ input[type=range]::-webkit-slider-thumb {
     </div>
   </div>
 
+  <!-- 1台でかけあいが効いているときだけ文が出る -->
+  <div class="onenote" id="oneNote"></div>
+
   <!-- BPM -->
   <div class="bpm-section">
     <div class="bpm-row">
@@ -302,6 +318,13 @@ input[type=range]::-webkit-slider-thumb {
       <div class="srow">
         <span class="sname">Trigger notes</span>
         <div class="sctrl"><input type="range" id="triggerSlider" min="2" max="8" step="1" value="4"><span class="sval" id="triggerVal">4</span></div>
+      </div>
+      <div class="srow">
+        <span class="sname">Solo device</span>
+        <div class="sctrl"><select class="sel" id="oneSel">
+          <option value="auto">Auto — use A if B absent</option>
+          <option value="off">Off — B only</option>
+        </select></div>
       </div>
     </div>
   </div>
@@ -355,6 +378,26 @@ let musicRNN=null, isModelReady=false, isThinking=false;
 let inputNotes=[], noteOnTimes={}, lastHumanCh=0;
 let temperature=1.1, genSteps=16, triggerCount=4;
 let bpm=100;
+
+// ── 1台でかけあい (DIALOGUE から移植) ───────────────────────
+// B 用の本体が無いとき、AI の返事を A の本体で鳴らす。デュエットは交互なので1台で成立する。
+// 本体は BLE NoteOn(0-15) を requestSolenoidFire としてしか扱わず、鳴らした音を返してこないので、
+// A の入力 (onNoteFromA) へ回り込む心配はない。人が割り込めば playAIResponse が途中で譲る。
+let oneDevice = 'auto';                                  // 'auto' | 'off'
+const isLive = p => !!(p && p.midiChar);
+// AI の出力先の本体。B があれば B、無ければ (許可されていれば) A。どちらも無ければ null
+function aiOut(){
+  if(isLive(pk.B)) return pk.B;
+  if(oneDevice!=='off' && isLive(pk.A)) return pk.A;
+  return null;
+}
+function soloDevice(){ return !isLive(pk.B) && isLive(pk.A) && oneDevice!=='off'; }
+function refreshOneNote(){
+  const el=document.getElementById('oneNote'); if(!el) return;
+  const on=soloDevice();
+  el.textContent = on ? '↑ AI answers on your PONKEY (A)' : '';
+  el.classList.toggle('on',on);
+}
 
 // ドラム (v4.6): 本体の「ステップを置いて待つ」操作は廃止され、P1 はパッドになった。
 //   なのでアプリ側のステップ打ち込み (drumPat / drumMode) もやめ、
@@ -536,6 +579,7 @@ async function connectDevice(slot) {
     setBtn(slot,'idle');
     if(window.alienSetConnected) alienSetConnected(slot, false);
     btn.disabled=false;
+    refreshOneNote();
     log(`PONKEY ${slot} disconnected`,'info');
     return;
   }
@@ -582,6 +626,7 @@ async function connectDevice(slot) {
     setBtn(slot,'connected');
     if(window.alienSetConnected) alienSetConnected(slot, true);
     btn.disabled=false;
+    refreshOneNote();
   } catch(e) {
     log(`Connect ${slot} failed: ${e.message}`,'err');
     btn.disabled=false;
@@ -592,6 +637,7 @@ function onDisconnect(slot) {
   pk[slot]=null;
   setBtn(slot,'idle');
   if(window.alienSetConnected) alienSetConnected(slot, false);
+  refreshOneNote();
   log(`PONKEY ${slot} disconnected`,'err');
 }
 
@@ -718,7 +764,7 @@ function onNoteOff(pitch,ch) {
 
   if(dur>=80){
     inputNotes.push({pitch,duration:dur,quantizedDuration:Math.max(1,Math.round(dur/250))});
-    if(inputNotes.length>=triggerCount&&isModelReady&&!isThinking&&pk.B)triggerAI();
+    if(inputNotes.length>=triggerCount&&isModelReady&&!isThinking&&aiOut())triggerAI();
   }
   if(!Object.keys(noteOnTimes).length)setTimeout(()=>{if(!Object.keys(noteOnTimes).length)setBtn('A','connected');},300);
 }
@@ -780,7 +826,7 @@ async function triggerAI() {
     const resp = await musicRNN.continueSequence(qns, steps, temp);
     log(`AI: ${resp.notes.length} notes`, 'ok');
     if(window.alienThink) alienThink(false);
-    setBtn('B','active');
+    if(pk.B) setBtn('B','active');       // 1台のときは B のボタンを触らない (未接続のままなので)
     await playAIResponse(resp, analysis);
   } catch(e){
     if(window.alienThink) alienThink(false);
@@ -808,18 +854,21 @@ async function playAIResponse(seq, analysis){
   const stepMs = analysis ? Math.round(analysis.avgDur * 250) : 250;
 
   // Send mode-select once at start and remember it
-  if(pk.B){
+  const out=aiOut();
+  if(out){
     const mode=CH_TO_PART[lastHumanCh]??2;      // v4.6: パート番号 1-6
     // Re-unmute SAM (v33 mutes on connect; may have re-muted)
-    pk.B.sendCC(0x55,0x00).catch(()=>{});
+    out.sendCC(0x55,0x00).catch(()=>{});
     await sleep(30);
-    pk.B.sendCC(mode,0x7F).catch(()=>{});
-    log(`AI→B SAM unmute + mode=${mode} ch=${lastHumanCh}`,'info');
+    // 1台のときの送り先は A だが、mode は人がいま弾いているパートそのものなので実質何も変わらない
+    out.sendCC(mode,0x7F).catch(()=>{});
+    log(`AI→${out===pk.B?'B':'A'} SAM unmute + mode=${mode} ch=${lastHumanCh}`,'info');
     await sleep(80);
   }
 
   for(const note of seq.notes){
-    if(!isThinking&&inputNotes.length>=triggerCount){log('Interrupted','info');break;}
+    // 人が弾き直したら譲る。1台のときは同じ本体を取り合うので、ここが効かないと成立しない
+    if(inputNotes.length>=triggerCount){log('Interrupted — human took over','info');break;}
     const rawDur=(note.quantizedEndStep-note.quantizedStartStep);
     const durMs = Math.max(80, rawDur * stepMs);
 
@@ -849,11 +898,12 @@ function sendBLEMidiNote(pitch,durMs){
   // Tone.js audio
   playToneNote(CH_TO_IDX[ch]??0,snapped,durMs);
 
-  if(!pk.B)return;
+  const out=aiOut();
+  if(!out)return;
   // 現行ファーム: data1<16 を「キー番号直送」として確実にソレノイド発火させる。
   // 実ノートを送ると本体の選択音色/オクターブ次第で取りこぼすため ki(0-15) を送る。
-  pk.B.noteOn(ch,ki,100).catch(e=>log('TX: '+e.message,'err'));
-  setTimeout(()=>{if(pk.B)pk.B.noteOff(ch,ki).catch(()=>{});},Math.max(80,durMs-20));
+  out.noteOn(ch,ki,100).catch(e=>log('TX: '+e.message,'err'));
+  setTimeout(()=>{if(isLive(out))out.noteOff(ch,ki).catch(()=>{});},Math.max(80,durMs-20));
 }
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -870,6 +920,11 @@ document.getElementById('stepsSlider').addEventListener('input',e=>{
 document.getElementById('triggerSlider').addEventListener('input',e=>{
   triggerCount=parseInt(e.target.value);
   document.getElementById('triggerVal').textContent=triggerCount;
+});
+document.getElementById('oneSel').addEventListener('change',e=>{
+  oneDevice=e.target.value;
+  refreshOneNote();
+  log('Solo device: '+(oneDevice==='auto'?'AI answers on A when B is absent':'off — AI needs its own PONKEY'),'info');
 });
 
 // ── Tempo loop ─────────────────────────────────────────────
@@ -891,6 +946,7 @@ function startTempoLoop() {
 function onBarSync(step) {
   tempoStep = (step + 1) % 16;
   // At bar boundary (step=0), resync B by stop→start
+  // ※ここは aiOut() を使わない — 1台のときの送り先は A 自身で、A の BAR_SYNC で A を止め直すと堂々巡りになる
   if(step === 0 && pk.B) {
     pk.B.sendCC(CC_PLAY,0).catch(()=>{});
     setTimeout(()=>{
@@ -1239,6 +1295,7 @@ document.getElementById('bpmSlider').addEventListener('input', e=>{
 
 // ── Boot ───────────────────────────────────────────────────
 initGrids();
+refreshOneNote();
 loadAI();
 </script>
 </body>
