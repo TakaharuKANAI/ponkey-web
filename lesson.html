@@ -1947,14 +1947,16 @@ const readStep=()=>{const st=cur(); say(st.one+' '+modeText(st.more||''));};
    10. 進行
    ===================================================================== */
 /* 画面だけで学ぶときの初期値。本体の工場出荷値と同じところから始める
-   (ROM の DEFAULT_PART_VOLUME / bpm=100 / masterVolume=110 を段階に直したもの)。
-   null のままだと HUD が「未取得」だらけで、自分が何を動かしたのか読み取れない */
+   (ROM の DEFAULT_PART_VOLUME / bpm=100 / DEFAULT_MASTER_VOLUME を段階に直したもの)。
+   null のままだと HUD が「未取得」だらけで、自分が何を動かしたのか読み取れない。
+   ※ マスター音量は v4.6.26 で 110 → 55 になった (PONKEY_V2_DATA_STRUCTURES.h の
+     DEFAULT_MASTER_VOLUME)。VOL_VALUES の最寄りは 55→L2 / 110→L7 なので D.master も一緒に動く */
 function soloSeed(){
   D.playing=false; D.bpm=100; D.click=false; D.slot=0; D.rect=[4,4];
   D.oct=[0,0,0,0,0,0];
   D.root=0; D.scale10=0; D.swing=0; D.accent=0;
-  D.voice=[0,0,0,0,0,0,0]; D.pvol=[6,6,5,6,4,5,6]; D.master=7;
-  D.preset=0; D.mvol=110; D.fxLv=[0,0,0,0]; D.fxKnown=true;
+  D.voice=[0,0,0,0,0,0,0]; D.pvol=[6,6,5,6,4,5,6]; D.master=2;
+  D.preset=0; D.mvol=55; D.fxLv=[0,0,0,0]; D.fxKnown=true;
 }
 function setMode(m){
   S.mode=m;

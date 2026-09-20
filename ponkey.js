@@ -1,6 +1,8 @@
 /* ============================================================================
-   ※ このファイルの正本は ponkey-midi リポジトリの devtools/ponkey.js。
+   ※ このファイルの正本は ponkey-midi リポジトリの web/ponkey.js。
      修正はまず正本に入れて、このコピーへ同期すること (直接編集しない)。
+     以下は正本のそのままのコピー (この4行だけが追加分)。
+     本文中の PONKEY_CONTROL_PROTOCOL.md も ponkey-midi のリポジトリ直下。
    ========================================================================= */
 /* ============================================================================
    ponkey.js — PONKEY Control Protocol クライアント (v0.1, 2026-08-21)
@@ -13,7 +15,7 @@
    プロトコルの正本はファームのヘッダ:
      - CC 番号 / FEAT ビット: PONKEY_V2_DATA_STRUCTURES.h
      - デバッグサービス / SONG_CMD: PONKEY_V2_DEBUG.h と .ino の SONG_CMD_* 定義
-   人間向けの説明: ponkey-midi の docs/PONKEY_CONTROL_PROTOCOL.md
+   人間向けの説明: PONKEY_CONTROL_PROTOCOL.md
 
    使い方 (プレーンな <script src="../ponkey.js"> で window.Ponkey が生える):
      const p = new Ponkey();
@@ -135,7 +137,7 @@ const DBG_PACKET_MAGIC = 0xa5, DBG_PACKET_HEADER_LEN = 11;
 const DBG_CMD_MAGIC = 0xa6;
 const DBG_CMD = { LOG_ENABLE_ALL: 0x01, LOG_DISABLE_ALL: 0x02, LOG_ENABLE_CAT: 0x03,
                   LOG_DISABLE_CAT: 0x04, GET_FW_VERSION: 0x06, GET_CAPS: 0x07 };
-const DBG_CAT = { SYSTEM: 0x00, MODE: 0x01, KEY: 0x02, SONG: 0x09 };
+const DBG_CAT = { SYSTEM: 0x00, MODE: 0x01, KEY: 0x02, SONG: 0x09, STORAGE: 0x0a };
 const SYS_EV  = { BOOT: 0x01, READY: 0x02, CAPS: 0x03, CLAIM: 0x04 };
 const MODE_EV = { UI: 0x10 };   // v4.5.72
 const KEY_EV  = { GRID_DOWN: 0x01, GRID_UP: 0x02, PART_DOWN: 0x03, PART_UP: 0x04,
@@ -332,6 +334,9 @@ class Ponkey {
 
   // ---- 高レベル API -------------------------------------------------------
   subscribeKeys() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [DBG_CAT.KEY]); }   // 聞き耳 (Phase 2-④)
+  // v4.6.22: 保存(フラッシュ書き込み)イベントの購読。cat=STORAGE の 'dbg' イベントが流れてくる
+  //   (SAVE_DONE 0x05: [fileId, dtMsLE16, bytesLE16, flags] — 正本: PONKEY_V2_DEBUG.h)
+  subscribeStorage() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [DBG_CAT.STORAGE]); }
   // ソレノイド発火イベント (cat=0x03 FIRE/DEACTIVATE)。本体の物理の動きを画面に映すアプリ用 (lesson 等)
   subscribeSolenoid() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [0x03]); }
   // 任意カテゴリの購読 ON/OFF (DBG_CAT の値を渡す)

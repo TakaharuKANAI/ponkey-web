@@ -5,9 +5,17 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
 ## 構成
 
 - `ponkey.js` — **全アプリ共通の BLE クライアント**（2026-08-22 に全アプリの BLE 層をこれ経由に移行済み。
-  lesson.html を含め未移行なし）。**正本は ponkey-midi リポジトリの `devtools/ponkey.js`** — 修正は必ず正本に
+  lesson.html を含め未移行なし）。**正本は ponkey-midi リポジトリの `web/ponkey.js`** — 修正は必ず正本に
   入れてからここへコピーで同期する（直接編集しない）。プロトコル仕様は ponkey-midi の
-  `docs/PONKEY_CONTROL_PROTOCOL.md`。
+  **リポジトリ直下**の `PONKEY_CONTROL_PROTOCOL.md`。
+  ⚠ **このパスは 2026-09-20 に直した**。2026-09-04 の2コミット（`a8fd1e7` / `8a1b30c`）で
+  「ponkey-midi 側が `web/` → `devtools/` に改名」「文書は `docs/` 配下へ」に追従したことになっていたが、
+  **ponkey-midi の `main` にその改名は入っていない**（同日の HEAD `dc601d6` 時点で `web/ponkey.js` と
+  ルート直下の `PONKEY_CONTROL_PROTOCOL.md` のまま。`docs/` も `devtools/` も存在しない）。
+  こちらが先走ったか、向こうで取り止めたかのどちらか。**実在する側に合わせる**判断にした。
+  ponkey-midi 側で改名が入ったら、ここと `ponkey.js` 先頭のヘッダを戻すこと。
+  なお `ponkey.js` は正本の**そのままのコピー**で、先頭6行のこの注記だけが追加分
+  （`diff <(tail -n +7 ponkey.js) ../ponkey-midi/web/ponkey.js` が空になる）。
   **パート構成の表もここにある** — `Ponkey.PARTS`（パート番号・名前・色相・MIDI ch・音階テーブル・音域シフト）/
   `Ponkey.KIT_NOTES`（ドラム8キット）/ `Ponkey.keyFromNote(ch,note,kit)`（本体の NoteOn → 鍵番号の逆引き）。
   各アプリが写経して持っていた表はここへ集約したので、ファームが変わったらここだけ直す。
@@ -36,7 +44,15 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   META+SLOT_DUMP と BLE MIDI の CC 通知で答え合わせ。v4.5.72+ なら `DBG_EV_MODE_UI` と拡張 META が届くので
   推定をやめて本体の申告を正とし、HUD の `?` も消える。旧FWのみ推定フォールバック）。
   Fn×Pn の割当や音色名はファーム `PONKEY_PT2_v4_5_34.ino` / `PONKEY_V2_DATA_STRUCTURES.h` から写しているので、
-  ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる（**現在 v4.6.20 準拠**）。
+  ファームが変わったら `L3` の本文と `VOICE_NAMES` 等の表を追従させる
+  （**本文は v4.6.20 準拠のまま。実機のファームは v4.6.37**）。
+  ⚠ 2026-09-20 に棚卸しし、**まとめて追従はせず、ズレを記録して残す**判断をした
+  （本文の書き換えは実機で確かめながらやるほうが確実なため）。未追従の一覧は
+  `PONKEY_LESSON_課題.md` の **B-6** にある（Fn×P6 の LED 輝度・クイックページの
+  BPM メトロノーム / キー＝基準音1音・録音中のソレノイド停止 など7件）。
+  **数値が実機と違っていた1件だけはその場で直した**: `soloSeed()` のマスター音量。
+  v4.6.26 で `DEFAULT_MASTER_VOLUME` が 110→55 になっていたので `D.mvol=55` / `D.master=2` へ
+  （`VOL_VALUES` の最寄り段。`D.pvol` は `DEFAULT_PART_VOLUME` と今も一致するので据え置き）。
   v4.6 追従で入れ替えたもの: L1/L2 は「P1=パッド＋長押し録音 / P2-P7=メロディ6パート」の操作モデルへ全面書き直し、
   L3 は Fn+G＝クイックページ（プリセット8/スケール/キー/BPM/音量）と P1+PN＝曲のスロット6つ、
   P7+P2〜P6＝インスタントFXの項を新設、廃止された SCALE 設定・パターン流し込みの2項を削除、
