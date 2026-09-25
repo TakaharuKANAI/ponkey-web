@@ -2062,6 +2062,8 @@ function applySettings(data) {
     if (dejitterBuf) dejitterBuf.value = BLE_JITTER_BUFFER_MS;
   }
   log("sys", `プリセット読込: ${appliedCount} スロット適用 (savedAt: ${data.savedAt || "不明"})`);
+  const lgIds = slots.filter(s => s.legacy).map(s => s.id);
+  if (lgIds.length) log("sys", `0615 モード用の旧プリセット: PONKEY ${lgIds.join(", ")} — CONNECT してから 0615 を押してください`);
   if (missingPorts.length) {
     log("warn", `MIDI 出力ポート未検出: ${missingPorts.join(", ")} → 該当スロットは「送信しない」に。プルダウンから手動で割り当ててください`);
   }
@@ -2078,6 +2080,7 @@ function refreshSlotUI(slot) {
   refreshPkeyVisuals(slot);
   refreshPadsForSelectedPart(slot);
   refreshMuteSoloVisuals(slot);   // v1.29: Mute/Solo ボタンの表示も同期
+  legacyRefreshUI(slot);          // v2.2: 0615 ボタン (旧プリセットがあれば濃く) とパネル
   // per-part スケール/キー (P2-P7)
   for (let pi = 0; pi < MEL_PARTS.length; pi++) {
     const sSel = document.getElementById(`scaleSel${slot.id}-${pi}`);
