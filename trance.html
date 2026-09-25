@@ -583,6 +583,30 @@
   .step-cell.beat { background: var(--paper-deep); }
   .step-cell.on { background: var(--ink); opacity: 1; }
   .step-cell.head { box-shadow: inset 0 0 0 2px var(--warn); opacity: 1; }
+  /* ── 0615 モード (v2.2) ── */
+  .lg-btn { opacity: .45; }
+  .lg-btn.ready, .lg-btn.on { opacity: 1; }
+  /* 楽譜と同じく ch ごとに本体と同じ 4×4 (左上 = ステップ1) */
+  .lg-panel .step-lane-head { flex-wrap: wrap; }
+  .lg-panel .step-lane-name { flex: 1 1 100%; }
+  .lg-rows { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .lg-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; align-content: start; }
+  .lg-lab {
+    grid-column: 1 / -1; margin-bottom: 1px;
+    border: 1px solid var(--border); background: var(--paper); cursor: pointer;
+    font: inherit; font-size: 9px; padding: 1px 0; color: var(--muted);
+  }
+  .lg-row.sel .lg-lab { background: var(--ink); color: var(--paper); }
+  .lg-cell {
+    aspect-ratio: 1; border: 1px solid var(--border-soft); background: var(--paper);
+    cursor: pointer; opacity: .55; font-size: 7px; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; white-space: nowrap; color: var(--muted);
+  }
+  .lg-cell.beat { background: var(--paper-deep); }
+  .lg-cell.acc { font-weight: 700; }
+  .lg-cell.on { background: var(--ink); color: var(--paper); opacity: 1; }
+  .lg-cell.head { box-shadow: inset 0 0 0 2px var(--warn); opacity: 1; }
+  .lg-cell.lost { text-decoration: line-through; }
   .slot-monitor {
     margin-top: 8px;
     padding-top: 8px;
@@ -999,6 +1023,18 @@
 //         が表現できる (旧 TRANCE の 4パート × 16ステップ より広い)。
 //         入る時に現在スロットを DUMP して**メロディは保持**したまま、ドラムだけ差し替える。
 //         claim は Fn 2秒長押しと切断でファーム側から必ず解除される。
+//   v2.2 (2026-09-25): **0615 モード (旧 TRANCE 互換)** — 2026-06-15 のライブを今のファームで再現する。
+//         当時 (v1.x / ファーム v4.5) は本体の P1-P4 がドラム4パート × 16ステップで、アプリが
+//         「P の何ステップ目か → melodyMap の音」に置き換えて Logic ch1-4 へ出していた。
+//         奏者は P1-P4 で ch を切り替え、隣を見ながらステップを足し引きして演奏した。
+//         v4.6 はステップ列を持たないので、STEP モードの仕組み (claim + LED_FRAME + LOAD_SLOT) に
+//         **(パート, 音, 強さ) の組ごとにキットのキーを1つ割り当てる**変換を足して再現する:
+//           - 本体の P1-P4 = ch1-4 のレーン選択 (パートキーも claim)。グリッド = そのレーンの16ステップ
+//           - LOAD_SLOT のドラム = (割り当てたキー<<4)|ステップ → 本体が鳴らした NoteOn のキーから
+//             (レーン, 音, 強さ) を**一意に引ける**ので、BLE の到着タイミングでステップを推定しなくてよい
+//           - P5-P7 = FREE。グリッドを当時の BASS/LEAD/PAD として**アプリが**鳴らす (Logic ch5-7)。
+//             ファームにアプリからパートを切り替える窓口が無いため
+//         旧プリセット (presetVersion 1.1 の melodyMode/melodyMap/stepVelocity) はそのまま読み込める。
 // ════════════════════════════════════════════════════════
 
 const KEY_COUNT    = 16;
@@ -1152,6 +1188,7 @@ const STEP_LED_HEAD = [255, 255, 255];
 function stepInit(slot) {
   slot.step = {
     on: false,
+    mode: "kit",                                 // "kit" = 16打楽器 STEP / "legacy" = 0615 モード
     lane: 0,                                     // 本体グリッドに出しているサウンド (0-15)
     grid: Array.from({length:16}, () => new Array(16).fill(false)),  // [サウンド][ステップ]
     keepSynth: [],                               // 取り込んだメロディ (書き戻しで消さないため)
@@ -1197,7 +1234,9 @@ function stepOnSlotDump(slot, d) {
   for (let n = 0; n < dc && i + 2 < full.length; n++) {
     const b = full[i++], lo = full[i++], hi = full[i++];
     const step = b & 0x0F, mask = lo | (hi << 8);
-    if (step < 16) for (let k = 0; k < 16; k++) if ((mask >> k) & 1) st.grid[k][step] = true;
+    // 0615 モードはドラムを本体から取り込まない (当時と同じく空から足していく)
+    if (step < 16 && st.mode === "kit")
+      for (let k = 0; k < 16; k++) if ((mask >> k) & 1) st.grid[k][step] = true;
   }
   const sc = full[i++];
   st.keepSynth = [];
@@ -1208,6 +1247,7 @@ function stepOnSlotDump(slot, d) {
   slot.pk?.unsubscribeCat(DBG_CAT_SONG).catch(()=>{});
   stepRefreshUI(slot);
   stepPaintDevice(slot);
+  if (st.mode === "legacy") stepSend(slot);       // ドラムを空 (または前回の続き) に差し替える
 }
 
 // 編集結果を本体へ (LOAD_SLOT)。**ドラムだけ差し替え、取り込んだメロディはそのまま載せ直す**
@@ -1217,7 +1257,8 @@ function stepSend(slot) {
   clearTimeout(st.sendTimer);
   st.sendTimer = setTimeout(async () => {
     const body = [st.loopLen || 64, ...st.oct.map(o => o & 0xff)];
-    const dr = [];
+    const dr = (st.mode === "legacy") ? legacyDrumBytes(slot) : [];
+    if (st.mode === "kit")
     for (let k = 0; k < 16; k++)
       for (let step = 0; step < 16; step++)
         if (st.grid[k][step]) dr.push(((k & 0x0F) << 4) | (step & 0x0F));   // v4.6: (サウンド<<4)|ステップ
@@ -1239,6 +1280,7 @@ function stepSend(slot) {
 function stepPaintDevice(slot) {
   const st = slot.step;
   if (!slot.pk || !st.on) return;
+  if (st.mode === "legacy") { legacyPaintDevice(slot); return; }
   const col = KIT_COL_RGB_RAW[st.lane % 4];
   const frame = [];
   for (let step = 0; step < 16; step++) {
@@ -1255,31 +1297,44 @@ const KIT_COL_RGB_RAW = [[255,32,32],[32,255,64],[32,96,255],[255,32,160]];
 function stepOnDeviceKey(slot, key) {
   const st = slot.step;
   if (!st || !st.on || key < 0 || key > 15) return;
+  if (st.mode === "legacy") { legacyOnDeviceKey(slot, key); return; }
   st.grid[st.lane][key] = !st.grid[st.lane][key];
   stepRefreshUI(slot);
   stepPaintDevice(slot);
   stepSend(slot);
 }
 
-async function stepEnter(slot) {
-  if (!slot.pk) { log("warn", `S${slot.id}: 接続してから STEP を押してください`); return; }
+async function stepEnter(slot, mode = "kit") {
+  const label = mode === "legacy" ? "0615" : "STEP";
+  if (!slot.pk) { log("warn", `S${slot.id}: 接続してから ${label} を押してください`); return; }
   if (!slot.pk.dbgCmdChar) {
-    log("warn", `S${slot.id}: STEP はデバッグサービスが要ります (接続し直してください)`);
+    log("warn", `S${slot.id}: ${label} はデバッグサービスが要ります (接続し直してください)`);
     return;
   }
+  if (mode === "legacy" && !slot.legacy) {
+    log("warn", `S${slot.id}: 0615 モードは旧プリセット (IMPORT) を読み込んでから使えます`);
+    return;
+  }
+  slot.step.mode = mode;
   slot.step.on = true;
+  if (mode === "legacy") legacyAssignKeys(slot);
   try {
     await slot.pk.songEnter();                    // LOAD_SLOT はソングモードでしか効かない
-    await slot.pk.claim({ grid: true });           // 本体のグリッド処理を止める (キーイベントは届く)
+    // 本体のグリッド処理を止める (キーイベントは届く)。0615 はパートキーも取る (P1-P4 = ch 切替)
+    await slot.pk.claim({ grid: true, partKeys: mode === "legacy" });
     await slot.pk.subscribeKeys();                 // DBG_EV_KEY_* を購読
     stepRequestDump(slot);                         // いまの中身を読んでメロディを保持
-  } catch (e) { log("warn", `S${slot.id} STEP 開始失敗: ${e.message}`); }
+  } catch (e) { log("warn", `S${slot.id} ${label} 開始失敗: ${e.message}`); }
   stepRefreshUI(slot);
-  log("sys", `S${slot.id} STEP モード ON — 本体のグリッドは「${KIT_SOUND_NAMES[slot.step.lane]}」の16ステップ (Fn 2秒長押しで強制解除)`);
+  if (mode === "legacy")
+    log("sys", `S${slot.id} 0615 モード ON — 本体 P1-P4 = ch1-4 のステップ / P5-P7 = FREE (Fn 2秒長押しで強制解除)`);
+  else
+    log("sys", `S${slot.id} STEP モード ON — 本体のグリッドは「${KIT_SOUND_NAMES[slot.step.lane]}」の16ステップ (Fn 2秒長押しで強制解除)`);
 }
 
 async function stepExit(slot) {
   slot.step.on = false;
+  legacyFreeAllOff(slot);
   clearTimeout(slot.step.sendTimer);
   try {
     await slot.pk?.release();
@@ -1297,6 +1352,172 @@ function stepSetLane(slot, k) {
   slot.step.lane = k;
   stepRefreshUI(slot);
   stepPaintDevice(slot);
+}
+
+// ════════════════════════════════════════════════════════
+// 0615 モード (v2.2) — 旧 TRANCE (v1.x) のステップ演奏を今のファームで再現する
+// ════════════════════════════════════════════════════════
+//   slot.legacy = 旧プリセットの中身 (null = 未読込)。
+//     lanes[0-3] = 旧 P1-P4 = Logic ch1-4: { melody, map[16], vel[16], grid[16] }
+//       melody=false のレーンは旧 DRUM モード (旋律化しない素のドラム → ch10)
+//     synthScale/synthKey[0-2] = 旧 BASS/LEAD/PAD (FREE で使う)
+//     sel = 本体で選んでいる所: 0-3 = ch1-4 のレーン / 4-6 = FREE (BASS/LEAD/PAD = Logic ch5-7)
+//   grid (どのステップを ON にしたか) は演奏状態なので保存しない (旧アプリと同じ方針)。
+const LEGACY_FREE_PARTS = ["BASS", "LEAD", "PAD"];
+const LEGACY_FREE_BASE  = { BASS: 24, LEAD: 48, PAD: 60 };   // 旧 v1.x の SYNTH_PART_BASE
+const LEGACY_FREE_RGB   = [[255,160,0], [0,255,192], [128,0,255]];
+const LEGACY_FREE_DIM   = 0.08;
+
+function legacyFromPreset(sd) {
+  const src = sd.legacy || sd;                   // v1.2 の保存形式 / v1.1 (6月) の素の形式
+  const mm = src.melodyMode, map = src.melodyMap, vel = src.stepVelocity;
+  if (!Array.isArray(mm) || mm.length !== 4 || !Array.isArray(map) || map.length !== 4) return null;
+  const clamp = n => Math.max(0, Math.min(127, n | 0));
+  const lanes = [0,1,2,3].map(L => ({
+    melody: !!mm[L],
+    map: (Array.isArray(map[L]) && map[L].length === 16) ? map[L].map(clamp) : new Array(16).fill(60),
+    vel: (Array.isArray(vel?.[L]) && vel[L].length === 16) ? vel[L].map(v => clamp(v) || 1) : new Array(16).fill(100),
+    grid: new Array(16).fill(false),
+  }));
+  const ss = Array.isArray(src.synthScale) && src.synthScale.length === 3 ? src.synthScale : ["major","major","major"];
+  const sk = Array.isArray(src.synthKey)   && src.synthKey.length === 3   ? src.synthKey   : [0,0,0];
+  return {
+    lanes,
+    synthScale: ss.map(s => (typeof s === "string" && SCALE_BY_ID[s]) ? s : "major"),
+    synthKey:   sk.map(k => (((k | 0) % 12) + 12) % 12),
+    sel: 0,
+    combo: new Array(16).fill(null),             // キットのキー → { lane, note, vel, raw }
+    keyOf: [0,1,2,3].map(() => new Array(16).fill(-1)),   // [レーン][ステップ] → キットのキー
+    freeHeld: new Map(),                         // FREE で押さえているキー → 出した音
+  };
+}
+function legacyToPreset(lg) {
+  return {
+    melodyMode:   lg.lanes.map(l => l.melody),
+    melodyMap:    lg.lanes.map(l => l.map.slice()),
+    stepVelocity: lg.lanes.map(l => l.vel.slice()),
+    synthScale:   lg.synthScale.slice(),
+    synthKey:     lg.synthKey.slice(),
+  };
+}
+
+// (レーン, 音, 強さ) の組ごとにキットのキーを1つ割り当てる。
+//   本体は LOAD_SLOT の (キー<<4)|ステップ をそのキーの打楽器として鳴らし、その NoteOn が届いたら
+//   キーから組を引き直す = どのステップの音かを BLE のタイミングで推定しなくて済む。
+//   素のドラムのレーン (melody=false) は列の代表 (キー 0-3 = キック/スネア/ハット/パーカッション) を当てる。
+function legacyAssignKeys(slot) {
+  const lg = slot.legacy;
+  if (!lg) return;
+  const kitNotes = KIT_NOTES[slot.kit & 7];
+  const usable = k => kitNotes.indexOf(kitNotes[k]) === k;   // 同じ音が先に出るキーは逆引きできない
+  lg.combo = new Array(16).fill(null);
+  lg.keyOf = [0,1,2,3].map(() => new Array(16).fill(-1));
+  lg.lanes.forEach((ln, L) => {
+    if (ln.melody || !usable(L)) return;
+    lg.combo[L] = { lane: L, raw: true };
+    lg.keyOf[L].fill(L);
+  });
+  const free = [4,5,6,7,8,9,10,11,12,13,14,15,0,1,2,3].filter(k => usable(k) && !lg.combo[k]);
+  let dropped = 0;
+  lg.lanes.forEach((ln, L) => {
+    if (!ln.melody) return;
+    for (let s = 0; s < 16; s++) {
+      let k = lg.combo.findIndex(c => c && !c.raw && c.lane === L && c.note === ln.map[s] && c.vel === ln.vel[s]);
+      if (k < 0 && free.length) { k = free.shift(); lg.combo[k] = { lane: L, note: ln.map[s], vel: ln.vel[s], raw: false }; }
+      if (k < 0) dropped++;
+      lg.keyOf[L][s] = k;
+    }
+  });
+  if (dropped) log("warn", `S${slot.id} 0615: 音の種類が多すぎてキットのキーが足りません (${dropped} ステップは鳴りません)`);
+}
+
+// LOAD_SLOT のドラム欄: ON のステップを (割り当てたキー<<4)|ステップ で並べる
+function legacyDrumBytes(slot) {
+  const lg = slot.legacy, dr = [];
+  if (!lg) return dr;
+  lg.lanes.forEach((ln, L) => {
+    for (let s = 0; s < 16; s++) {
+      const k = lg.keyOf[L][s];
+      if (ln.grid[s] && k >= 0) dr.push(((k & 0x0F) << 4) | s);
+    }
+  });
+  return dr;
+}
+
+// 本体 LED: レーン選択中 = そのレーンの16ステップ + 再生ヘッド / FREE = パート色を薄く、押さえたキーを明るく
+function legacyPaintDevice(slot) {
+  const lg = slot.legacy, st = slot.step;
+  if (!lg || !slot.pk) return;
+  const frame = [];
+  if (lg.sel < 4) {
+    const col = KIT_COL_RGB_RAW[lg.sel];
+    for (let s = 0; s < 16; s++) {
+      if (s === st.head) frame.push(STEP_LED_HEAD);
+      else if (lg.lanes[lg.sel].grid[s]) frame.push(col);
+      else frame.push(STEP_LED_OFF);
+    }
+  } else {
+    const col = LEGACY_FREE_RGB[lg.sel - 4];
+    const dim = col.map(c => Math.round(c * LEGACY_FREE_DIM));
+    for (let k = 0; k < 16; k++) frame.push(lg.freeHeld.has(k) ? col : dim);
+  }
+  slot.pk.ledFrame(frame).catch(()=>{});
+}
+
+function legacyOut(slot) {
+  return (slot.outputId && midiAccess) ? midiAccess.outputs.get(slot.outputId) : null;
+}
+function legacyFreeNote(slot, key) {
+  const lg = slot.legacy, i = lg.sel - 4, part = LEGACY_FREE_PARTS[i];
+  const scale = SCALE_BY_ID[lg.synthScale[i]] || SCALE_BY_ID["major"];
+  const iv = scale.intervals;
+  const idx = (3 - Math.floor(key / 4)) * 4 + (key % 4);      // 左下=低音, 右上=高音 (旧アプリと同じ)
+  const n = LEGACY_FREE_BASE[part] + lg.synthKey[i] + Math.floor(idx / iv.length) * 12 + iv[idx % iv.length];
+  return transposedNote(slot, 4 + i, n);
+}
+
+// 本体のグリッド: レーンならステップの足し引き / FREE なら音を出す
+function legacyOnDeviceKey(slot, key) {
+  const lg = slot.legacy;
+  if (!lg) return;
+  if (lg.sel < 4) {
+    const ln = lg.lanes[lg.sel];
+    ln.grid[key] = !ln.grid[key];
+    stepRefreshUI(slot); legacyPaintDevice(slot); stepSend(slot);
+    return;
+  }
+  const ch = lg.sel;                             // 0-origin 4-6 = Logic ch5-7
+  const note = legacyFreeNote(slot, key);
+  const out = legacyOut(slot);
+  if (out && partAllowedToLogic(slot, ch)) out.send([0x90 | ch, note, 100]);
+  lg.freeHeld.set(key, { ch, note });
+  flashSlotPad(slot.id, key);
+  legacyPaintDevice(slot);
+}
+function legacyOnDeviceKeyUp(slot, key) {
+  const lg = slot.legacy;
+  const h = lg?.freeHeld.get(key);
+  if (!h) return;
+  lg.freeHeld.delete(key);
+  legacyOut(slot)?.send([0x80 | h.ch, h.note, 0]);
+  legacyPaintDevice(slot);
+}
+function legacyFreeAllOff(slot) {
+  const lg = slot.legacy;
+  if (!lg) return;
+  const out = legacyOut(slot);
+  lg.freeHeld.forEach(h => out?.send([0x80 | h.ch, h.note, 0]));
+  lg.freeHeld.clear();
+}
+
+// 本体のパートキー: P1-P4 = ch1-4 のレーン / P5-P7 = FREE (BASS/LEAD/PAD)
+function legacySelect(slot, p) {
+  const lg = slot.legacy;
+  if (!lg || p < 0 || p > 6 || lg.sel === p) return;
+  legacyFreeAllOff(slot);
+  lg.sel = p;
+  flashPartButton(slot.id, p + 1);
+  stepRefreshUI(slot); legacyPaintDevice(slot);
 }
 
 // ── Web Audio (モニター音) ──────────────────────────────
@@ -1551,9 +1772,11 @@ function stepRefreshUI(slot) {
   const panel = document.getElementById(`stepPanel${slot.id}`);
   const btn   = document.getElementById(`stepBtn${slot.id}`);
   if (!panel || !btn) return;
-  panel.style.display = st.on ? "" : "none";
-  btn.classList.toggle("on", st.on);
-  if (!st.on) {
+  const kitOn = st.on && st.mode === "kit";
+  panel.style.display = kitOn ? "" : "none";
+  btn.classList.toggle("on", kitOn);
+  legacyRefreshUI(slot);
+  if (!kitOn) {
     for (let i = 0; i < KEY_COUNT; i++)
       document.getElementById(`pad${slot.id}-${i}`)?.classList.remove("step-on");
     return;
@@ -1571,6 +1794,35 @@ function stepRefreshUI(slot) {
   for (let i = 0; i < KEY_COUNT; i++) {
     const pad = document.getElementById(`pad${slot.id}-${i}`);
     if (pad) pad.classList.toggle("step-on", st.grid[i].some(Boolean) || i === st.lane);
+  }
+}
+
+// 0615 モードの画面: 4レーン × 16ステップ。セルの文字 = そのステップで鳴る音 (素のドラムは「DR」)
+function legacyRefreshUI(slot) {
+  const lg = slot.legacy, st = slot.step;
+  const on = st.on && st.mode === "legacy" && !!lg;
+  const panel = document.getElementById(`lgPanel${slot.id}`);
+  const btn = document.getElementById(`lgBtn${slot.id}`);
+  if (btn) { btn.classList.toggle("on", on); btn.classList.toggle("ready", !!lg); }
+  if (!panel) return;
+  panel.style.display = on ? "" : "none";
+  if (!on) return;
+  const selEl = document.getElementById(`lgSel${slot.id}`);
+  if (selEl) selEl.textContent = lg.sel < 4
+    ? `本体 = ch${lg.sel+1} (P${lg.sel+1}) のステップ`
+    : `本体 = FREE ${LEGACY_FREE_PARTS[lg.sel-4]} → ch${lg.sel+1} (${KEY_NAMES[lg.synthKey[lg.sel-4]]} ${SCALE_BY_ID[lg.synthScale[lg.sel-4]]?.name || ""})`;
+  for (let L = 0; L < 4; L++) {
+    const ln = lg.lanes[L];
+    document.getElementById(`lgRow${slot.id}-${L}`)?.classList.toggle("sel", lg.sel === L);
+    for (let s = 0; s < 16; s++) {
+      const c = document.getElementById(`lgCell${slot.id}-${L}-${s}`);
+      if (!c) continue;
+      c.textContent = ln.melody ? noteName(ln.map[s]) : "DR";
+      c.classList.toggle("on", ln.grid[s]);
+      c.classList.toggle("head", s === st.head);
+      c.classList.toggle("acc", ln.melody && ln.vel[s] > 110);
+      c.classList.toggle("lost", lg.keyOf[L][s] < 0);
+    }
   }
 }
 
@@ -1684,7 +1936,7 @@ refreshMidiBtn.addEventListener("click", refreshOutputs);
 // v1.29 (item1): プリセットは「設定・変換ルール」だけを保存する方針。
 // 演奏状態 (押したステップ/演奏パターン/再生位置/直前ノート/バッファ内容/Solo/接続/再生停止)
 // は保存しない。Mute は設定として保存、Solo は保存しない (読込時に全OFF)。
-const PRESET_VERSION = "1.1";
+const PRESET_VERSION = "1.2";   // v2.2: 0615 モードの旧プリセット (legacy) を同梱
 
 function serializeSettings() {
   return {
@@ -1705,6 +1957,7 @@ function serializeSettings() {
       kitMap:     slot.kitMap.slice(),       // 叩いたキー → 音の高さ
       kitVel:     slot.kitVel.slice(),
       mute: slot.mute.slice(),               // v1.29: Mute は保存 (Solo は保存しない)
+      legacy: slot.legacy ? legacyToPreset(slot.legacy) : null,   // v2.2: 0615 モード (旧 v1.1 の変換ルール)
       // simSelectedPart / solo は演奏・作業状態なので保存しない
     })),
   };
@@ -1738,8 +1991,16 @@ function applySettings(data) {
     // v1.13 以前の slot.monitor (廃止) / transpose(#18廃止) は無視
     // v1.29 (item1): simSelectedPart は演奏・作業状態なので読込で復元しない。
     // v4.6: 旧形式 (melodyMode / melodyMap / stepVelocity は 4ドラムパート × 16ステップ、
-    //   synthScale / synthKey は 3パート) は**構造が変わったので読み捨てる**。
-    //   ドラムがステップ列からキット (16打楽器) になり、位置と音の対応が付かないため。
+    //   synthScale / synthKey は 3パート) は今のパート構成には当てはまらない。
+    //   v2.2: 読み捨てずに slot.legacy へ取っておき、**0615 モード**で当時のまま使う。
+    if (sd.legacy !== undefined || Array.isArray(sd.melodyMap)) {
+      const prevSel = slot.legacy?.sel ?? 0;
+      slot.legacy = sd.legacy === null ? null : legacyFromPreset(sd);
+      if (slot.legacy) {
+        slot.legacy.sel = prevSel;
+        if (slot.step.on && slot.step.mode === "legacy") { legacyAssignKeys(slot); stepSend(slot); }
+      } else if (slot.step.on && slot.step.mode === "legacy") stepExit(slot);
+    }
     // v1.29: Mute は設定として復元 (Solo は上で全 OFF 済み)
     if (Array.isArray(sd.mute) && sd.mute.length === 7) {
       slot.mute = sd.mute.map(b => !!b);
@@ -2438,6 +2699,8 @@ for (let i = 1; i <= SLOT_COUNT; i++) {
     // デフォルト "major" + root 0 (C) で、ファーム既定の白鍵テーブルと同等の音が出る
     synthScale: ["major","major","major","major","major","major"],
     synthKey:   [0, 0, 0, 0, 0, 0],
+    // v2.2: 0615 モード (旧 TRANCE v1.x の変換ルール)。旧プリセットを読み込むと入る。null = 未読込
+    legacy: null,
     // v1.14: シミュレータ用
     simSelectedPart: 3,  // デフォルト P3 リード
     looper: Array.from({length:6}, () => (
@@ -2513,6 +2776,15 @@ function buildSlots() {
         </div>
         <button class="slot-btn" id="btn${slot.id}">Connect</button>
         <button class="slot-btn step-btn" id="stepBtn${slot.id}" title="本体を16打楽器×16ステップのシーケンサにする (グリッドを claim して LED を描き、押されたキーをステップとして扱う)">STEP</button>
+        <button class="slot-btn step-btn lg-btn" id="lgBtn${slot.id}" title="0615 モード: 旧 TRANCE (2026-06) のステップ演奏。本体 P1-P4 = ch1-4 の16ステップ / P5-P7 = FREE (BASS/LEAD/PAD)。旧プリセットを IMPORT すると使えます">0615</button>
+      </div>
+      <!-- 0615 モード: 旧 P1-P4 = Logic ch1-4 の16ステップ。セルの文字 = そのステップで鳴る音 -->
+      <div class="step-panel lg-panel" id="lgPanel${slot.id}" style="display:none">
+        <div class="step-lane-head">
+          <span class="step-lane-name" id="lgSel${slot.id}">—</span>
+          <span class="step-hint">本体 P1-P4 = ch1-4 / P5-P7 = FREE</span>
+        </div>
+        <div class="lg-rows" id="lgRows${slot.id}"></div>
       </div>
       <!-- STEP モード: 本体のグリッド = 選んでいるサウンドの16ステップ -->
       <div class="step-panel" id="stepPanel${slot.id}" style="display:none">
@@ -2742,7 +3014,33 @@ function buildSlots() {
       stepCells.appendChild(c);
     }
     document.getElementById(`stepBtn${slot.id}`).addEventListener("click", () => {
-      if (slot.step.on) stepExit(slot); else stepEnter(slot);
+      if (slot.step.on) stepExit(slot); else stepEnter(slot, "kit");
+    });
+    // ── 0615 モード ──
+    const lgRows = document.getElementById(`lgRows${slot.id}`);
+    for (let L = 0; L < 4; L++) {
+      const row = document.createElement("div");
+      row.className = "lg-row"; row.id = `lgRow${slot.id}-${L}`;
+      const lab = document.createElement("button");
+      lab.className = "lg-lab"; lab.textContent = `ch${L+1}`;
+      lab.addEventListener("click", () => legacySelect(slot, L));
+      row.appendChild(lab);
+      for (let s = 0; s < 16; s++) {
+        const c = document.createElement("div");
+        c.className = "lg-cell" + (s % 4 === 0 ? " beat" : "");   // 左列 = 拍頭
+        c.id = `lgCell${slot.id}-${L}-${s}`;
+        c.addEventListener("click", () => {
+          const lg = slot.legacy;
+          if (!lg || !slot.step.on) return;
+          lg.lanes[L].grid[s] = !lg.lanes[L].grid[s];
+          stepRefreshUI(slot); legacyPaintDevice(slot); stepSend(slot);
+        });
+        row.appendChild(c);
+      }
+      lgRows.appendChild(row);
+    }
+    document.getElementById(`lgBtn${slot.id}`).addEventListener("click", () => {
+      if (slot.step.on) stepExit(slot); else stepEnter(slot, "legacy");
     });
     document.getElementById(`stepPrev${slot.id}`).addEventListener("click",
       () => stepSetLane(slot, (slot.step.lane + 15) % 16));
@@ -2945,7 +3243,7 @@ async function connectSlot(slot) {
     pk.on("disconnect", () => {
       // v1.24: 切断時は必ず全ノート停止 (押さえたまま切れた音が鳴りっぱなしになるのを防ぐ)
       panicSlot(slot);
-      if (slot.step.on) { slot.step.on = false; clearTimeout(slot.step.sendTimer); stepRefreshUI(slot); }
+      if (slot.step.on) { slot.step.on = false; legacyFreeAllOff(slot); clearTimeout(slot.step.sendTimer); stepRefreshUI(slot); }
       slot.connected = false;
       slot.pk = null;
       slot.lastChannel = null;
@@ -2958,8 +3256,11 @@ async function connectSlot(slot) {
     // v2.1: STEP モード用。claim / LED / LOAD_SLOT は**デバッグサービス経由**なので開いておく。
     //   ただしログ通知は絞る (4台同時なので、要らない通知で BLE を埋めない)。
     pk.on("keydown",  e => { if (slot.step.on) stepOnDeviceKey(slot, e.key); });
+    // v2.2: 0615 モード — FREE の離鍵 / パートキー (P1-P4 = ch1-4、P5-P7 = FREE)
+    pk.on("keyup",    e => { if (slot.step.on && slot.step.mode === "legacy") legacyOnDeviceKeyUp(slot, e.key); });
+    pk.on("partdown", e => { if (slot.step.on && slot.step.mode === "legacy") legacySelect(slot, e.key); });
     pk.on("slotdump", d => stepOnSlotDump(slot, d));
-    pk.on("claim",    c => { if (slot.step.on && !c.grid) { slot.step.on = false; stepRefreshUI(slot);
+    pk.on("claim",    c => { if (slot.step.on && !c.grid) { slot.step.on = false; legacyFreeAllOff(slot); stepRefreshUI(slot);
                               log("sys", `S${slot.id} STEP: 本体側で解除されました (Fn 長押し)`); } });
     await pk.connect({ debug: true });
     slot.pk = pk;
@@ -3067,6 +3368,8 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       if (part === 0) {
         // v4.6: part0 = ドラムの**キット番号**。16音の中身が変わるので逆引きに効く
         slot.kit = voice & 7;
+        // 0615 モード中にキットが変わったら、逆引きできるキーが変わるので割り当て直して書き直す
+        if (slot.step.on && slot.step.mode === "legacy") { legacyAssignKeys(slot); stepSend(slot); }
         refreshSlotUI(slot);
         log("sys", `S${slot.id} ドラムキット → ${voice & 7} (${KIT_NAMES[voice & 7]})`);
       } else if (part < 7 && voice < 16) {
@@ -3080,7 +3383,18 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
   //   2) SCALE モードなら「叩いたキー」に対応する音へ置換して Logic ch1 に出力
   let melodyOverride = null;
   let kitKey = -1;
-  if (isOn && channel === DRUM_CH) {
+  const legacyOn = slot.step.on && slot.step.mode === "legacy" && !!slot.legacy;
+  let legacyLane = -1;
+  if (isOn && channel === DRUM_CH && legacyOn) {
+    // 0615 モード: 鳴ったキー → 割り当てた (レーン, 音, 強さ)。素のドラムのレーンは ch10 のまま
+    kitKey = identifyKitKey(slot, d1);
+    const c = kitKey >= 0 ? slot.legacy.combo[kitKey] : null;
+    if (c) {
+      legacyLane = c.lane;
+      if (c.raw) d2 = 100;
+      else { d2 = c.vel; melodyOverride = { kitKey, melodyNote: c.note, ch: c.lane, legacy: true }; }
+    }
+  } else if (isOn && channel === DRUM_CH) {
     kitKey = identifyKitKey(slot, d1);
     if (kitKey >= 0) {
       d2 = slot.kitVel[kitKey];
@@ -3114,9 +3428,12 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
   //   (mute をノート保持中に切り替えても stuck note にならないように)。
   //   v4.6: 0 = P1 ドラム (キットは1パート) / 1-6 = P2-P7 メロディ
   let evPartIndex = -1;
-  if (channel === DRUM_CH) evPartIndex = 0;
+  if (channel === DRUM_CH) evPartIndex = legacyLane >= 0 ? legacyLane : 0;   // 0615: P1-P4 の Mute = ch1-4
   else if (found) evPartIndex = 1 + synthPartIdx(found.part);
-  const blockToLogic = isOn && !partAllowedToLogic(slot, evPartIndex);
+  // 0615 モード中は本体スロットに残っているメロディを Logic へ出さない
+  //   (ch2-4 がレーンと重なるため。当時のライブにも無かった音)
+  const legacyMelodyBlock = legacyOn && isOn && channel !== DRUM_CH;
+  const blockToLogic = isOn && (legacyMelodyBlock || !partAllowedToLogic(slot, evPartIndex));
   const muteTag = blockToLogic ? ` 🔇(${anySoloActive() ? "not-solo" : "muted"})` : "";
 
   // 1) 素通し転送
@@ -3137,7 +3454,7 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       out.send([0x80 | melodyOverride.ch, melNote, 0], offAt);
     }
     const trTag = slot.transpose ? ` [tr ${slot.transpose>0?"+":""}${slot.transpose}]` : "";
-    fwdNote = ` ▶ ${out.name}${muteTag} 🎵 ch${melodyOverride.ch+1} note=${melNote}(${noteName(melNote)})${trTag} [P1 ${KIT_SOUND_NAMES[melodyOverride.kitKey]}]`;
+    fwdNote = ` ▶ ${out.name}${muteTag} 🎵 ch${melodyOverride.ch+1} note=${melNote}(${noteName(melNote)})${trTag}${melodyOverride.legacy ? ` [0615 ch${melodyOverride.ch+1}]` : ` [P1 ${KIT_SOUND_NAMES[melodyOverride.kitKey]}]`}`;
   } else if (out) {
     if (cmd === 0x90 || cmd === 0x80) {
       const remapped = found ? synthRemap(d1) : d1;

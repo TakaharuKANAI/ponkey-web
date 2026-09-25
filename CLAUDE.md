@@ -175,6 +175,14 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   ※ SONG_CMD はデバッグサービス経由なので、接続は `debug:true`。ただし SONG/MODE の
   ログ通知は接続直後に切って、4台つないでも BLE を埋めないようにしてある。
   claim は Fn 2秒長押しと切断でファーム側から必ず解除される（`claim` イベントで画面も戻す）。
+  **0615 モード (v2.2)**: 2026-06-15 の4台ライブ（旧 v1.x = 本体 P1-P4 がドラム4パート×16ステップ、
+  アプリが「ステップ位置→音」に置換して Logic ch1-4 へ）を今のファームで再現する。旧プリセット
+  (presetVersion 1.1 の `melodyMode/melodyMap/stepVelocity`) をそのまま IMPORT して `slot.legacy` に持つ。
+  STEP の仕組みに**「(レーン, 音, 強さ) の組 → キットのキー1つ」の割り当て**を足し、LOAD_SLOT の
+  `(キー<<4)|ステップ` で本体に鳴らさせ、届いた NoteOn のキーから組を引き直す（ステップを BLE の到着時刻で
+  推定しない）。パートキーも claim して **P1-P4 = ch1-4 のレーン / P5-P7 = FREE**（旧 BASS/LEAD/PAD を
+  アプリが鳴らして Logic ch5-7。ファームにアプリからパートを切り替える窓口が無いため）。
+  中はスロットに残るメロディを Logic に出さない（ch2-4 がレーンと重なる）。ON/OFF の状態は保存しない。
 - `echo.html` — ECHO（その日の演奏を本体から読み出して残す日記＋共有リンク）。
   取り込みは `SONG_CMD_DUMP_SLOT`(0x07, payload 0xFE=中身のある全スロット)。ソングモード不要・副作用なし。
   応答は `DBG_EV_SONG_META` → `DBG_EV_SONG_SLOT_DUMP`（分割・要組み立て）で、スロットは **V2 形式(先頭 0xF2)**。
