@@ -1710,6 +1710,19 @@ function legacyRefreshUI(slot) {
   const panel = document.getElementById(`lgPanel${slot.id}`);
   const btn = document.getElementById(`lgBtn${slot.id}`);
   if (btn) { btn.classList.toggle("on", on); btn.classList.toggle("ready", !!lg); }
+  // P2-P7 のスケール/キー欄: 0615 中は触れない。P5-P7 (FREE) は**6月の値**を見せる
+  //   (0615 中の P2-P7 は本体に持ち込んだ音階表で鳴り、この欄の変換は使わない。前は「メジャー / C」の
+  //    ままで、JSON が読めていないように見えた)
+  for (let pi = 0; pi < MEL_PARTS.length; pi++) {
+    const sSel = document.getElementById(`scaleSel${slot.id}-${pi}`);
+    const kSel = document.getElementById(`keySel${slot.id}-${pi}`);
+    if (!sSel || !kSel) continue;
+    const f = on ? LEGACY_FREE_MAP.find(x => x.part === pi + 1) : null;
+    sSel.value = f ? lg.synthScale[f.free] : slot.synthScale[pi];
+    kSel.value = String(f ? lg.synthKey[f.free] : slot.synthKey[pi]);
+    sSel.disabled = kSel.disabled = on;
+    sSel.title = kSel.title = on ? (f ? `0615: 6月の FREE ${LEGACY_FREE_PARTS[f.free]} の設定 (変更は 0615 を抜けてから)` : "0615: 6月のステップの音程で鳴ります") : "";
+  }
   if (!panel) return;
   panel.style.display = on ? "" : "none";
   if (!on) return;
@@ -1993,7 +2006,6 @@ function refreshSlotUI(slot) {
   refreshPkeyVisuals(slot);
   refreshPadsForSelectedPart(slot);
   refreshMuteSoloVisuals(slot);   // v1.29: Mute/Solo ボタンの表示も同期
-  legacyRefreshUI(slot);          // v2.2: 0615 ボタン (旧プリセットがあれば濃く) とパネル
   // per-part スケール/キー (P2-P7)
   for (let pi = 0; pi < MEL_PARTS.length; pi++) {
     const sSel = document.getElementById(`scaleSel${slot.id}-${pi}`);
@@ -2016,6 +2028,7 @@ function refreshSlotUI(slot) {
     const bar = cell.querySelector(".vel-bar");
     if (bar) bar.style.height = `${(slot.kitVel[i]/127*100).toFixed(0)}%`;
   }
+  legacyRefreshUI(slot);          // v2.2: 0615 ボタン・パネル・P2-P7 のスケール欄 (最後に上書きする)
 }
 
 function downloadJSON(filename, data) {
@@ -3191,6 +3204,7 @@ async function connectSlot(slot) {
     //   版番号 (CAPS) が届くのを少し待ってから判定する
     setTimeout(async () => {
       if (slot.pk !== pk) return;
+      if (slot.legacy?.on) return;                    // もう 0615 に入っている (FREE の P5-P7 を STEP にしない)
       const ok = stepSupported(slot);
       log("sys", `スロット${slot.id}: ファーム ${pk.caps?.version || "不明"} / パートごとの STEP ${ok ? "使えます → 全パート STEP" : "使えません (v4.6.38 以降が必要)"}`);
       if (!ok) return;
