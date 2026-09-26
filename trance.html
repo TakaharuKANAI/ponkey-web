@@ -1402,14 +1402,16 @@ async function legacyExit(slot) {
   lg.on = false;
   if (slot.pk) {
     try {
-      for (const p of LEGACY_LANE_PART) if (slot.stepOn[p]) await stepPartSet(slot, p, false);
       for (let pi = 0; pi < 6; pi++) await slot.pk.clearNoteTable(pi);   // 音階表を本体のスケールへ戻す
+      // 既定 (全パート STEP・ふつうの表) へ戻す。lg.on=false なので stepMapFor はふつうの表を返す
+      for (let p = 0; p < 7; p++) await stepPartSet(slot, p, true);
+      stepRequestDump(slot);
     } catch {}
   } else {
     LEGACY_LANE_PART.forEach(p => slot.stepOn[p] = false);
   }
   stepRefreshUI(slot);
-  log("sys", `S${slot.id} 0615 モード OFF (P1-P4 はパッドに戻りました。打ち込んだステップは本体に残っています)`);
+  log("sys", `S${slot.id} 0615 モード OFF (全パートふつうの STEP に戻りました。打ち込んだステップは本体に残っています)`);
 }
 function legacyScaleLabel(lg, free) {
   return `${KEY_NAMES[lg.synthKey[free]]} ${SCALE_BY_ID[lg.synthScale[free]]?.name || ""}`;
@@ -3177,7 +3179,16 @@ async function connectSlot(slot) {
     pk.unsubscribeCat(DBG_CAT_MODE).catch(()=>{});
     updateSlotUI(slot);
     log("sys", `スロット${slot.id}: 接続 ${pk.device.name || "(no name)"}`);
-    setTimeout(() => log("sys", `スロット${slot.id}: ファーム ${pk.caps?.version || "不明"} / パートごとの STEP ${stepSupported(slot) ? "使えます" : "使えません (v4.6.38 以降が必要)"}`), 1500);
+    // v2.3: TRANCE につないだら**全パートを STEP にする** (ユーザー指示 2026-09-26。パッドに戻すのは各行の STEP で)。
+    //   版番号 (CAPS) が届くのを少し待ってから判定する
+    setTimeout(async () => {
+      if (slot.pk !== pk) return;
+      const ok = stepSupported(slot);
+      log("sys", `スロット${slot.id}: ファーム ${pk.caps?.version || "不明"} / パートごとの STEP ${ok ? "使えます → 全パート STEP" : "使えません (v4.6.38 以降が必要)"}`);
+      if (!ok) return;
+      for (let p = 0; p < 7; p++) if (!slot.stepOn[p]) await stepPartSet(slot, p, true);
+      stepRequestDump(slot);                          // 本体に残っている中身を画面へ
+    }, 1500);
 
     // 接続成功直後に SAM をミュート (本体スピーカーが Ableton と二重に鳴らないように)
     await sendSamMute(slot, true);
