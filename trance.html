@@ -1332,14 +1332,24 @@ function legacyFromPreset(sd) {
   }));
   const ss = Array.isArray(src.synthScale) && src.synthScale.length === 3 ? src.synthScale : ["major","major","major"];
   const sk = Array.isArray(src.synthKey)   && src.synthKey.length === 3   ? src.synthKey   : [0,0,0];
+  const mir = Array.isArray(src.mirrorCh1To) ? src.mirrorCh1To.filter(c => (c|0) >= 2 && (c|0) <= 16).map(c => c|0) : [];
   return {
-    on: false, lanes, sel: -1,
+    on: false, lanes, sel: -1, mirrorCh1To: mir,
     synthScale: ss.map(s => (typeof s === "string" && SCALE_BY_ID[s]) ? s : "major"),
     synthKey:   sk.map(k => (((k | 0) % 12) + 12) % 12),
   };
 }
+// レーンのある音程の強さ = その音程のステップで最も多い stepVelocity (本体からはステップが分からないため)
+function legacyLaneVel(ln, note) {
+  const cnt = new Map();
+  ln.map.forEach((n, s) => { if (n === note) cnt.set(ln.vel[s], (cnt.get(ln.vel[s]) || 0) + 1); });
+  let best = 100, bc = 0;
+  cnt.forEach((c, v) => { if (c > bc) { bc = c; best = v; } });
+  return best;
+}
 function legacyToPreset(lg) {
   return {
+    ...(lg.mirrorCh1To.length ? { mirrorCh1To: lg.mirrorCh1To.slice() } : {}),
     melodyMode:   lg.lanes.map(l => l.melody),
     melodyMap:    lg.lanes.map(l => l.map.slice()),
     stepVelocity: lg.lanes.map(l => l.vel.slice()),
@@ -3331,7 +3341,7 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
     // 0615 の ch1: 本体 P1 が鳴らした打楽器 → 割り当てた音程 (当時と同じく ch1、85% ゲート)
     kitKey = identifyKitKey(slot, d1);
     const n = kitKey >= 0 ? lgP1.keyPitch[kitKey] : null;
-    if (n != null) { d2 = 100; melodyOverride = { kitKey, melodyNote: n, ch: 0, legacy: true }; }
+    if (n != null) { d2 = legacyLaneVel(lgP1, n); melodyOverride = { kitKey, melodyNote: n, ch: 0, legacy: true }; }
   } else if (isOn && channel === DRUM_CH) {
     kitKey = identifyKitKey(slot, d1);
     if (kitKey >= 0) {
@@ -3408,6 +3418,16 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       const seqNote = channel === DRUM_CH || (legacyCh !== null && legacyCh < 4);
       let sendAt = seqNote ? dejTime : 0;
       if (seqNote && sendAt !== 0 && cmd === 0x80) sendAt += 2;  // NoteOff を NoteOn の後ろに
+      if (legacyCh !== null && legacyCh < 4) {
+        // 曲のステップ (ch2-4): 6月 (旧 TRANCE) と同じ鳴らし方にそろえる = 強さは JSON の stepVelocity、
+        //   長さはステップの 85% をアプリが決める (本体の NoteOff は使わない)。ch1 (P1) と同じ扱い。
+        //   本体のままだと強さ 127・長さ 75% で、同じ音色でも ch1 と鳴り方が変わっていた
+        if (cmd === 0x90 && d2 > 0 && !blockToLogic) {
+          const vel = legacyLaneVel(slot.legacy.lanes[legacyCh], d1);
+          out.send([0x90 | outCh, outNote, vel], dejTime);
+          out.send([0x80 | outCh, outNote, 0], (dejTime || performance.now()) + scaleGateMs());
+        }
+      } else
       // v1.27: Mute/Solo で NoteOn がブロックされていなければ送る (NoteOff は常に通る)。
       if (!blockToLogic) out.send([outStatus, outNote, d2], sendAt);
       let scaleTag = "";
@@ -3425,6 +3445,12 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       fwdNote = ` ▶ ${out.name}${muteTag}${chTag}${scaleTag}${trTag}`;
     } else {
       out.send([status, d1, d2]);
+      // 曲の JSON の mirrorCh1To: 本体 ch1 (0-origin 0) の操作用 CC を、指定の Logic ch にも複製する。
+      //   本体の操作情報 (再生/停止=CC64・パート切替=CC0-6・BPM=CC65・再生位置=CC84 …) は ch1 の CC として
+      //   Logic へ流れていて、ch1 のトラックはそれを受けた状態の音で作られている。別の台の ch1 の役を
+      //   ほかの ch に移したとき (3台版で PONKEY4 の ch1 → PONKEY1 の ch4) に同じ音にするため
+      const mir = slot.legacy?.on ? slot.legacy.mirrorCh1To : null;
+      if (cmd === 0xB0 && channel === 0 && mir) for (const c of mir) out.send([0xB0 | (c - 1), d1, d2]);
       fwdNote = ` ▶ ${out.name}`;
     }
   } else if (slot.outputId) {
