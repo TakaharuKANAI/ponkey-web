@@ -1924,8 +1924,10 @@ function applySettings(data) {
       // 0615 中に読み込み直したら、いったん抜けて新しい表で入り直す
       const wasOn = !!slot.legacy?.on;
       const next = sd.legacy === null ? null : legacyFromPreset(sd);
+      // v2.3: 曲の JSON を読んだら、つながっている台はその場で 0615 (曲のステップ) に入る。
+      //   「JSON を読む + つなぐ」だけで演奏の準備が整うように (ボタンは抜けるときに使う)
       if (wasOn) legacyExit(slot).then(() => { slot.legacy = next; if (next) legacyEnter(slot); refreshSlotUI(slot); });
-      else slot.legacy = next;
+      else { slot.legacy = next; if (next && slot.pk) legacyEnter(slot); }
     }
     // v1.29: Mute は設定として復元 (Solo は上で全 OFF 済み)
     if (Array.isArray(sd.mute) && sd.mute.length === 7) {
@@ -2704,7 +2706,7 @@ function buildSlots() {
           <span class="slot-sub" id="sub${slot.id}">disconnected</span>
         </div>
         <button class="slot-btn" id="btn${slot.id}">Connect</button>
-        <button class="slot-btn step-btn lg-btn" id="lgBtn${slot.id}" title="0615 モード: 旧 TRANCE (2026-06) のステップ演奏。本体 P1-P4 = Logic ch1-4 の16ステップ / P5-P7 = FREE (旧 BASS/LEAD/PAD → ch5-7)。旧プリセットを IMPORT すると使えます。要ファーム v4.6.38+">0615</button>
+        <button class="slot-btn step-btn lg-btn" id="lgBtn${slot.id}" title="0615 モード: 曲の JSON (旧 TRANCE 形式) のステップ演奏。本体 P1-P4 = Logic ch1-4 の16ステップ / P5-P7 = FREE (BASS/LEAD/PAD → ch5-7)。JSON を IMPORT してつなぐと自動で入る。押すと抜ける / 入り直す。要ファーム v4.6.38+">0615</button>
       </div>
       <!-- 0615 モード: 旧 ch1-4 = 本体 P1-P4 の16ステップ。セルの文字 = そのステップで鳴る音 -->
       <div class="step-panel lg-panel" id="lgPanel${slot.id}" style="display:none">
@@ -3205,6 +3207,8 @@ async function connectSlot(slot) {
     setTimeout(async () => {
       if (slot.pk !== pk) return;
       if (slot.legacy?.on) return;                    // もう 0615 に入っている (FREE の P5-P7 を STEP にしない)
+      // 曲の JSON が読んであれば、つないだら自動で 0615 に入る
+      if (slot.legacy) { await legacyEnter(slot); return; }
       const ok = stepSupported(slot);
       log("sys", `スロット${slot.id}: ファーム ${pk.caps?.version || "不明"} / パートごとの STEP ${ok ? "使えます → 全パート STEP" : "使えません (v4.6.38 以降が必要)"}`);
       if (!ok) return;
