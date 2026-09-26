@@ -1203,10 +1203,14 @@ function fwAtLeast(ver, want) {
   for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i]; }
   return true;
 }
+//   どちらも届いていない (版番号 不明) ときも**弾かずに送る** — 古いファームは知らない SONG_CMD を無視するだけで害が無い。
+//   止めるのは「版番号が分かっていて 4.6.38 より古い」ときだけ (実機で STEP が押せなくなっていたため)
 function stepSupported(slot) {
   const pk = slot.pk;
   if (!pk || !pk.dbgCmdChar) return false;
-  return (pk.hasFeature && pk.hasFeature('STEP_PART')) || fwAtLeast(pk.caps?.version, "4.6.38");
+  if (pk.hasFeature && pk.hasFeature('STEP_PART')) return true;
+  const v = pk.caps?.version;
+  return !v || fwAtLeast(v, "4.6.38");
 }
 // パート p の「ステップ → キー」表。0615 中の P1-P4 はレーンの表、それ以外は全ステップ同じキー
 function stepMapFor(slot, p) {
@@ -1216,6 +1220,10 @@ function stepMapFor(slot, p) {
 }
 async function stepPartSet(slot, p, on, { clear = false } = {}) {
   if (!slot.pk) { log("warn", `S${slot.id}: 接続してから STEP にしてください`); return false; }
+  if (!slot.pk.dbgCmdChar) {
+    log("warn", `S${slot.id}: STEP の通り道 (デバッグサービス) につながっていません。Disconnect → Connect し直してください`);
+    return false;
+  }
   if (!stepSupported(slot)) {
     log("warn", `S${slot.id}: パートごとの STEP はファーム v4.6.38 以降が必要です (いまの本体: ${slot.pk.caps?.version || "不明"})`);
     return false;
