@@ -1189,6 +1189,8 @@ function lookupKey(channel, note) {
 //   v2.1 の STEP モード (claim して LOAD_SLOT で書き戻す方式) はこれに置き換えた。
 const DBG_CAT_KEY = 0x02, DBG_CAT_SONG = 0x09, DBG_CAT_MODE = 0x01;
 const STEP_DEFAULT_KEY = [0, 12, 12, 12, 12, 12, 12];   // P1 = バスドラ / メロディ = 左下 (いちばん低い音)
+// つないだときの既定: P1-P4 = STEP / P5-P7 = パッド (ユーザー指示 2026-09-26。旧 TRANCE の P1-P4 ステップ + P5-P7 FREE と同じ形)
+const STEP_DEFAULT_ON  = [true, true, true, true, false, false, false];
 
 function stepPartsInit(slot) {
   slot.stepOn   = new Array(7).fill(false);                       // パートごとの STEP
@@ -1374,10 +1376,10 @@ function legacyBuildLane(ln) {
 
 async function legacyEnter(slot) {
   const lg = slot.legacy;
-  if (!lg) { log("warn", `S${slot.id}: 0615 モードは旧プリセット (IMPORT) を読み込んでから使えます`); return; }
-  if (!slot.pk) { log("warn", `S${slot.id}: 接続してから 0615 を押してください`); return; }
+  if (!lg) return;
+  if (!slot.pk) return;                             // つないだ時に自動で入る
   if (!stepSupported(slot)) {
-    log("warn", `S${slot.id}: 0615 モードはファーム v4.6.38 以降が必要です (いまの本体: ${slot.pk.caps?.version || "不明"})`);
+    log("warn", `S${slot.id}: 曲のステップ演奏はファーム v4.6.38 以降が必要です (いまの本体: ${slot.pk.caps?.version || "不明"})`);
     return;
   }
   lg.on = true;
@@ -1399,10 +1401,10 @@ async function legacyEnter(slot) {
       await slot.pk.uploadNoteTable(f.part - 1, t);
       if (slot.stepOn[f.part]) await stepPartSet(slot, f.part, false);
     }
-  } catch (e) { log("warn", `S${slot.id} 0615 開始失敗: ${e.message}`); }
+  } catch (e) { log("warn", `S${slot.id} 曲のステップ演奏の開始に失敗: ${e.message}`); }
   stepRefreshUI(slot);
   const fb = LEGACY_FREE_MAP.map(f => `P${f.part+1} = FREE ${LEGACY_FREE_PARTS[f.free]} ${legacyScaleLabel(lg, f.free)} → ch${f.free+5}`).join(" / ");
-  log("sys", `S${slot.id} 0615 モード ON — 本体 P1-P4 = ch1-4 のステップ (空から) / ${fb}`);
+  log("sys", `S${slot.id} 曲のステップ演奏 ON — 本体 P1-P4 = ch1-4 のステップ (空から) / ${fb}`);
 }
 async function legacyExit(slot) {
   const lg = slot.legacy;
@@ -1411,15 +1413,15 @@ async function legacyExit(slot) {
   if (slot.pk) {
     try {
       for (let pi = 0; pi < 6; pi++) await slot.pk.clearNoteTable(pi);   // 音階表を本体のスケールへ戻す
-      // 既定 (全パート STEP・ふつうの表) へ戻す。lg.on=false なので stepMapFor はふつうの表を返す
-      for (let p = 0; p < 7; p++) await stepPartSet(slot, p, true);
+      // 既定 (P1-P4 STEP / P5-P7 パッド・ふつうの表) へ戻す。lg.on=false なので stepMapFor はふつうの表を返す
+      for (let p = 0; p < 7; p++) await stepPartSet(slot, p, STEP_DEFAULT_ON[p]);
       stepRequestDump(slot);
     } catch {}
   } else {
     LEGACY_LANE_PART.forEach(p => slot.stepOn[p] = false);
   }
   stepRefreshUI(slot);
-  log("sys", `S${slot.id} 0615 モード OFF (全パートふつうの STEP に戻りました。打ち込んだステップは本体に残っています)`);
+  log("sys", `S${slot.id} 曲のステップ演奏 OFF (P1-P4 ふつうの STEP / P5-P7 パッドに戻りました)`);
 }
 function legacyScaleLabel(lg, free) {
   return `${KEY_NAMES[lg.synthKey[free]]} ${SCALE_BY_ID[lg.synthScale[free]]?.name || ""}`;
@@ -1721,7 +1723,7 @@ function legacyRefreshUI(slot) {
     sSel.value = f ? lg.synthScale[f.free] : slot.synthScale[pi];
     kSel.value = String(f ? lg.synthKey[f.free] : slot.synthKey[pi]);
     sSel.disabled = kSel.disabled = on;
-    sSel.title = kSel.title = on ? (f ? `0615: 6月の FREE ${LEGACY_FREE_PARTS[f.free]} の設定 (変更は 0615 を抜けてから)` : "0615: 6月のステップの音程で鳴ります") : "";
+    sSel.title = kSel.title = on ? (f ? `曲の JSON の FREE ${LEGACY_FREE_PARTS[f.free]} の設定` : "曲の JSON のステップの音程で鳴ります") : "";
   }
   if (!panel) return;
   panel.style.display = on ? "" : "none";
@@ -1991,7 +1993,7 @@ function applySettings(data) {
   }
   log("sys", `プリセット読込: ${appliedCount} スロット適用 (savedAt: ${data.savedAt || "不明"})`);
   const lgIds = slots.filter(s => s.legacy).map(s => s.id);
-  if (lgIds.length) log("sys", `0615 モード用の旧プリセット: PONKEY ${lgIds.join(", ")} — CONNECT してから 0615 を押してください`);
+  if (lgIds.length) log("sys", `曲のステップ演奏: PONKEY ${lgIds.join(", ")} — つながっている台はすぐ、ほかは CONNECT した時に始まります`);
   if (missingPorts.length) {
     log("warn", `MIDI 出力ポート未検出: ${missingPorts.join(", ")} → 該当スロットは「送信しない」に。プルダウンから手動で割り当ててください`);
   }
@@ -2030,7 +2032,7 @@ function refreshSlotUI(slot) {
     const bar = cell.querySelector(".vel-bar");
     if (bar) bar.style.height = `${(slot.kitVel[i]/127*100).toFixed(0)}%`;
   }
-  legacyRefreshUI(slot);          // v2.2: 0615 ボタン・パネル・P2-P7 のスケール欄 (最後に上書きする)
+  legacyRefreshUI(slot);          // v2.3: 曲のパネル・P2-P7 のスケール欄 (最後に上書きする)
 }
 
 function downloadJSON(filename, data) {
@@ -2706,7 +2708,6 @@ function buildSlots() {
           <span class="slot-sub" id="sub${slot.id}">disconnected</span>
         </div>
         <button class="slot-btn" id="btn${slot.id}">Connect</button>
-        <button class="slot-btn step-btn lg-btn" id="lgBtn${slot.id}" title="0615 モード: 曲の JSON (旧 TRANCE 形式) のステップ演奏。本体 P1-P4 = Logic ch1-4 の16ステップ / P5-P7 = FREE (BASS/LEAD/PAD → ch5-7)。JSON を IMPORT してつなぐと自動で入る。押すと抜ける / 入り直す。要ファーム v4.6.38+">0615</button>
       </div>
       <!-- 0615 モード: 旧 ch1-4 = 本体 P1-P4 の16ステップ。セルの文字 = そのステップで鳴る音 -->
       <div class="step-panel lg-panel" id="lgPanel${slot.id}" style="display:none">
@@ -2927,7 +2928,7 @@ function buildSlots() {
       tog.className = "step-tog"; tog.id = `stepTog${slot.id}-${p}`; tog.textContent = "STEP";
       tog.title = `P${p+1} を本体でステップ入力にする (押した瞬間に本体の中で ON/OFF。つないでいる間だけ・切断でパッドに戻る)`;
       tog.addEventListener("click", () => {
-        if (slot.legacy?.on && p <= 3) { log("warn", `S${slot.id}: P${p+1} は 0615 モードが使っています`); return; }
+        if (slot.legacy?.on && p <= 3) { log("warn", `S${slot.id}: P${p+1} は曲のステップ演奏 (JSON) が使っています`); return; }
         stepPartSet(slot, p, !slot.stepOn[p]).then(ok => { if (ok && slot.stepOn[p]) stepRequestDump(slot); });
       });
       row.querySelector(".mp-head").appendChild(tog);
@@ -2976,9 +2977,6 @@ function buildSlots() {
       }
       lgRows.appendChild(row);
     }
-    document.getElementById(`lgBtn${slot.id}`).addEventListener("click", () => {
-      if (slot.legacy?.on) legacyExit(slot); else legacyEnter(slot);
-    });
     // v1.31(#17/#18): Out 選択 / Transpose ボタンは廃止 (出力は PONKEY{id} へ自動)
   });
 }
@@ -3210,9 +3208,9 @@ async function connectSlot(slot) {
       // 曲の JSON が読んであれば、つないだら自動で 0615 に入る
       if (slot.legacy) { await legacyEnter(slot); return; }
       const ok = stepSupported(slot);
-      log("sys", `スロット${slot.id}: ファーム ${pk.caps?.version || "不明"} / パートごとの STEP ${ok ? "使えます → 全パート STEP" : "使えません (v4.6.38 以降が必要)"}`);
+      log("sys", `スロット${slot.id}: ファーム ${pk.caps?.version || "不明"} / パートごとの STEP ${ok ? "使えます → P1-P4 を STEP" : "使えません (v4.6.38 以降が必要)"}`);
       if (!ok) return;
-      for (let p = 0; p < 7; p++) if (!slot.stepOn[p]) await stepPartSet(slot, p, true);
+      for (let p = 0; p < 7; p++) if (slot.stepOn[p] !== STEP_DEFAULT_ON[p]) await stepPartSet(slot, p, STEP_DEFAULT_ON[p]);
       stepRequestDump(slot);                          // 本体に残っている中身を画面へ
     }, 1500);
 
@@ -3392,7 +3390,7 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       out.send([0x80 | melodyOverride.ch, melNote, 0], offAt);
     }
     const trTag = slot.transpose ? ` [tr ${slot.transpose>0?"+":""}${slot.transpose}]` : "";
-    fwdNote = ` ▶ ${out.name}${muteTag} 🎵 ch${melodyOverride.ch+1} note=${melNote}(${noteName(melNote)})${trTag} ${melodyOverride.legacy ? "[0615 P1]" : `[P1 ${KIT_SOUND_NAMES[melodyOverride.kitKey]}]`}`;
+    fwdNote = ` ▶ ${out.name}${muteTag} 🎵 ch${melodyOverride.ch+1} note=${melNote}(${noteName(melNote)})${trTag} ${melodyOverride.legacy ? "[曲 P1]" : `[P1 ${KIT_SOUND_NAMES[melodyOverride.kitKey]}]`}`;
   } else if (out) {
     if (cmd === 0x90 || cmd === 0x80) {
       // 0615: 音程は本体の音階表どおり (変換しない)、ch だけ当時へ戻す
@@ -3422,7 +3420,7 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
         }
       }
       const trTag = (slot.transpose && channel !== DRUM_CH) ? ` [tr ${slot.transpose>0?"+":""}${slot.transpose}]` : "";
-      const chTag = legacyCh !== null ? ` [0615] ch${channel+1}→${outCh+1}`
+      const chTag = legacyCh !== null ? ` [曲] ch${channel+1}→${outCh+1}`
                   : (found && outCh !== channel) ? ` ch${channel+1}→${outCh+1}` : "";
       fwdNote = ` ▶ ${out.name}${muteTag}${chTag}${scaleTag}${trTag}`;
     } else {
