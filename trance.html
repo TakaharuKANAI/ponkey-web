@@ -3418,7 +3418,15 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
       const seqNote = channel === DRUM_CH || (legacyCh !== null && legacyCh < 4);
       let sendAt = seqNote ? dejTime : 0;
       if (seqNote && sendAt !== 0 && cmd === 0x80) sendAt += 2;  // NoteOff を NoteOn の後ろに
-      if (legacyCh !== null && legacyCh < 4) {
+      if (legacyCh !== null && legacyCh < 4 && cmd === 0x90 && d2 > 0 &&
+          !slot.legacy.lanes[legacyCh].table.includes(d1)) {
+        // 本体が「持ち込んだ音階表にない音」を鳴らした = 表が本体側で消えた (本体でキー/スケールを変えた等)。
+        //   このまま出すと P2-P4 本来の音域 (ベースなら低い) で Logic に届き、オクターブや音程がずれる。
+        //   JSON どおりに戻すため表を送り直し、この1音は出さない
+        const ln = slot.legacy.lanes[legacyCh];
+        slot.pk?.uploadNoteTable(LEGACY_LANE_PART[legacyCh] - 1, ln.table).catch(()=>{});
+        log("warn", `S${slot.id} ch${legacyCh+1} (P${LEGACY_LANE_PART[legacyCh]+1}): 本体の音階表が戻っていたので送り直しました (受信 ${noteName(d1)} は JSON に無い音)`);
+      } else if (legacyCh !== null && legacyCh < 4) {
         // 曲のステップ (ch2-4): 6月 (旧 TRANCE) と同じ鳴らし方にそろえる = 強さは JSON の stepVelocity、
         //   長さはステップの 85% をアプリが決める (本体の NoteOff は使わない)。ch1 (P1) と同じ扱い。
         //   本体のままだと強さ 127・長さ 75% で、同じ音色でも ch1 と鳴り方が変わっていた
