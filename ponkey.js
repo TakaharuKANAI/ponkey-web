@@ -54,6 +54,7 @@ const FEAT_P1 = {
 };
 const FEAT_P2 = {   // v4.5.73 (CC_FEATURES3 0x3D)
   LED32: 1 << 0, SOL_SING: 1 << 1,
+  STEP_PART: 1 << 3,       // v4.6.38: SONG_CMD_STEP_PART (アプリが許したパートだけステップ入力) + 'step' イベント
   PART_REDESIGN: 1 << 2,   // v4.6.0: P1=ドラムキット / P2-P7=メロディ6パート。
                            //   これが立っていない本体は旧構成 (P1-P4=ドラム4パート / P5-P7=BASS,LEAD,PAD)。
                            //   パート番号・MIDI ch・スロット内のドラム表現が全部変わるので、
@@ -135,11 +136,11 @@ const DBG_PACKET_MAGIC = 0xa5, DBG_PACKET_HEADER_LEN = 11;
 const DBG_CMD_MAGIC = 0xa6;
 const DBG_CMD = { LOG_ENABLE_ALL: 0x01, LOG_DISABLE_ALL: 0x02, LOG_ENABLE_CAT: 0x03,
                   LOG_DISABLE_CAT: 0x04, GET_FW_VERSION: 0x06, GET_CAPS: 0x07 };
-const DBG_CAT = { SYSTEM: 0x00, MODE: 0x01, KEY: 0x02, SONG: 0x09 };
+const DBG_CAT = { SYSTEM: 0x00, MODE: 0x01, KEY: 0x02, SONG: 0x09, STORAGE: 0x0a };
 const SYS_EV  = { BOOT: 0x01, READY: 0x02, CAPS: 0x03, CLAIM: 0x04 };
 const MODE_EV = { UI: 0x10 };   // v4.5.72
 const KEY_EV  = { GRID_DOWN: 0x01, GRID_UP: 0x02, PART_DOWN: 0x03, PART_UP: 0x04,
-                  FN_DOWN: 0x05, FN_UP: 0x06 };
+                  FN_DOWN: 0x05, FN_UP: 0x06, STEP: 0x08 };
 const SONG_EV = { SLOT_DUMP: 0x09, META: 0x0a, COMMIT: 0x0b };
 
 // ---- SONG_MAGIC コマンド (正本: .ino の SONG_CMD_*) ----
@@ -147,7 +148,7 @@ const SONG_MAGIC = 0x5a;
 const SONG_CMD = { ENTER: 0x01, EXIT: 0x02, LOAD_SLOT: 0x04, SET_SEQUENCE: 0x05,
                    SET_MUTE: 0x06, DUMP_SLOT: 0x07, COMMIT_SLOT: 0x08,
                    LED_FRAME: 0x09, SOL: 0x0a, PASSTHRU: 0x0b, TABLE: 0x0c, CLAIM: 0x0d,
-                   LED32: 0x0e };
+                   LED32: 0x0e, STEP_PART: 0x0f };
 
 class Ponkey {
   constructor() {
@@ -289,6 +290,8 @@ class Ponkey {
                     [KEY_EV.PART_DOWN]: 'partdown', [KEY_EV.PART_UP]: 'partup',
                     [KEY_EV.FN_DOWN]: 'fndown', [KEY_EV.FN_UP]: 'fnup' };
       if (map[ev]) this._emit(map[ev], { key: d[0], ts });
+      // v4.6.38: ステップ入力パートで本体が ON/OFF した (part 0-6 = P1-P7, step 0-15)
+      else if (ev === KEY_EV.STEP) this._emit('step', { part: d[0], step: d[1], on: !!d[2], ts });
     } else if (cat === DBG_CAT.MODE && ev === MODE_EV.UI) {
       // v4.5.72: モードUI通知。アプリはこれを正とし、キーイベントからの状態推定をやめてよい
       this._emit('modeui', {
@@ -332,6 +335,9 @@ class Ponkey {
 
   // ---- 高レベル API -------------------------------------------------------
   subscribeKeys() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [DBG_CAT.KEY]); }   // 聞き耳 (Phase 2-④)
+  // v4.6.22: 保存(フラッシュ書き込み)イベントの購読。cat=STORAGE の 'dbg' イベントが流れてくる
+  //   (SAVE_DONE 0x05: [fileId, dtMsLE16, bytesLE16, flags] — 正本: PONKEY_V2_DEBUG.h)
+  subscribeStorage() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [DBG_CAT.STORAGE]); }
   // ソレノイド発火イベント (cat=0x03 FIRE/DEACTIVATE)。本体の物理の動きを画面に映すアプリ用 (lesson 等)
   subscribeSolenoid() { return this._dbgCmd(DBG_CMD.LOG_ENABLE_CAT, [0x03]); }
   // 任意カテゴリの購読 ON/OFF (DBG_CAT の値を渡す)
@@ -388,6 +394,16 @@ class Ponkey {
   // 入力 claim (Phase 3)。切断か Fn 2秒長押しで必ず解放される
   claim({ grid = false, partKeys = false } = {}) { return this._song(SONG_CMD.CLAIM, [(grid ? 1 : 0) | (partKeys ? 2 : 0)]); }
   release()                                      { return this._song(SONG_CMD.CLAIM, [0]); }
+
+  // v4.6.38: ステップ入力パート。part 0-6 = P1-P7。step=true でグリッド = そのパートの16ステップ
+  //   (押した瞬間に本体の中で ON/OFF。結果は 'step' イベントで届く)。false でパッドへ戻す。
+  //   map[s] = ステップ s で ON/OFF するキー (P1 = 打楽器 / P2-P7 = 音階表のキー。音の高さは
+  //   uploadNoteTable で持ち込める)。clear=true でそのパートの中身を現在スロットから消す。切断で全解除
+  stepPart(part, { step = true, clear = false, map = null } = {}) {
+    const p = [part & 7, (step ? 1 : 0) | (clear ? 2 : 0)];
+    if (map) for (let s = 0; s < 16; s++) p.push((map[s] | 0) & 15);
+    return this._song(SONG_CMD.STEP_PART, p);
+  }
 
   // 保存 (§3): 明示コミット / 読み出し
   commitSlot(slot = 0xff) { return this._song(SONG_CMD.COMMIT_SLOT, [slot & 0xff]); }
