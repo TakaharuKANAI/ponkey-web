@@ -1196,8 +1196,17 @@ function stepPartsInit(slot) {
   slot.stepGrid = Array.from({length: 7}, () => new Array(16).fill(false));   // 本体の報告を写す
   slot.stepHead = -1;
 }
+// 機能ビット (FEAT3 = State Sync の CC で届く) か、デバッグサービスの CAPS に載る版番号で判定する。
+//   CC が取りこぼされても版番号は接続時に必ず届くので、どちらか一方で通す (実機で CC 側が落ちていた)
+function fwAtLeast(ver, want) {
+  const a = String(ver || "").split(".").map(n => parseInt(n, 10) || 0), b = want.split(".").map(Number);
+  for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i]; }
+  return true;
+}
 function stepSupported(slot) {
-  return !!(slot.pk && slot.pk.dbgCmdChar && slot.pk.hasFeature && slot.pk.hasFeature('STEP_PART'));
+  const pk = slot.pk;
+  if (!pk || !pk.dbgCmdChar) return false;
+  return (pk.hasFeature && pk.hasFeature('STEP_PART')) || fwAtLeast(pk.caps?.version, "4.6.38");
 }
 // パート p の「ステップ → キー」表。0615 中の P1-P4 はレーンの表、それ以外は全ステップ同じキー
 function stepMapFor(slot, p) {
@@ -3168,6 +3177,7 @@ async function connectSlot(slot) {
     pk.unsubscribeCat(DBG_CAT_MODE).catch(()=>{});
     updateSlotUI(slot);
     log("sys", `スロット${slot.id}: 接続 ${pk.device.name || "(no name)"}`);
+    setTimeout(() => log("sys", `スロット${slot.id}: ファーム ${pk.caps?.version || "不明"} / パートごとの STEP ${stepSupported(slot) ? "使えます" : "使えません (v4.6.38 以降が必要)"}`), 1500);
 
     // 接続成功直後に SAM をミュート (本体スピーカーが Ableton と二重に鳴らないように)
     await sendSamMute(slot, true);
