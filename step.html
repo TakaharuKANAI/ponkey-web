@@ -33,91 +33,116 @@
   button{font:inherit;font-weight:400;font-size:13px;letter-spacing:.04em;padding:7px 12px;
          border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;white-space:nowrap;touch-action:manipulation}
   button:hover{background:#ebe7dd;border-color:#bfb9ab}
+  button:disabled{opacity:.4;cursor:default;background:transparent}
   button.on{background:var(--txt);color:var(--bg);border-color:var(--txt)}
-  #play{min-width:84px;border-color:var(--teal);color:var(--teal)}
-  #play.on{background:var(--teal);color:#fff}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.primary.on{background:var(--teal);color:#fff}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em;white-space:nowrap}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
   label.f{font-size:11px;color:var(--dim);letter-spacing:.08em;display:flex;align-items:center;gap:6px;white-space:nowrap}
-  label.f b{font-weight:500;color:var(--txt);min-width:2.4em;display:inline-block;text-align:right}
-  input[type=range]{accent-color:var(--pc);width:90px}
-  select{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);background:var(--panel);color:var(--txt)}
+  label.f b{font-weight:500;color:var(--txt);min-width:2.2em;display:inline-block;text-align:center}
+  label.f button{padding:4px 9px}
+  input[type=range]{accent-color:var(--teal);width:90px}
   main{max-width:980px;margin:0 auto;padding:14px 16px 40px;display:flex;flex-direction:column;gap:14px}
 
-  /* パートの帯: 7本。各行に全ステップのミニ表示 */
+  .intro{background:var(--panel);border:1px solid var(--line);padding:16px 18px;font-size:14px;line-height:1.8}
+  .intro b{font-weight:500}
+  .intro .dim{color:var(--dim);font-size:12.5px}
+  .intro .act{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  /* パートの帯: 7本 */
   .parts{display:flex;flex-direction:column;border:1px solid var(--line);background:var(--panel)}
-  .prow{display:grid;grid-template-columns:118px 1fr 58px;align-items:center;gap:8px;padding:5px 8px;border-top:1px solid var(--line);cursor:pointer}
+  .prow{display:grid;grid-template-columns:118px 62px 1fr 30px;align-items:center;gap:8px;padding:5px 8px;border-top:1px solid var(--line);cursor:pointer}
   .prow:first-child{border-top:none}
   .prow.sel{background:var(--panel2);box-shadow:inset 3px 0 0 var(--c)}
   .prow .nm{display:flex;align-items:center;gap:7px;font-size:13px;white-space:nowrap}
   .prow .nm i{width:10px;height:10px;background:var(--c);flex:none}
   .prow .nm span{color:var(--dim);font-size:11px}
   .prow canvas{width:100%;height:22px;display:block}
-  .prow .ms{display:flex;gap:3px;justify-content:flex-end}
-  .prow .ms button{padding:2px 0;width:26px;font-size:11px}
-  .prow.muted canvas,.prow.muted .nm{opacity:.35}
-  .ms button.m.on{background:var(--red);border-color:var(--red);color:#fff}
-  .ms button.s.on{background:#c98a2e;border-color:#c98a2e;color:#fff}
+  .prow button{padding:3px 0;font-size:11px}
+  .prow .mode.step{background:var(--c);border-color:var(--c);color:#fff}
+  .prow .m.on{background:var(--red);border-color:var(--red);color:#fff}
+  .prow.muted canvas{opacity:.35}
 
-  /* 選んだパートの設定 */
   .pbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .pbar .ttl{font-size:16px;font-weight:400;letter-spacing:.06em;display:flex;align-items:center;gap:8px;margin-right:6px}
   .pbar .ttl i{width:14px;height:14px;background:var(--pc)}
   .pbar .sp{flex:1}
+  .lane{font-size:13px}
+  .lane b{font-weight:500;color:var(--pc)}
 
-  /* グリッド */
-  .gwrap{overflow-x:auto;border:1px solid var(--line);background:var(--panel);-webkit-overflow-scrolling:touch}
-  .gin{display:grid;grid-template-columns:62px 1fr;min-width:calc(62px + var(--steps) * 18px)}
-  .labels{display:grid;grid-template-rows:repeat(16,1fr);border-right:1px solid var(--line)}
+  /* グリッド: 16行 (鍵) × 16ステップ。行をタップ = 本体の16キーで置く音を選ぶ */
+  .gwrap{border:1px solid var(--line);background:var(--panel)}
+  .gin{display:grid;grid-template-columns:70px 1fr}
+  .labels div,.grid .row{height:26px}
+  .labels{border-right:1px solid var(--line)}
   .labels div{font-size:10.5px;color:var(--dim);display:flex;align-items:center;gap:5px;padding:0 6px;cursor:pointer;
-              border-top:1px solid var(--panel2);white-space:nowrap;overflow:hidden;user-select:none;height:26px}
-  .labels div:hover{color:var(--txt);background:var(--panel2)}
+              border-top:1px solid var(--panel2);white-space:nowrap;overflow:hidden;user-select:none}
   .labels div i{width:6px;height:6px;flex:none}
-  .labels div.w{color:var(--txt)}
-  .grid{position:relative;display:grid;grid-template-columns:repeat(var(--steps),1fr);grid-template-rows:repeat(16,26px);
-        touch-action:none;user-select:none;cursor:crosshair}
-  .grid .c{border-left:1px solid var(--panel2);border-top:1px solid var(--panel2)}
+  .labels div.cur{color:#fff;background:var(--pc)}
+  .labels div.cur i{outline:1px solid #fff}
+  .grid{display:flex;flex-direction:column;cursor:pointer;user-select:none}
+  .grid .row{display:grid;grid-template-columns:repeat(16,1fr);border-top:1px solid var(--panel2)}
+  .grid .row.cur{background:color-mix(in srgb,var(--pc) 10%,transparent);outline:1px solid var(--pc);outline-offset:-1px;position:relative;z-index:1}
+  .grid .c{border-left:1px solid var(--panel2);position:relative}
   .grid .c.beat{border-left-color:var(--line)}
-  .grid .c.alt{background:rgba(0,0,0,.018)}
-  .grid .c.ph{background:rgba(63,143,152,.12)}
-  .grid .n{background:var(--pc);margin:2px 1px;position:relative;z-index:2;pointer-events:none;opacity:.92}
-  .grid .n.hit{filter:brightness(1.25);box-shadow:0 0 0 2px rgba(255,255,255,.7) inset}
-  .hint{font-size:12px;color:var(--dim);line-height:1.7}
+  .grid .c.ph{background:rgba(63,143,152,.14)}
+  .grid .c.on::after{content:'';position:absolute;inset:3px 2px;background:var(--pc)}
+  .grid .c.on.ph::after{filter:brightness(1.3);box-shadow:0 0 0 2px rgba(255,255,255,.8) inset}
+  .gwrap.pad .grid .row.cur{outline:none;background:none}
+  .gwrap.pad .labels div.cur{background:none;color:var(--dim)}
+
+  .hint{font-size:12.5px;color:var(--dim);line-height:1.75}
   .hint b{font-weight:500;color:var(--txt)}
   .foot{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .foot .sp{flex:1}
-  #msg{font-size:12px;color:var(--dim)}
+  #log{font-size:12px;color:var(--dim)}
+  #log.warn{color:var(--red)}
+  .off .needconn{opacity:.4;pointer-events:none}
   @media(max-width:560px){
     header{position:static}
-    .prow{grid-template-columns:86px 1fr 56px}
+    .prow{grid-template-columns:78px 54px 1fr 28px}
     .prow .nm span{display:none}
-    input[type=range]{width:70px}
+    .gin{grid-template-columns:58px 1fr}
   }
 </style>
 </head>
-<body>
+<body class="off">
 <header>
   <a class="home" href="index.html">← HOME</a>
   <h1>STEP</h1>
-  <button id="play">▶ 再生</button>
-  <label class="f">BPM <input type="range" id="bpm" min="60" max="180" step="1"><b id="bpmV"></b></label>
-  <label class="f">スイング <input type="range" id="swing" min="0" max="60" step="1"><b id="swingV"></b></label>
+  <button id="conn" class="primary">PONKEY につなぐ</button>
+  <span class="pill" id="stat">未接続</span>
   <span class="sp"></span>
-  <label class="f">ステップ <select id="steps"><option value="16">16</option><option value="32">32</option></select></label>
+  <button id="play" class="primary needconn">▶ 再生</button>
+  <label class="f needconn">BPM <button id="bpmDn">−</button><b id="bpmV">—</b><button id="bpmUp">＋</button></label>
+  <button id="snd" title="音をアプリから出すか、本体のスピーカーから出すか">音: アプリ</button>
   <label class="f">音量 <input type="range" id="master" min="0" max="100" step="1"></label>
 </header>
 
 <main>
-  <div class="parts" id="parts"></div>
+  <div class="intro" id="intro">
+    <b>PONKEY をステップシーケンサーにするアプリです。</b>
+    つなぐと本体の P1〜P7 が <b>STEP</b> に切り替わり、グリッドの16キーがそのパートの <b>16ステップ</b>になります。
+    キーを押すとそのステップに音が置かれ（もう一度押すと消える）、再生すると<b>音はこの画面から</b>鳴ります。<br>
+    <span class="dim">Chrome（パソコン / Android）で開いてください。iPhone / iPad は Bluefy などの Web Bluetooth 対応ブラウザが必要です。
+    要ファーム v4.6.38 以降（PT3 は v5.0.02 以降）。切断すると本体はふだんのパッド演奏に戻ります。</span>
+    <div class="act"><button class="primary" id="conn2">PONKEY につなぐ</button></div>
+  </div>
 
-  <div class="pbar" id="pbar">
+  <div class="parts needconn" id="parts"></div>
+
+  <div class="pbar needconn">
     <div class="ttl"><i></i><span id="pttl"></span></div>
-    <label class="f" id="kitBox">キット <select id="kit"></select></label>
-    <label class="f" id="octBox">オクターブ <button id="octDn">−</button><b id="octV"></b><button id="octUp">＋</button></label>
-    <label class="f">パート音量 <input type="range" id="pvol" min="0" max="100" step="1"></label>
+    <span class="lane" id="lane"></span>
     <span class="sp"></span>
+    <button id="allStep">ぜんぶ STEP</button>
+    <button id="allPad">ぜんぶ パッド</button>
     <button id="pclear">このパートを消す</button>
   </div>
 
-  <div class="gwrap"><div class="gin" id="gin">
+  <div class="gwrap needconn" id="gwrap"><div class="gin">
     <div class="labels" id="labels"></div>
     <div class="grid" id="grid"></div>
   </div></div>
@@ -125,40 +150,37 @@
   <div class="hint" id="hint"></div>
 
   <div class="foot">
-    <button id="demo">お手本を読む</button>
-    <button id="clearAll">ぜんぶ消す</button>
+    <span id="log"></span>
     <span class="sp"></span>
-    <span id="msg"></span>
-    <button id="exp">書き出す</button>
-    <button id="imp">読み込む</button>
-    <input type="file" id="file" accept=".json,application/json" hidden>
   </div>
 </main>
 
 <script>
 'use strict';
 /* =====================================================================
-   PONKEY STEP — P1〜P7 のステップシーケンサー。音はすべてブラウザ (WebAudio) で作る。
-   パート構成は本体と同じ (Ponkey.PARTS):
-     P1 = ドラム。16鍵 = 16打楽器 (Ponkey.KIT_NOTES の GM ノート)。行は列=系統でまとめる
-     P2-P7 = メロディ。16鍵 = 白鍵16本 (KEYS/LEAD/CHORD/BELL/VOICE は C3-D5、BASS は C1-D3)
-             + パートの音域シフト (LEAD +12 / BELL +24)
-   ノートは {s:ステップ, k:鍵(0-15), l:長さ(ステップ数)}。メロディの k は低い方から 0。
-   外部ライブラリは使わない (オフラインでも開ける)。
+   PONKEY STEP — 本体の P1〜P7 をステップ入力に切り替え、鳴った音をブラウザで鳴らす
+   本体側の窓口 (ファーム v4.6.38+ / PT3 v5.0.02+):
+     - SONG_CMD_STEP_PART = pk.stepPart(part, {step, clear, map})
+         STEP のパートはグリッド16キー = 16ステップ。押した瞬間に**本体の中で** ON/OFF する。
+         各ステップで ON/OFF する「鍵」(P1 = 打楽器 / P2-P7 = 音階表のキー) は map[16] で渡す。
+         → このアプリは map を全ステップ同じ鍵にして、「いまどの行を打ち込むか」を画面で選ばせる
+     - 本体で ON/OFF した結果は KEY/STEP イベント ('step') で届く。画面はそれを写すだけ
+     - 中身の読み出しは DUMP_SLOT → SLOT_DUMP (V2 形式。解釈は TRANCE と同じ)
+     - 切断で全パートがパッドへ戻る (ファーム側の鉄則)
+   音: CC_SAM_MUTE=127 で本体の内蔵音源を黙らせ、本体が BLE に流す NoteOn/Off
+       (ドラム = ch9 の GM ノート / メロディ = 各パートの ch とレイヤー1 の ch、実音高) を WebAudio で鳴らす。
+       「音: 本体」にすると CC_SAM_MUTE=0 で本体スピーカーに戻し、ブラウザは黙る。
    ===================================================================== */
-const PARTS = Ponkey.PARTS, KIT_NOTES = Ponkey.KIT_NOTES;
+const PARTS = Ponkey.PARTS, KIT_NOTES = Ponkey.KIT_NOTES, CCN = Ponkey.CC;
+const CC_SAM_MUTE = 0x55;
 const KIT_NAMES = ['トイ','オーケストラ','バンド','ゲーム','宇宙','ヘンテコ','ボイス','ワールド'];
-const COL_NAMES = Ponkey.KIT_COL_NAMES;
-const COL_HUE = [0, 130, 220, 320];
-const STORE = 'ponkey_step_v01';
+const COL_HUE = [0, 130, 220, 320];   // P1 の列 (キック/スネア/ハット/パーカッション)
+const STORE = 'ponkey_step_v02';
+const DEFAULT_LANE = [0, 12, 12, 12, 12, 12, 12];   // P1 = キック / メロディ = 左下 (いちばん低い音)
 const partColor = (p, l = 50) => `hsl(${PARTS[p].hue},62%,${l}%)`;
-
-// メロディの16鍵 → 低い順の音高
-const sortedTable = p => PARTS[p].table.slice().sort((a, b) => a - b);
 const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-const noteName = m => NAMES[m % 12] + (Math.floor(m / 12) - 1);
+const noteName = m => NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
 
-// GM ドラムの短い名前 (ラベル用)
 const GM = {35:'キック2',36:'キック',37:'リム',38:'スネア',39:'クラップ',40:'スネア2',41:'タム低',42:'ハット',43:'タム低2',
   44:'ペダルHH',45:'タム中',46:'オープンHH',47:'タム中2',48:'タム高',49:'クラッシュ',50:'タム高2',51:'ライド',52:'チャイナ',
   53:'ライドベル',54:'タンバリン',55:'スプラッシュ',56:'カウベル',57:'クラッシュ2',58:'ビブラスラップ',59:'ライド2',
@@ -167,59 +189,29 @@ const GM = {35:'キック2',36:'キック',37:'リム',38:'スネア',39:'クラ
   76:'ウッド高',77:'ウッド低',78:'クイーカM',79:'クイーカ',80:'トライアングルM',81:'トライアングル'};
 
 /* ---------------- 状態 ---------------- */
-function blankState() {
-  return { v: 1, bpm: 110, swing: 0, steps: 16, master: 80, kit: 0,
-    parts: PARTS.map((_, i) => ({ notes: [], mute: false, solo: false, vol: 75, oct: 0 })) };
-}
-let S = load() || demoState();
-let sel = 0;
+// 画面だけの設定 (localStorage)。本体の中身 (grid) は毎回本体から読む
+const P = (() => {
+  const d = { lane: DEFAULT_LANE.slice(), stepOn: [true, true, true, true, true, true, true], mute: new Array(7).fill(false),
+              appSound: true, master: 80 };
+  try { const o = JSON.parse(localStorage.getItem(STORE)); if (o) {
+    if (Array.isArray(o.lane) && o.lane.length === 7) d.lane = o.lane.map(v => v & 15);
+    if (Array.isArray(o.stepOn) && o.stepOn.length === 7) d.stepOn = o.stepOn.map(Boolean);
+    if (Array.isArray(o.mute) && o.mute.length === 7) d.mute = o.mute.map(Boolean);
+    if (typeof o.appSound === 'boolean') d.appSound = o.appSound;
+    if (o.master >= 0 && o.master <= 100) d.master = o.master;
+  } } catch (e) {}
+  return d;
+})();
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(P)); } catch (e) {} };
 
-function load() {
-  try {
-    const o = JSON.parse(localStorage.getItem(STORE));
-    return sanitize(o);
-  } catch (e) { return null; }
-}
-function sanitize(o) {
-  if (!o || !Array.isArray(o.parts) || o.parts.length !== 7) return null;
-  const b = blankState();
-  b.bpm = clamp(+o.bpm || 110, 60, 180); b.swing = clamp(+o.swing || 0, 0, 60);
-  b.steps = o.steps == 32 ? 32 : 16; b.master = clamp(o.master ?? 80, 0, 100); b.kit = clamp(o.kit | 0, 0, 7);
-  o.parts.forEach((p, i) => {
-    const q = b.parts[i];
-    q.mute = !!p.mute; q.solo = !!p.solo; q.vol = clamp(p.vol ?? 75, 0, 100); q.oct = clamp(p.oct | 0, -2, 2);
-    q.notes = (p.notes || []).filter(n => n && n.s >= 0 && n.s < 32 && n.k >= 0 && n.k < 16)
-      .map(n => ({ s: n.s | 0, k: n.k | 0, l: i === 0 ? 1 : clamp(n.l | 0 || 1, 1, 32 - n.s) }));
-  });
-  return b;
-}
-let saveT = 0;
-function save() {
-  clearTimeout(saveT);
-  saveT = setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) {} }, 200);
-}
-function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
-// お手本: 4つ打ち＋ベース＋和音＋リード＋ベル (Cメジャー)
-function demoState() {
-  const s = blankState();
-  const add = (p, st, k, l = 1) => s.parts[p].notes.push({ s: st, k, l });
-  // P1 ドラム (TOYキット: 0=キック 1=スネア 2=ハット 13=クラップ 14=オープンHH 3=タンバリン)
-  [0, 4, 8, 12].forEach(t => add(0, t, 0));
-  [4, 12].forEach(t => add(0, t, 1));
-  [2, 6, 10].forEach(t => add(0, t, 2)); add(0, 14, 14);
-  [1, 3, 5, 7, 9, 11, 13, 15].forEach(t => add(0, t, 3));
-  // P4 ベース (鍵: 0=C1 … 7=C2 9=E2 11=G2)
-  [[0,7,2],[3,7,1],[6,7,1],[8,5,2],[11,5,1],[12,4,2],[14,6,2]].forEach(([t,k,l]) => add(3, t, k, l));
-  // P5 わおん (C と F と G)
-  add(4, 0, 0, 6); add(4, 8, 3, 4); add(4, 12, 4, 4);
-  // P3 リード
-  [[0,7,2],[2,9,1],[3,11,3],[8,10,2],[10,9,1],[11,8,1],[12,7,4]].forEach(([t,k,l]) => add(2, t, k - 4, l));
-  // P6 ベル
-  [[6,11,1],[14,9,1],[15,11,1]].forEach(([t,k,l]) => add(5, t, k, l));
-  s.parts[5].vol = 55; s.parts[2].vol = 60;
-  return s;
-}
+const D = {                 // 本体の状態 (本体の報告を写す)
+  connected: false, version: null,
+  grid: Array.from({ length: 7 }, () => Array.from({ length: 16 }, () => new Array(16).fill(false))),  // [part][key][step]
+  part: 0,                  // 本体で選ばれているパート (0-6)
+  head: -1, playing: false, bpm: null, kit: 0, scale: 0, key: 0,
+};
+let sel = 0;                // 画面で見ているパート (本体の選択に追従する)
+let pk = null;
 
 /* ---------------- 音 (WebAudio) ---------------- */
 let ac = null, master, comp, revIn, noiseBuf;
@@ -229,18 +221,16 @@ function audio() {
   ac = new (window.AudioContext || window.webkitAudioContext)();
   comp = ac.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = .003; comp.release.value = .2;
-  master = ac.createGain(); master.gain.value = vol01(S.master);
+  master = ac.createGain();
   comp.connect(master); master.connect(ac.destination);
-  // 残響: 減衰ノイズのインパルス
   const len = ac.sampleRate * 1.8, ir = ac.createBuffer(2, len, ac.sampleRate);
   for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
   const conv = ac.createConvolver(); conv.buffer = ir;
-  revIn = ac.createGain(); revIn.gain.value = 1;
+  revIn = ac.createGain();
   const revOut = ac.createGain(); revOut.gain.value = .35;
   revIn.connect(conv); conv.connect(revOut); revOut.connect(comp);
   noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
   const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-  // パートごとのバス (音量 + 定位 + 残響センド)
   const PAN = [0, -.15, .25, 0, -.3, .35, .1], SEND = [.08, .12, .2, .02, .35, .45, .3];
   PARTS.forEach((_, i) => {
     const g = ac.createGain(), pan = ac.createStereoPanner ? ac.createStereoPanner() : null, snd = ac.createGain();
@@ -255,16 +245,10 @@ function audio() {
 const vol01 = v => Math.pow(v / 100, 1.6);
 function applyMix() {
   if (!ac) return;
-  master.gain.setTargetAtTime(vol01(S.master), ac.currentTime, .02);
-  const anySolo = S.parts.some(p => p.solo);
-  S.parts.forEach((p, i) => {
-    const on = !p.mute && (!anySolo || p.solo);
-    bus[i].gain.setTargetAtTime(on ? vol01(p.vol) * 1.3 : 0, ac.currentTime, .02);
-  });
+  master.gain.setTargetAtTime(P.appSound ? vol01(P.master) : 0, ac.currentTime, .02);
+  P.mute.forEach((m, i) => bus[i].gain.setTargetAtTime(m ? 0 : 1, ac.currentTime, .02));
 }
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
-
-// 小道具: エンベロープ付きの音源
 function env(g, t, a, peak, d, sus = 0) {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.linearRampToValueAtTime(peak, t + a);
@@ -283,7 +267,7 @@ function filt(type, f, q = 1, out) {
 }
 function gainTo(out, v = 1) { const g = ac.createGain(); g.gain.value = v; g.connect(out); return g; }
 
-/* ---- ドラム: GM ノート番号から合成 ---- */
+/* ---- ドラム: GM ノート番号から合成 (本体は ch9 に GM ノートで流してくる) ---- */
 function drum(note, t, vel, out) {
   const v = vel;
   const kick = (f0, f1, dec) => {
@@ -360,357 +344,367 @@ function drum(note, t, vel, out) {
   }
 }
 
-/* ---- メロディ6パート (パートの性格で音色を分ける) ---- */
-function melody(p, m, t, dur, vel, out) {
-  const f = mtof(m), end = t + dur;
+
+/* ---- メロディ6パート: NoteOn で鳴らし始め、NoteOff で離す ----
+   voice() は最長 MAX_HOLD 秒ぶんの音を組み、gate (ゲイン) を返す。NoteOff で gate を絞って止める。
+   NoteOff を取りこぼしても MAX_HOLD で必ず消える。 */
+const MAX_HOLD = 4;
+const RELEASE = { KEYS: .25, LEAD: .06, BASS: .05, CHORD: .3, BELL: .6, VOICE: .12 };
+function voice(p, m, vel, out) {
+  const t = ac.currentTime + .005, f = mtof(m), end = t + MAX_HOLD;
+  const gate = gainTo(out); gate.gain.setValueAtTime(1, t);
+  const stopAll = [];
+  const O = (type, fr, dst) => { const o = osc(type, fr, t, end, dst); stopAll.push(o); return o; };
   switch (PARTS[p].name) {
-    case 'KEYS': { // ピアノっぽい減衰
-      const g = gainTo(out); env(g, t, .004, .5 * vel, Math.min(1.4, dur + .6));
-      g.gain.setTargetAtTime(0.0001, end, .08);
-      const lp = filt('lowpass', 2200 + f, .5, g);
-      osc('triangle', f, t, end + .5, lp); osc('sine', f * 2, t, end + .5, gainTo(lp, .25));
-      return end + .5;
-    }
-    case 'LEAD': {
-      const g = gainTo(out); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.28 * vel, t + .01);
-      g.gain.setTargetAtTime(.2 * vel, t + .01, .1); g.gain.setTargetAtTime(0.0001, end, .05);
+    case 'KEYS': { const g = gainTo(gate); env(g, t, .004, .5 * vel, 1.6);
+      const lp = filt('lowpass', 2200 + f, .5, g); O('triangle', f, lp); O('sine', f * 2, gainTo(lp, .25)); break; }
+    case 'LEAD': { const g = gainTo(gate); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.28 * vel, t + .01);
+      g.gain.setTargetAtTime(.2 * vel, t + .01, .1);
       const lp = filt('lowpass', 1800, 4, g); lp.frequency.setValueAtTime(5000, t); lp.frequency.exponentialRampToValueAtTime(1600, t + .25);
-      const a = osc('sawtooth', f, t, end + .3, lp), b = osc('sawtooth', f, t, end + .3, lp); b.detune.value = 9;
-      const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 5.5; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(7, t + .35);
-      l.connect(lg); lg.connect(a.detune); lg.connect(b.detune); l.start(t); l.stop(end + .3);
-      return end + .3;
-    }
-    case 'BASS': {
-      const g = gainTo(out); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.6 * vel, t + .005);
-      g.gain.setTargetAtTime(.42 * vel, t + .005, .12); g.gain.setTargetAtTime(0.0001, end, .03);
+      const a = O('sawtooth', f, lp), b = O('sawtooth', f, lp); b.detune.value = 9;
+      const l = O('sine', 5.5, ac.createGain()), lg = ac.createGain(); l.disconnect(); l.connect(lg);
+      lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(7, t + .35); lg.connect(a.detune); lg.connect(b.detune); break; }
+    case 'BASS': { const g = gainTo(gate); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.6 * vel, t + .005);
+      g.gain.setTargetAtTime(.42 * vel, t + .005, .12);
       const lp = filt('lowpass', 600, 6, g); lp.frequency.setValueAtTime(2200, t); lp.frequency.exponentialRampToValueAtTime(380, t + .18);
-      osc('sawtooth', f, t, end + .2, lp); osc('square', f / 2, t, end + .2, gainTo(lp, .5));
-      return end + .2;
-    }
-    case 'CHORD': { // 白鍵上の三和音 (その音 + 2つ上 + 4つ上の白鍵) をパッドで
-      const ws = whiteFrom(m, [0, 2, 4]);
-      const g = gainTo(out); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.14 * vel, t + .06);
-      g.gain.setTargetAtTime(0.0001, end, .18);
+      O('sawtooth', f, lp); O('square', f / 2, gainTo(lp, .5)); break; }
+    case 'CHORD': { const g = gainTo(gate); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.2 * vel, t + .06);
       const lp = filt('lowpass', 2400, .7, g);
-      ws.forEach(x => { const a = osc('sawtooth', mtof(x), t, end + .9, lp); a.detune.value = -6;
-        const b = osc('triangle', mtof(x), t, end + .9, lp); b.detune.value = 6; });
-      return end + .9;
-    }
-    case 'BELL': { // FM ベル
-      const g = gainTo(out); env(g, t, .002, .32 * vel, Math.max(1.2, dur + .8));
-      const car = osc('sine', f, t, end + 1.6, g);
-      const mod = ac.createOscillator(), mg = ac.createGain();
-      mod.frequency.value = f * 3.5; mg.gain.setValueAtTime(f * 2.2, t); mg.gain.exponentialRampToValueAtTime(f * .1, t + 1);
-      mod.connect(mg); mg.connect(car.frequency); mod.start(t); mod.stop(end + 1.6);
-      return end + 1.6;
-    }
-    case 'VOICE': { // 「あー」のフォルマント
-      const g = gainTo(out); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.5 * vel, t + .05);
-      g.gain.setTargetAtTime(0.0001, end, .1);
-      const fs = [[800, 1, 8], [1150, .5, 9], [2900, .25, 10]].map(([F, a, q]) => filt('bandpass', F, q, gainTo(g, a)));
-      const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
-      const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 5; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(10, t + .4);
-      l.connect(lg); lg.connect(o.detune);
-      fs.forEach(x => o.connect(x)); o.start(t); o.stop(end + .5); l.start(t); l.stop(end + .5);
-      return end + .5;
-    }
+      O('sawtooth', f, lp).detune.value = -7; O('triangle', f, lp).detune.value = 7; O('sine', f * 2, gainTo(lp, .2)); break; }
+    case 'BELL': { const g = gainTo(gate); env(g, t, .002, .32 * vel, 1.8);
+      const car = O('sine', f, g);
+      const mod = O('sine', f * 3.5, ac.createGain()), mg = ac.createGain(); mod.disconnect(); mod.connect(mg);
+      mg.gain.setValueAtTime(f * 2.2, t); mg.gain.exponentialRampToValueAtTime(f * .1, t + 1); mg.connect(car.frequency); break; }
+    case 'VOICE': { const g = gainTo(gate); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(.5 * vel, t + .05);
+      const o = O('sawtooth', f, ac.createGain()); o.disconnect();
+      [[800, 1, 8], [1150, .5, 9], [2900, .25, 10]].forEach(([F, a, q]) => o.connect(filt('bandpass', F, q, gainTo(g, a))));
+      const l = O('sine', 5, ac.createGain()), lg = ac.createGain(); l.disconnect(); l.connect(lg);
+      lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(10, t + .4); lg.connect(o.detune); break; }
   }
-}
-const WHITE = [0, 2, 4, 5, 7, 9, 11];
-function whiteFrom(m, offs) { // m から白鍵で数えて offs 段上
-  const oct = Math.floor(m / 12), i = WHITE.indexOf(m % 12);
-  if (i < 0) return offs.map(o => m + o);
-  return offs.map(o => { const j = i + o; return (oct + Math.floor(j / 7)) * 12 + WHITE[j % 7]; });
+  const rel = RELEASE[PARTS[p].name];
+  return { release() {
+    const now = ac.currentTime;
+    gate.gain.cancelScheduledValues(now); gate.gain.setValueAtTime(gate.gain.value, now);
+    gate.gain.setTargetAtTime(0, now, rel / 3);
+    stopAll.forEach(o => { try { o.stop(now + rel * 2 + .05); } catch (e) {} });
+  } };
 }
 
-function partPitch(p, k) { return sortedTable(p)[k] + PARTS[p].shift + S.parts[p].oct * 12; }
-
-function trigger(p, k, t, dur, vel = 1) {
-  if (p === 0) drum(KIT_NOTES[S.kit][k], t, vel, bus[0]);
-  else melody(p, partPitch(p, k), t, dur, vel, bus[p]);
+// 本体から届いた音
+const held = new Map();   // "ch:note" → voice
+const chPart = ch => PARTS.findIndex(p => p.ch === ch || p.chL2 === ch);
+function onNote(e) {
+  if (!P.appSound) return;
+  audio();
+  const vel = Math.max(.25, (e.vel || 100) / 127);
+  if (e.ch === Ponkey.DRUM_CH) {
+    if (e.on) { flashPart(0); drum(e.note, ac.currentTime + .003, vel, bus[0]); }
+    return;
+  }
+  const p = chPart(e.ch); if (p < 1) return;
+  const id = e.ch + ':' + e.note, old = held.get(id);
+  if (old) { old.release(); held.delete(id); }
+  if (e.on) { held.set(id, voice(p, e.note, vel, bus[p])); flashPart(p); }
 }
+function releaseAll() { held.forEach(v => v.release()); held.clear(); }
+
+// 試し鳴らし (ステップを置いたとき・行を選んだとき)。本体が止まっていても音で確かめられる
 function preview(p, k) {
+  if (!P.appSound) return;
   audio();
-  // 試聴はミュート/ソロに関係なく鳴らしたいので、一時的にバスを通さず直接出す
-  const g = ac.createGain(); g.gain.value = vol01(S.parts[p].vol) * 1.3; g.connect(comp);
-  const t = ac.currentTime + .01;
-  if (p === 0) drum(KIT_NOTES[S.kit][k], t, 1, g); else melody(p, partPitch(p, k), t, stepDur() * 1.5, 1, g);
+  if (p === 0) drum(KIT_NOTES[D.kit][k], ac.currentTime + .005, 1, bus[0]);
+  else { const v = voice(p, pitchOf(p, k), .9, bus[p]); setTimeout(() => v.release(), 220); }
+}
+// 鍵 → 音高の目安 (白鍵・キー C のとき本体と一致。スケール/キーを変えているときは行の名前を鍵番号にする)
+const plainScale = () => (D.scale === 0 || D.scale === 0x7f) && D.key === 0;
+function pitchOf(p, k) { return PARTS[p].table[k] + PARTS[p].shift; }
+
+/* ---------------- 本体とのやりとり ---------------- */
+function fwAtLeast(ver, want) {
+  const a = String(ver || '').split('.').map(n => parseInt(n, 10) || 0), b = want.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i];
+  return true;
+}
+function stepSupported() {
+  if (!pk || !pk.dbgCmdChar) return false;
+  if (pk.hasFeature('STEP_PART')) return true;
+  const v = pk.caps.version;
+  return !v || fwAtLeast(v, '4.6.38');   // 版が分からないときは送る (古いファームは知らない命令を無視するだけ)
+}
+const mapOf = p => new Array(16).fill(P.lane[p] & 15);
+async function sendStep(p) {
+  if (!D.connected) return;
+  try { await pk.stepPart(p, { step: P.stepOn[p], map: mapOf(p) }); }
+  catch (e) { log(`P${p + 1} の切り替えに失敗: ${e.message}`, true); }
+}
+async function sendSound() {
+  if (!D.connected) return;
+  try { await pk.sendCC(CC_SAM_MUTE, P.appSound ? 127 : 0); } catch (e) {}
 }
 
-/* ---------------- シーケンサー (先読みスケジューラ) ---------------- */
-let playing = false, nextStep = 0, nextTime = 0, timer = 0;
-const queue = [];   // 画面の再生ヘッド用: {step, time}
-const stepDur = () => 60 / S.bpm / 4;
-function schedule() {
-  const ahead = .12;
-  while (nextTime < ac.currentTime + ahead) {
-    const st = nextStep, sd = stepDur();
-    const t = nextTime + (st % 2 ? S.swing / 100 * sd : 0);
-    S.parts.forEach((p, i) => {
-      for (const n of p.notes) if (n.s === st) {
-        const vel = (st % 4 === 0) ? 1 : .82;   // 拍頭を少しだけ強く
-        trigger(i, n.k, t, Math.max(.04, n.l * sd - (i === 0 ? 0 : sd * .1)), vel);
-      }
-    });
-    queue.push({ step: st, time: t });
-    nextTime += sd;
-    nextStep = (nextStep + 1) % S.steps;
+async function connect() {
+  if (!navigator.bluetooth) { log('このブラウザは Web Bluetooth が使えません。Chrome（パソコン / Android）か、iPhone なら Bluefy で開いてください', true); return; }
+  if (D.connected) { pk.disconnect(); return; }
+  audio();
+  pk = new Ponkey();
+  pk.on('caps', c => { D.version = c.version || D.version; refreshStat(); });
+  pk.on('note', onNote);
+  pk.on('cc', onCC);
+  pk.on('step', onStep);
+  pk.on('modeui', m => { if (m.currentMode < 7) followPart(m.currentMode); });
+  pk.on('partdown', e => { if (e.key < 7) followPart(e.key); });
+  pk.on('slotdump', onSlotDump);
+  pk.on('disconnect', onDisconnect);
+  try {
+    setStat('接続中…');
+    await pk.connect({ debug: true, keyEvents: true });
+  } catch (e) {
+    pk = null; setStat('未接続');
+    if (e && e.name !== 'NotFoundError') log('つなげませんでした: ' + (e.message || e), true);
+    return;
+  }
+  if (!pk.dbgCmdChar) { log('STEP の通り道 (デバッグサービス) が見つかりません。本体を再起動してもう一度つないでください', true); }
+  D.connected = true; document.body.classList.remove('off');
+  $('intro').style.display = 'none';
+  $('conn').textContent = '切断'; $('conn2').textContent = '切断';
+  refreshStat();
+  // 版番号 (CAPS) が届くのを少し待ってから切り替える
+  for (let i = 0; i < 15 && !pk.caps.version && !pk.hasFeature('STEP_PART'); i++) await new Promise(r => setTimeout(r, 100));
+  refreshStat();
+  if (!stepSupported()) {
+    log(`この本体のファーム (${pk.caps.version}) は STEP 切り替えに対応していません。v4.6.38 以降（PT3 は v5.0.02 以降）に更新してください`, true);
+  }
+  await sendSound();
+  for (let p = 0; p < 7; p++) await sendStep(p);
+  requestDump();
+  try { await pk.sendCC(sel, 127); } catch (e) {}   // 画面で見ているパートを本体でも選ぶ
+  log('本体を STEP にしました。本体のキーを押すとステップが置かれます');
+  render();
+}
+function onDisconnect() {
+  D.connected = false; D.playing = false; D.head = -1; releaseAll();
+  document.body.classList.add('off');
+  $('intro').style.display = '';
+  $('conn').textContent = 'PONKEY につなぐ'; $('conn2').textContent = 'PONKEY につなぐ';
+  setStat('未接続', 'ng'); log('切断しました。本体はパッド演奏に戻っています');
+  render();
+}
+
+function onCC(e) {
+  if (e.ch !== 0) return;
+  switch (e.cc) {
+    case CCN.BAR_SYNC: D.head = e.val & 15; if (!D.playing) { D.playing = true; refreshPlay(); } lastSync = performance.now(); drawHead(); break;
+    case CCN.PLAY_STOP: D.playing = e.val > 0; if (!D.playing) { D.head = -1; releaseAll(); drawHead(); } refreshPlay(); break;
+    case CCN.BPM: D.bpm = e.val + 60; $('bpmV').textContent = D.bpm; break;
+    case CCN.VOICE_SELECT: if (((e.val >> 4) & 15) === 0) { D.kit = e.val & 7; if (sel === 0) render(); } break;
+    case CCN.SYNTH_SCALE: D.scale = e.val; if (sel) render(); break;
+    case CCN.KEY: D.key = e.val % 12; if (sel) render(); break;
+    default: if (e.cc < 7 && e.val > 0) followPart(e.cc);   // 本体でパートキーを押した (CC 通知)
   }
 }
-function play() {
-  audio();
-  playing = true; nextStep = 0; nextTime = ac.currentTime + .06; queue.length = 0;
-  schedule(); timer = setInterval(schedule, 25);
-  $('play').classList.add('on'); $('play').textContent = '■ 停止';
+// CC_PLAY_STOP が来ない古いファームでも、再生位置が止まったら停止とみなす
+let lastSync = 0;
+setInterval(() => {
+  if (D.playing && performance.now() - lastSync > 1500) { D.playing = false; D.head = -1; drawHead(); refreshPlay(); }
+}, 500);
+
+function onStep(e) {
+  if (e.part > 6 || e.step > 15) return;
+  const k = P.lane[e.part];
+  D.grid[e.part][k][e.step] = e.on;
+  if (e.on && !D.playing) preview(e.part, k);
+  followPart(e.part);
+  drawGrid(); drawMini(e.part);
 }
-function stop() {
-  playing = false; clearInterval(timer); queue.length = 0; curStep = -1; drawHead();
-  $('play').classList.remove('on'); $('play').textContent = '▶ 再生';
+
+// 本体のいまの中身を読む (V2: [0xF2][slot][loopLen][oct×6][rectRow][rectCol][dCnt]{(p<<4)|step,maskLo,maskHi}[sCnt]{(part<<4)|key,sub,raw})
+let dumpAsm = {};
+function requestDump() {
+  dumpAsm = {};
+  pk.subscribeCat(Ponkey.DBG_CAT.SONG).catch(() => {});
+  pk.dumpSlot(0xff).catch(() => {});
+}
+function onSlotDump(d) {
+  if (d.length < 4) return;
+  const gen = d[0], idx = d[1], cnt = d[2];
+  let a = dumpAsm[gen];
+  if (!a || a.cnt !== cnt) a = dumpAsm[gen] = { cnt, parts: {} };
+  a.parts[idx] = d.slice(3);
+  if (Object.keys(a.parts).length < cnt) return;
+  let tot = 0; for (let c = 0; c < cnt; c++) tot += a.parts[c].length;
+  const full = new Uint8Array(tot); let off = 0;
+  for (let c = 0; c < cnt; c++) { full.set(a.parts[c], off); off += a.parts[c].length; }
+  delete dumpAsm[gen];
+  let i = 0;
+  if (full[i++] !== 0xF2) return;
+  i += 2 + 6 + 2;
+  const g = D.grid.map(r => r.map(x => x.fill(false)));
+  const dc = full[i++];
+  for (let n = 0; n < dc && i + 2 < full.length; n++) {
+    const b = full[i++], m = full[i++] | (full[i++] << 8), s = b & 15;
+    for (let k = 0; k < 16; k++) if ((m >> k) & 1) g[0][k][s] = true;
+  }
+  const sc = full[i++];
+  for (let n = 0; n < sc && i + 2 < full.length; n++) {
+    const pkb = full[i++], sub = full[i++]; i++;
+    const pi = (pkb >> 4) & 15, k = pkb & 15;
+    if (pi < 6 && (sub & 3) === 0 && (sub >> 2) < 16) g[pi + 1][k][sub >> 2] = true;
+  }
+  render();
 }
 
 /* ---------------- 画面 ---------------- */
 const $ = id => document.getElementById(id);
-let curStep = -1;
+let logT = 0;
+function log(t, warn = false) {
+  const el = $('log'); el.textContent = t; el.classList.toggle('warn', warn);
+  clearTimeout(logT); if (!warn) logT = setTimeout(() => el.textContent = '', 6000);
+}
+function setStat(t, cls = '') { const s = $('stat'); s.textContent = t; s.className = 'pill ' + cls; }
+function refreshStat() { if (D.connected) setStat('接続中' + (D.version ? ' v' + D.version : ''), 'ok'); }
+function refreshPlay() { $('play').classList.toggle('on', D.playing); $('play').textContent = D.playing ? '■ 停止' : '▶ 再生'; }
+function refreshSnd() { $('snd').textContent = P.appSound ? '音: アプリ' : '音: 本体'; $('snd').classList.toggle('on', !P.appSound); }
 
+function followPart(p) { if (p !== sel) { sel = p; render(); } }
+
+// 表示の上から順の鍵番号。P1 は列 (系統) ごと、メロディは高い音が上
 function rowsOf(p) {
-  // 表示の上から順に 鍵番号 を返す
   if (p === 0) { const r = []; for (let c = 0; c < 4; c++) for (let row = 0; row < 4; row++) r.push(row * 4 + c); return r; }
-  return Array.from({ length: 16 }, (_, i) => 15 - i);
+  return Array.from({ length: 16 }, (_, k) => k).sort((a, b) => PARTS[p].table[b] - PARTS[p].table[a]);
+}
+function laneName(p, k) {
+  if (p === 0) { const n = KIT_NOTES[D.kit][k]; return GM[n] || ('GM ' + n); }
+  return plainScale() ? noteName(pitchOf(p, k)) : `鍵 ${k + 1}`;
 }
 
 function buildParts() {
   const box = $('parts'); box.innerHTML = '';
   PARTS.forEach((pt, i) => {
     const r = document.createElement('div'); r.className = 'prow'; r.style.setProperty('--c', partColor(i));
-    r.innerHTML = `<div class="nm"><i></i>P${i + 1} ${pt.name}<span>${pt.ja}</span></div><canvas></canvas>
-      <div class="ms"><button class="m" title="ミュート">M</button><button class="s" title="ソロ">S</button></div>`;
-    r.addEventListener('click', e => { if (e.target.closest('button')) return; select(i); });
-    r.querySelector('.m').onclick = () => { S.parts[i].mute = !S.parts[i].mute; applyMix(); refreshParts(); save(); };
-    r.querySelector('.s').onclick = () => { S.parts[i].solo = !S.parts[i].solo; applyMix(); refreshParts(); save(); };
+    r.innerHTML = `<div class="nm"><i></i>P${i + 1} ${pt.name}<span>${pt.ja}</span></div>
+      <button class="mode" title="本体のこのパートを STEP / パッド に切り替える"></button><canvas></canvas>
+      <button class="m" title="アプリの音だけミュート">M</button>`;
+    r.addEventListener('click', e => { if (e.target.closest('button')) return; pickPart(i); });
+    r.querySelector('.mode').onclick = () => { P.stepOn[i] = !P.stepOn[i]; save(); sendStep(i); render(); };
+    r.querySelector('.m').onclick = () => { P.mute[i] = !P.mute[i]; save(); applyMix(); render(); };
     box.appendChild(r);
   });
-  refreshParts();
+}
+function pickPart(i) {
+  sel = i; render();
+  if (D.connected) pk.sendCC(i, 127).catch(() => {});   // 本体の P キーを押したのと同じ
 }
 function refreshParts() {
-  const anySolo = S.parts.some(p => p.solo);
   [...$('parts').children].forEach((r, i) => {
-    const p = S.parts[i];
     r.classList.toggle('sel', i === sel);
-    r.classList.toggle('muted', p.mute || (anySolo && !p.solo));
-    r.querySelector('.m').classList.toggle('on', p.mute);
-    r.querySelector('.s').classList.toggle('on', p.solo);
+    r.classList.toggle('muted', P.mute[i]);
+    const b = r.querySelector('.mode'); b.textContent = P.stepOn[i] ? 'STEP' : 'パッド'; b.classList.toggle('step', P.stepOn[i]);
+    r.querySelector('.m').classList.toggle('on', P.mute[i]);
     drawMini(i);
   });
+}
+const flashT = [];
+function flashPart(p) {
+  const r = $('parts').children[p]; if (!r) return;
+  r.querySelector('.nm i').style.boxShadow = '0 0 0 3px ' + partColor(p, 75);
+  clearTimeout(flashT[p]); flashT[p] = setTimeout(() => r.querySelector('.nm i').style.boxShadow = '', 90);
 }
 function drawMini(i) {
   const cv = $('parts').children[i].querySelector('canvas');
   const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
-  if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  if (!w) return;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const n = S.steps, cw = w / n, rows = rowsOf(i);
-  for (let s = 0; s < n; s++) { g.fillStyle = s === curStep ? 'rgba(63,143,152,.22)' : (Math.floor(s / 4) % 2 ? '#efece4' : '#f6f4ee'); g.fillRect(s * cw, 0, cw - .5, h); }
-  g.fillStyle = partColor(i);
-  for (const nt of S.parts[i].notes) {
-    if (nt.s >= n) continue;
-    const y = rows.indexOf(nt.k) / 16 * h;
-    g.fillRect(nt.s * cw + .5, y, Math.min(nt.l, n - nt.s) * cw - 1, Math.max(1.5, h / 16));
-  }
-}
-
-function select(i) {
-  sel = i;
-  document.documentElement.style.setProperty('--pc', partColor(i));
-  $('pttl').textContent = `P${i + 1}  ${PARTS[i].name} / ${PARTS[i].ja}`;
-  $('kitBox').style.display = i === 0 ? '' : 'none';
-  $('octBox').style.display = i === 0 ? 'none' : '';
-  $('octV').textContent = (S.parts[i].oct > 0 ? '+' : '') + S.parts[i].oct;
-  $('pvol').value = S.parts[i].vol;
-  $('hint').innerHTML = i === 0
-    ? '<b>マスをタップ</b>で打つ／消す。<b>なぞる</b>と続けて塗れます。左の名前を押すと試し打ち。行は本体と同じく列（キック/スネア/ハット/パーカッション）ごとにまとめています。'
-    : '<b>マスをタップ</b>で音を置く／消す。置いたまま<b>右へドラッグ</b>すると長い音になります（既にある音を横に引くと長さを直せます）。左の音名を押すと試し弾き。16行は本体の16鍵（白鍵）と同じ音です。'
-      + (PARTS[i].name === 'CHORD' ? ' わおんは<b>置いた音から白鍵で3つ重ねた和音</b>で鳴ります。' : '');
-  buildGrid(); refreshParts();
-}
-
-function buildGrid() {
-  const p = sel, rows = rowsOf(p), n = S.steps;
-  $('gin').style.setProperty('--steps', n);
-  const lab = $('labels'); lab.innerHTML = '';
+  const cw = w / 16, rows = rowsOf(i), lane = P.lane[i];
+  for (let s = 0; s < 16; s++) { g.fillStyle = s === D.head ? 'rgba(63,143,152,.25)' : (Math.floor(s / 4) % 2 ? '#efece4' : '#f6f4ee'); g.fillRect(s * cw, 0, cw - .5, h); }
   rows.forEach((k, r) => {
+    g.fillStyle = k === lane && P.stepOn[i] ? partColor(i, 42) : partColor(i, 70);
+    for (let s = 0; s < 16; s++) if (D.grid[i][k][s]) g.fillRect(s * cw + .5, r / 16 * h, cw - 1, Math.max(1.5, h / 16));
+  });
+}
+
+function render() {
+  document.documentElement.style.setProperty('--pc', partColor(sel));
+  const st = P.stepOn[sel];
+  $('pttl').textContent = `P${sel + 1}  ${PARTS[sel].name} / ${PARTS[sel].ja}`;
+  $('lane').innerHTML = st
+    ? `本体の16キーで置く音: <b>${laneName(sel, P.lane[sel])}</b>`
+    : 'このパートは<b>パッド</b>（本体のキー = ふつうの演奏）';
+  $('gwrap').classList.toggle('pad', !st);
+  $('hint').innerHTML = st
+    ? '<b>本体のキー = ステップ</b>（左上が1歩目、右下が16歩目）。押すとこの画面で選んだ行の音が置かれ、もう一度押すと消えます。'
+      + '<br><b>行をタップ</b>すると、本体で置く音を切り替えられます（本体の光もその行の16ステップに変わります）。'
+      + (sel === 0 ? ` 打楽器はいまのキット（${KIT_NAMES[D.kit]}）の16音です。` : '')
+      + (sel && !plainScale() ? ' スケールかキーを変えているので、行は鍵番号で表示しています。' : '')
+    : '<b>パッド</b>のパートは本体でふだんどおり弾けます（長押しで録音）。上の <b>STEP</b> を押すとステップ入力に戻ります。';
+  buildLabels(); drawGrid(); refreshParts(); refreshPlay(); refreshSnd();
+}
+function buildLabels() {
+  const p = sel, lab = $('labels'); lab.innerHTML = '';
+  rowsOf(p).forEach((k, r) => {
     const d = document.createElement('div');
-    if (p === 0) {
-      const note = KIT_NOTES[S.kit][k], col = k % 4;
-      d.innerHTML = `<i style="background:hsl(${COL_HUE[col]},60%,50%)"></i>${GM[note] || note}`;
-      d.title = `${COL_NAMES[col]} / 鍵 ${k + 1} / GM ${note}`;
-      if (r % 4 === 0) d.style.borderTop = '1px solid var(--line)';
-    } else {
-      const m = partPitch(p, k); d.textContent = noteName(m);
-      if (m % 12 === 0) { d.classList.add('w'); d.style.borderTop = '1px solid var(--line)'; }
-    }
-    d.onpointerdown = e => { e.preventDefault(); preview(p, k); };
+    const col = p === 0 ? `hsl(${COL_HUE[k % 4]},60%,50%)` : partColor(p);
+    d.innerHTML = `<i style="background:${col}"></i>${laneName(p, k)}`;
+    if (k === P.lane[p]) d.classList.add('cur');
+    if (p === 0 && r % 4 === 0 && r) d.style.borderTop = '1px solid var(--line)';
+    d.onclick = () => pickLane(k);
     lab.appendChild(d);
   });
-  drawGrid();
 }
-let cells = [];
 function drawGrid() {
-  const g = $('grid'), p = sel, rows = rowsOf(p), n = S.steps;
-  g.innerHTML = ''; cells = [];
-  for (let r = 0; r < 16; r++) for (let s = 0; s < n; s++) {
-    const c = document.createElement('div');
-    c.className = 'c' + (s % 4 === 0 ? ' beat' : '') + (Math.floor(s / 4) % 2 ? ' alt' : '') + (s === curStep ? ' ph' : '');
-    c.style.gridRow = r + 1; c.style.gridColumn = s + 1;
-    if (p === 0 && r % 4 === 0 && r) c.style.borderTopColor = 'var(--line)';
-    g.appendChild(c); (cells[s] = cells[s] || []).push(c);
-  }
-  for (const nt of S.parts[p].notes) {
-    if (nt.s >= n) continue;
-    const e = document.createElement('div'); e.className = 'n';
-    e.style.gridRow = rows.indexOf(nt.k) + 1;
-    e.style.gridColumn = `${nt.s + 1} / span ${Math.min(nt.l, n - nt.s)}`;
-    e.dataset.s = nt.s; e.dataset.l = sel === 0 ? 1 : nt.l;
-    if (p === 0) e.style.background = `hsl(${COL_HUE[nt.k % 4]},55%,52%)`;
-    g.appendChild(e);
-  }
-  if (playing) markHits();
+  const p = sel, g = $('grid'); g.innerHTML = '';
+  rowsOf(p).forEach((k, r) => {
+    const row = document.createElement('div'); row.className = 'row' + (k === P.lane[p] ? ' cur' : '');
+    if (p === 0 && r % 4 === 0 && r) row.style.borderTopColor = 'var(--line)';
+    for (let s = 0; s < 16; s++) {
+      const c = document.createElement('div');
+      c.className = 'c' + (s % 4 === 0 ? ' beat' : '') + (s === D.head ? ' ph' : '') + (D.grid[p][k][s] ? ' on' : '');
+      row.appendChild(c);
+    }
+    row.onclick = () => pickLane(k);
+    g.appendChild(row);
+  });
+}
+function pickLane(k) {
+  P.lane[sel] = k; save(); preview(sel, k);
+  if (P.stepOn[sel]) sendStep(sel);
+  render();
 }
 function drawHead() {
-  for (let s = 0; s < cells.length; s++) if (cells[s]) for (const c of cells[s]) c.classList.toggle('ph', s === curStep);
-  markHits();
-  S.parts.forEach((_, i) => drawMini(i));
-}
-function markHits() {
-  for (const e of $('grid').querySelectorAll('.n')) {
-    const s = +e.dataset.s;
-    e.classList.toggle('hit', curStep >= s && curStep < s + +e.dataset.l);
-  }
-}
-function tick() {
-  if (playing && ac) {
-    let st = curStep;
-    while (queue.length && queue[0].time <= ac.currentTime) st = queue.shift().step;
-    if (st !== curStep) { curStep = st; drawHead(); }
-  }
-  requestAnimationFrame(tick);
+  const rows = $('grid').children;
+  for (const row of rows) [...row.children].forEach((c, s) => c.classList.toggle('ph', s === D.head));
+  for (let i = 0; i < 7; i++) drawMini(i);
 }
 
-/* ---- グリッドの操作 ---- */
-let drag = null;
-function cellAt(e) {
-  const g = $('grid'), b = g.getBoundingClientRect();
-  const s = clamp(Math.floor((e.clientX - b.left) / b.width * S.steps), 0, S.steps - 1);
-  const r = clamp(Math.floor((e.clientY - b.top) / b.height * 16), 0, 15);
-  return { s, r, k: rowsOf(sel)[r] };
-}
-$('grid').addEventListener('pointerdown', e => {
-  audio();
-  const { s, k } = cellAt(e), notes = S.parts[sel].notes;
-  $('grid').setPointerCapture(e.pointerId);
-  if (sel === 0) {
-    const i = notes.findIndex(n => n.s === s && n.k === k);
-    const paint = i < 0;
-    if (paint) { notes.push({ s, k, l: 1 }); preview(0, k); } else notes.splice(i, 1);
-    drag = { drum: true, paint, k, last: s };
-  } else {
-    const hit = notes.find(n => n.k === k && s >= n.s && s < n.s + n.l);
-    if (hit) drag = { note: hit, from: s, moved: false, existed: true };
-    else {
-      // 同じ行でこの先にある音にぶつからない長さまで
-      const nt = { s, k, l: 1 }; notes.push(nt); preview(sel, k);
-      drag = { note: nt, from: s, moved: true, existed: false };
-    }
-  }
-  drawGrid(); drawMini(sel);
-});
-$('grid').addEventListener('pointermove', e => {
-  if (!drag) return;
-  const { s } = cellAt(e), notes = S.parts[sel].notes;
-  if (drag.drum) {
-    if (s === drag.last) return; drag.last = s;
-    const i = notes.findIndex(n => n.s === s && n.k === drag.k);
-    if (drag.paint && i < 0) { notes.push({ s, k: drag.k, l: 1 }); preview(0, drag.k); }
-    if (!drag.paint && i >= 0) notes.splice(i, 1);
-  } else {
-    const nt = drag.note;
-    if (s === drag.from && !drag.moved) return;
-    drag.moved = true;
-    let l = Math.max(1, s - nt.s + 1);
-    const nextOn = notes.filter(n => n !== nt && n.k === nt.k && n.s > nt.s).reduce((m, n) => Math.min(m, n.s), S.steps);
-    l = Math.min(l, nextOn - nt.s);
-    if (l === nt.l) return; nt.l = l;
-  }
-  drawGrid(); drawMini(sel);
-});
-function endDrag() {
-  if (!drag) return;
-  if (!drag.drum && drag.existed && !drag.moved) {
-    const notes = S.parts[sel].notes; notes.splice(notes.indexOf(drag.note), 1);
-    drawGrid(); drawMini(sel);
-  }
-  drag = null; save();
-}
-$('grid').addEventListener('pointerup', endDrag);
-$('grid').addEventListener('pointercancel', endDrag);
-
-/* ---- ヘッダ・パート設定 ---- */
-function syncHeader() {
-  $('bpm').value = S.bpm; $('bpmV').textContent = S.bpm;
-  $('swing').value = S.swing; $('swingV').textContent = S.swing + '%';
-  $('steps').value = S.steps; $('master').value = S.master; $('kit').value = S.kit;
-}
-$('play').onclick = () => playing ? stop() : play();
-$('bpm').oninput = e => { S.bpm = +e.target.value; $('bpmV').textContent = S.bpm; save(); };
-$('swing').oninput = e => { S.swing = +e.target.value; $('swingV').textContent = S.swing + '%'; save(); };
-$('master').oninput = e => { S.master = +e.target.value; applyMix(); save(); };
-$('steps').onchange = e => {
-  S.steps = +e.target.value;
-  if (nextStep >= S.steps) nextStep = 0;
-  buildGrid(); refreshParts(); save();
+/* ---- ヘッダ ---- */
+$('conn').onclick = connect; $('conn2').onclick = connect;
+$('play').onclick = () => { if (D.connected) { audio(); pk.sendCC(CCN.PLAY_STOP, D.playing ? 0 : 127).catch(() => {}); } };
+const bump = d => {
+  if (!D.connected || D.bpm == null) return;
+  D.bpm = Math.max(60, Math.min(187, D.bpm + d)); $('bpmV').textContent = D.bpm;
+  pk.sendCC(CCN.BPM, D.bpm - 60).catch(() => {});
 };
-KIT_NAMES.forEach((n, i) => $('kit').add(new Option(`${i + 1} ${n}`, i)));
-$('kit').onchange = e => { S.kit = +e.target.value; buildGrid(); save(); preview(0, 0); };
-$('pvol').oninput = e => { S.parts[sel].vol = +e.target.value; applyMix(); save(); };
-const setOct = d => { const p = S.parts[sel]; p.oct = clamp(p.oct + d, -2, 2); select(sel); save(); preview(sel, 7); };
-$('octDn').onclick = () => setOct(-1); $('octUp').onclick = () => setOct(1);
-$('pclear').onclick = () => {
-  if (!S.parts[sel].notes.length || !confirm(`P${sel + 1} ${PARTS[sel].name} の音をぜんぶ消しますか？`)) return;
-  S.parts[sel].notes = []; drawGrid(); refreshParts(); save();
+$('bpmDn').onclick = () => bump(-5); $('bpmUp').onclick = () => bump(5);
+$('snd').onclick = () => { P.appSound = !P.appSound; save(); applyMix(); if (!P.appSound) releaseAll(); sendSound(); refreshSnd(); };
+$('master').value = P.master;
+$('master').oninput = e => { P.master = +e.target.value; save(); applyMix(); };
+$('allStep').onclick = async () => { P.stepOn.fill(true); save(); render(); for (let p = 0; p < 7; p++) await sendStep(p); };
+$('allPad').onclick = async () => { P.stepOn.fill(false); save(); render(); for (let p = 0; p < 7; p++) await sendStep(p); };
+$('pclear').onclick = async () => {
+  if (!D.connected || !confirm(`本体の P${sel + 1} ${PARTS[sel].name} の中身をぜんぶ消しますか？（いまのスロット・全小節）`)) return;
+  try { await pk.stepPart(sel, { step: P.stepOn[sel], clear: true, map: mapOf(sel) }); } catch (e) { log('消せませんでした: ' + e.message, true); return; }
+  D.grid[sel].forEach(r => r.fill(false)); render();
 };
-$('clearAll').onclick = () => {
-  if (!confirm('7パートぜんぶの音を消しますか？（BPM などの設定は残ります）')) return;
-  S.parts.forEach(p => p.notes = []); drawGrid(); refreshParts(); save();
-};
-$('demo').onclick = () => {
-  if (S.parts.some(p => p.notes.length) && !confirm('いまの曲をお手本で上書きしますか？')) return;
-  S = demoState(); syncHeader(); applyMix(); select(sel); save();
-};
-$('exp').onclick = () => {
-  const blob = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `ponkey-step-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-};
-$('imp').onclick = () => $('file').click();
-$('file').onchange = async e => {
-  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  try {
-    const o = sanitize(JSON.parse(await f.text()));
-    if (!o) throw 0;
-    S = o; syncHeader(); applyMix(); select(sel); save(); msg('読み込みました');
-  } catch (_) { msg('このファイルは STEP の曲として読めませんでした'); }
-};
-let msgT = 0;
-function msg(t) { $('msg').textContent = t; clearTimeout(msgT); msgT = setTimeout(() => $('msg').textContent = '', 4000); }
-
-// キーボード: スペース=再生/停止、1-7=パート選択
 addEventListener('keydown', e => {
   if (e.target.matches('input,select,textarea')) return;
-  if (e.code === 'Space') { e.preventDefault(); playing ? stop() : play(); }
-  else if (/^[1-7]$/.test(e.key)) select(+e.key - 1);
+  if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
+  else if (/^[1-7]$/.test(e.key)) pickPart(+e.key - 1);
 });
-addEventListener('resize', () => S.parts.forEach((_, i) => drawMini(i)));
+addEventListener('resize', () => { for (let i = 0; i < 7; i++) drawMini(i); });
+// iOS などは最初のタップまで音が出せないので、どこかを触ったら起こしておく
+addEventListener('pointerdown', () => audio(), { once: true });
 
-syncHeader(); buildParts(); select(0); requestAnimationFrame(tick);
+buildParts(); render();
 </script>
 </body>
 </html>
