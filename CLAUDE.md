@@ -56,7 +56,16 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   `openLesson(2)` の `devReset()` で消えるため、そこで seed し直している。切断時は seed し直さない
   （切れた瞬間の実測値のほうが正しい）。本文中のモード限定の一文は `<span class="onlydev">` /
   `<span class="onlysolo">` で出し分け、読み上げは `modeText()` が出していない側を先に落とす。
-- `duet.html` — PONKEY AI Duet **v2（2026-10-26 作り直し）**。Magenta MusicRNN の AI 人格たちとセッションする。
+- `duet.html` — PONKEY AI Duet（Magenta MusicRNN と交互に弾く）。**v4.6 追従済み**:
+  受信 ch → パートは `Ponkey.PARTS` から作る（旧 `ch===0 ならベース` は v4.6 で誤り。
+  ベースは ch2）。レイヤー1 の ch も同じパートとして扱う。Tone.js の音色は 4→6 パート分。
+  **ドラムのステップ打ち込み（drumPat / CC 0-3 のパート選択 / CC 16-31）は撤去**した —
+  v4.6 で本体から「置いて待つ」操作が無くなり、CC 16-31 も対角しか書けなくなったため。
+  代わりに**本体で叩かれたキット音（ch9）に反応して鳴らす**（列 `key%4` = 系統）。
+  キット番号は `CC_VOICE_SELECT` の part0 で追う。
+  **後継の DUET 2（`duet2.html`）とは別アプリとして並べて残す**（2026-10-27 ユーザー指示。一度 duet.html を
+  作り直しで置き換えたが、前の版も残すことになった）。
+- `duet2.html` — DUET 2（2026-10-26 作成。一覧では DUET の隣）。Magenta MusicRNN の AI 人格たちとセッションする。
   **パート = 「あなた」か AI 人格**（🐙タコ/🐢カメ/🐸カエル/🐘ゾウ/🐦トリ/👻オバケ。`PERSONAS` に temperature・
   返事の長さ・ゆったり度・間引き・入りの遅れ `lag`・ソレノイドの強さ `vel` を持つ。カエルだけモデルを使わず度数ずらしでまねる）。
   **各パートは接続時に「新しい PONKEY / つないである PONKEY をシェア / 画面だけ」を選ぶ**（パート行の ▾）。
@@ -81,7 +90,6 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   ドラム（ch9）は列 `key%4` の色で光らせるだけで AI には渡さない（MelodyRNN は旋律専用）。
   「▶ AIだけで回す」= あなたが弾かなくても続ける（いちばん音の多かった返事が次のお題）。あなたが弾くと `S.round` が進み、
   AI の未発音の音は捨てられる。パートの顔ぶれと設定は localStorage `ponkey_duet_v2`（本体の接続は毎回えらぶ）。
-  旧 v1（ひと A ⇄ AI B の2台、エイリアンのアニメ）は git 履歴 `d813dcd` にある。
 - `dialogue.html` — DIALOGUE（A=人 / B=AI の交互かけあい。+ C=ドラマー）。v3.2 で完成していて、
   サプライザル整形・オンライン学習・ノリゲージ・ビートトラッカーまで動く。
   **v4.6 追従済み**: ch → 音階ラダーと fam(B/N) を `Ponkey.PARTS` から作る。fam は
