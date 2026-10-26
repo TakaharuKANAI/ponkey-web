@@ -259,6 +259,14 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   **振動して `--bs` が一度も入らない**ので、ヒステリシス（ON 280 / OFF 340）で止めてある。
   `.wrap` の `grid-template-rows` を省くと行が `auto`（＝中身の高さ）になり、
   盤面が自分で自分を大きくするループになる。必ず `minmax(0,1fr)` で閉じる。
+- `step.html` — STEP（P1〜P7 のステップシーケンサー。ライトテーマ。2026-10-27）。**本体と通信しない・音はすべて WebAudio**
+  （外部ライブラリなし＝オフラインでも鳴る）。パート構成・音階表・キットは `Ponkey.PARTS` / `KIT_NOTES` を読むだけ。
+  P1 = 16打楽器（行は列＝系統ごとにまとめる。キット8種を選べ、GM ノート番号からドラムを合成する `drum()`）/
+  P2-P7 = 白鍵16本 ＋ パートの音域シフト ＋ パートごとのオクターブ ±2。音色はパートの性格で分けた自前シンセ
+  （KEYS=三角波の減衰 / LEAD=デチューンのこぎり / BASS=フィルタ付き / CHORD=置いた音から白鍵で3つ重ねたパッド /
+  BELL=FM / VOICE=「あー」のフォルマント）。**本体の内蔵音源の音とは別物**。
+  ノートは `{s,k,l}`（k はメロディなら低い方から 0）。16/32 ステップ・スイング・ミュート/ソロ・パート音量。
+  保存は localStorage `ponkey_step_v01`、JSON の書き出し/読み込みあり。
 - `ponkey-sound-guide.html` — 音の世界観・リスニングガイド
 - `manifest.json` / `sw.js` / `icon-*.png` — PWA（インストール・オフライン）。
   network-first の fetch は `cache:'no-cache'`（`fresh()`）で出す — 素の `fetch(req)` だと GitHub Pages の
