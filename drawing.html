@@ -81,7 +81,7 @@
   <span class="hint">太さ <input type="range" id="size" min="3" max="48" value="14"></span>
   <button id="btnRepeat" class="on" title="同じマスの中でなぞり続けても叩き続ける">連打</button>
   <button id="btnSound" class="on" title="PONKEY の内蔵音源でアンビエントな音を鳴らす (要ファーム v4.5.65+。古いファームだと鍵が余計に動くので OFF に)">音</button>
-  <button id="btnFade" title="描いた線が少しずつ消えていく (本体の LED の絵も一緒に消えていく)">消えていく</button>
+  <button id="btnFade" title="描いた線が少しずつ消えていく (本体の LED は音が消えると自動で消える)">消えていく</button>
   <button id="btnClear">クリア</button>
   <button id="btnSave">PNG</button>
   <span class="hint how">なぞる=叩く+鳴る ・ マス=16鍵 ・ 色=P1〜P7 (キー1〜7) = 音色</span>
@@ -102,15 +102,17 @@
 // BLE 層は ponkey.js 経由。パート名・色相・MIDI ch の表は Ponkey.PARTS (ファームの正本を写したもの)。
 // v4.6.0 の再編で P1=ドラムキット / P2-P7=メロディ6パート になった。ここは「7色のパレット」としてしか
 // 使っていないので、色と名前が付いてくるだけで描き心地は変わらない。
-// voice = その色でなぞったときに鳴る内蔵音源 (SAM2695, GM プログラム番号 0 始まり)。どれもアンビエント寄りのパッド/FX
+// voice = その色でなぞったときに鳴る内蔵音源 (SAM2695, GM プログラム番号 0 始まり)。パートの性格に合わせて選ぶ。
+//   oct = 音高のずらし (半音) / hold = マスを離れてから NoteOff までの ms (短い=粒立つ、長い=重なって和音)
+//   rel = CC72 リリース (尾の長さ) / rev = CC91 リバーブ。ドラムは ch16 のメロディ音源なのでスチールドラムで代用
 const PAINT_VOICES=[
-  {voice:89, vname:'Warm Pad'   },   // P1 DRUM
-  {voice:88, vname:'New Age Pad'},   // P2 KEYS
-  {voice:91, vname:'Choir Pad'  },   // P3 LEAD
-  {voice:95, vname:'Sweep Pad'  },   // P4 BASS
-  {voice:94, vname:'Halo Pad'   },   // P5 CHORD
-  {voice:92, vname:'Bowed Glass'},   // P6 BELL
-  {voice:100,vname:'Brightness' },   // P7 VOICE
+  {voice:114,vname:'Steel Drums',  oct:  0, hold:180, rel: 64, rev: 80},   // P1 DRUM
+  {voice:4,  vname:'Electric Piano',oct: 0, hold:450, rel: 90, rev:100},   // P2 KEYS
+  {voice:80, vname:'Square Lead',  oct: 12, hold:260, rel: 80, rev: 90},   // P3 LEAD
+  {voice:38, vname:'Synth Bass',   oct:-12, hold:300, rel: 72, rev: 50},   // P4 BASS
+  {voice:89, vname:'Warm Pad',     oct:  0, hold:900, rel:110, rev:127},   // P5 CHORD
+  {voice:10, vname:'Music Box',    oct: 12, hold:500, rel:100, rev:120},   // P6 BELL
+  {voice:52, vname:'Choir Aahs',   oct:  0, hold:800, rel:105, rev:127},   // P7 VOICE
 ];
 const PARTS=Ponkey.PARTS.map((p,i)=>({
   cc:p.part, name:p.name, ja:p.ja, hue:p.hue, ...PAINT_VOICES[i],
@@ -125,10 +127,11 @@ const REPEAT_MS=140;     // 連打の最短間隔 (ソレノイドのパルス�
 const FLASH_MS=260;      // マスの光り
 
 // ── 本体 LED お絵かきオーバーレイ (要ファーム v4.5.66+): CC_LED_PAINT 0x39, val = key<<3 | level(0-7)。
-//    描いたマスは level 7 で光り続け、「消えていく」ON なら段階的に下げて送る = 本体の絵も一緒に消えていく。
+//    なぞっている間は level 7 で光り、音が消える (NoteOff) と同時に 7→0 へ段階的に下げて送る = ふわっと消える。
+//    ファームは level をそのまま明るさにするだけ (補間しない) ので、なめらかさはこちらの送る間隔で決まる。
 //    旧ファームは未知 CC を無視するだけなので送っても無害。
 const CC_LED_PAINT=0x39;
-const PAINT_FADE_STEP_MS=420;   // 1 level 下がる間隔 (7→0 で約 3 秒 ≒ アプリ側のフェード感覚)
+const LED_FADE_STEP_MS=55;      // 1 level 下がる間隔 (7→0 で約 0.4 秒)
 
 // ── 音 (ファーム v4.5.65+): BLE の ch16 (0x?F) に送ったものは本体がそのまま内蔵音源 SAM2695 の ch16 へ通す。
 //    本体のシーケンサ・録音・ソレノイド・LED には触らない (叩くのは従来どおり ch1 の NoteOn を別送)。
@@ -136,7 +139,7 @@ const PAINT_FADE_STEP_MS=420;   // 1 level 下がる間隔 (7→0 で約 3 秒 �
 const LIVE_CH=15;
 const PENTA=[0,2,4,7,9], NOTE_BASE=48;
 function cellNote(k){const idx=(3-Math.floor(k/4))*4+(k%4);return NOTE_BASE+Math.floor(idx/PENTA.length)*12+PENTA[idx%PENTA.length];}
-const RELEASE_MS=650;    // マスを離れてから NoteOff するまで (隣どうしが重なって和音になる)
+// マスを離れてから NoteOff するまでの時間はパートごと (PARTS[].hold)。隣どうしが重なって和音になる
 
 // ============================================================ 状態
 let pk=null;
@@ -144,6 +147,8 @@ let part=2;              // 現在の色 (index into PARTS)。既定 P3 LEAD=黄
 let brush=14, repeat=true, fade=false, sound=true;
 const paintLevel=new Uint8Array(16);   // cell → 本体 LED の明るさ 0-7 (こちらが正、本体へ差分送信)
 const holdCount=new Uint8Array(16), releaseTimer=new Array(16).fill(null);   // cell → 押えているポインタ数 / 離す予約
+const playing=new Int16Array(16).fill(-1);   // cell → 鳴らしている音高 (パートを途中で変えても同じ音高で NoteOff するため)
+const ledTimer=new Array(16).fill(null);     // cell → LED フェードのタイマ
 const pointers=new Map();          // pointerId → {x,y,cell,lastFire}
 const flash=new Float64Array(16);  // cell → 光り始めた時刻
 let drawn=false;
@@ -164,7 +169,7 @@ document.getElementById('btnConnect').onclick=async()=>{
     p.on('note',({on,ch,note})=>{
       if(!on)return;                                   // 本体の鍵が押された → そのマスに今の色で点を打つ
       const k=lookupKey(ch,note);
-      if(k!=null){splash(k);flash[k]=performance.now();setPaint(k,7);}
+      if(k!=null){splash(k);flash[k]=performance.now();litCell(k);fadeLed(k,250);}   // 本体の音は本体が鳴らすので、少し光ってから消す
     });
     await p.connect({debug:false});                    // MIDI のみ
     pk=p; setConn(true);
@@ -179,48 +184,75 @@ function fire(k){
   if(!(k>=0&&k<=15))return;
   flash[k]=performance.now();
   writeMIDI(0x90,k,100);
-  setPaint(k,7);                       // 描いたマスは本体 LED も光り続ける
+  litCell(k);                          // なぞっている間は本体 LED も光る (離れて音が消えるとフェード)
 }
 function setPaint(k,lv){
   if(paintLevel[k]===lv)return;
   paintLevel[k]=lv;
   writeMIDI(0xB0,CC_LED_PAINT,(k<<3)|lv);
 }
-function clearPaint(){for(let k=0;k<16;k++)setPaint(k,0);}
-// 「消えていく」ON の間、本体の絵も段階的に暗くする (アプリ側キャンバスのフェードと並走)
-setInterval(()=>{if(!fade)return;for(let k=0;k<16;k++)if(paintLevel[k])setPaint(k,paintLevel[k]-1);},PAINT_FADE_STEP_MS);
+function litCell(k){
+  if(ledTimer[k]){clearTimeout(ledTimer[k]);ledTimer[k]=null;}
+  setPaint(k,7);
+}
+// 7→0 を LED_FADE_STEP_MS ごとに 1 段ずつ。delay 後に始める
+function fadeLed(k,delay=0){
+  if(ledTimer[k])clearTimeout(ledTimer[k]);
+  const step=()=>{
+    if(paintLevel[k]===0){ledTimer[k]=null;return;}
+    setPaint(k,paintLevel[k]-1);
+    ledTimer[k]=paintLevel[k]?setTimeout(step,LED_FADE_STEP_MS):null;
+  };
+  ledTimer[k]=setTimeout(step,delay);
+}
+function clearPaint(){for(let k=0;k<16;k++){if(ledTimer[k]){clearTimeout(ledTimer[k]);ledTimer[k]=null;}setPaint(k,0);}}
 function selectPart(i){
   part=(i+7)%7;
   document.querySelectorAll('#pal .sw').forEach((e,j)=>e.classList.toggle('on',j===part));
   writeMIDI(0xB0,PARTS[part].cc,127);      // 本体の LED 色も切り替わる (P1〜P7 を押したのと同じ)
-  if(sound)writeMIDI(0xC0|LIVE_CH,PARTS[part].voice,0);   // 音色も色に追従
+  applyVoice();                            // 音色も色に追従
 }
 
 // ============================================================ 出口: 鳴らす (ch16 パススルー)
+function applyVoice(){
+  if(!sound)return;
+  const p=PARTS[part];
+  writeMIDI(0xC0|LIVE_CH,p.voice,0);             // Program Change
+  writeMIDI(0xB0|LIVE_CH,91,p.rev);              // リバーブ send (種別は本体既定の Hall2)
+  writeMIDI(0xB0|LIVE_CH,72,p.rel);              // リリース (尾の長さ)
+}
 function setupSound(){
   if(!sound)return;
-  writeMIDI(0xC0|LIVE_CH,PARTS[part].voice,0);   // Program Change
   writeMIDI(0xB0|LIVE_CH,7,100);                 // 音量
-  writeMIDI(0xB0|LIVE_CH,91,127);                // リバーブ send 最大 (種別は本体既定の Hall2)
   writeMIDI(0xB0|LIVE_CH,93,40);                 // コーラス少し
-  writeMIDI(0xB0|LIVE_CH,72,110);                // リリース長め (尾を引く)
   writeMIDI(0xB0|LIVE_CH,10,64);                 // パン中央
+  applyVoice();
 }
-function noteOnCell(k,vel){
-  if(!sound||!(k>=0&&k<=15))return;
+// マスに入った: 押えているポインタ数を数え、最初の1本で鳴らす。音が無くても数える (LED の消し時に使う)
+function pressCell(k,vel){
+  if(!(k>=0&&k<=15))return;
   if(releaseTimer[k]){clearTimeout(releaseTimer[k]);releaseTimer[k]=null;}
-  if(holdCount[k]===0)writeMIDI(0x90|LIVE_CH,cellNote(k),vel);
+  if(holdCount[k]===0&&sound){
+    if(playing[k]>=0)writeMIDI(0x80|LIVE_CH,playing[k],0);   // 前の尾が残っていたら打ち直す
+    playing[k]=cellNote(k)+PARTS[part].oct;
+    writeMIDI(0x90|LIVE_CH,playing[k],vel);
+  }
   holdCount[k]++;
 }
-function releaseCell(k,delay=RELEASE_MS){
+function releaseCell(k,delay=PARTS[part].hold){
   if(!(k>=0&&k<=15)||holdCount[k]===0)return;
   holdCount[k]--;
   if(holdCount[k]>0)return;
-  releaseTimer[k]=setTimeout(()=>{releaseTimer[k]=null;writeMIDI(0x80|LIVE_CH,cellNote(k),0);},delay);
+  releaseTimer[k]=setTimeout(()=>{releaseTimer[k]=null;endCell(k);},delay);
+}
+// 音が消える = NoteOff と同時に LED もふわっと消す
+function endCell(k){
+  if(playing[k]>=0){writeMIDI(0x80|LIVE_CH,playing[k],0);playing[k]=-1;}
+  fadeLed(k);
 }
 function allSoundOff(){
-  for(let k=0;k<16;k++){holdCount[k]=0;if(releaseTimer[k]){clearTimeout(releaseTimer[k]);releaseTimer[k]=null;}}
-  writeMIDI(0xB0|LIVE_CH,123,0);   // All Notes Off
+  playing.fill(-1);
+  writeMIDI(0xB0|LIVE_CH,123,0);   // All Notes Off (押えている数と LED の予約はそのまま)
 }
 
 // ============================================================ キャンバス
@@ -300,7 +332,7 @@ board.addEventListener('pointerdown',e=>{
   try{board.setPointerCapture(e.pointerId);}catch(_){}
   const {x,y}=pos(e); const k=cellAt(x,y);
   pointers.set(e.pointerId,{x,y,cell:k,lastFire:performance.now(),t:performance.now()});
-  dot(x,y); fire(k); noteOnCell(k,70);
+  dot(x,y); fire(k); pressCell(k,70);
 });
 board.addEventListener('pointermove',e=>{
   const s=pointers.get(e.pointerId); if(!s)return;
@@ -310,12 +342,12 @@ board.addEventListener('pointermove',e=>{
   if(k!==s.cell){                                                             // 隣のマスへ入った
     const speed=Math.hypot(x-s.x,y-s.y)/Math.max(1,now-s.t);                 // px/ms → 速いほど強く
     const vel=Math.round(Math.min(100,Math.max(45,45+speed*22)));
-    releaseCell(s.cell); s.cell=k; s.lastFire=now; fire(k); noteOnCell(k,vel);
+    releaseCell(s.cell); s.cell=k; s.lastFire=now; fire(k); pressCell(k,vel);
   }
   else if(repeat&&now-s.lastFire>=REPEAT_MS&&(x!==s.x||y!==s.y)){ s.lastFire=now; fire(k); }  // 同じマスをなぞり続けている
   s.x=x; s.y=y; s.t=now;
 });
-const up=e=>{const s=pointers.get(e.pointerId);if(!s)return;releaseCell(s.cell,300);pointers.delete(e.pointerId);};
+const up=e=>{const s=pointers.get(e.pointerId);if(!s)return;releaseCell(s.cell,Math.min(300,PARTS[part].hold));pointers.delete(e.pointerId);};
 board.addEventListener('pointerup',up); board.addEventListener('pointercancel',up); board.addEventListener('pointerleave',up);
 
 // ── UI
