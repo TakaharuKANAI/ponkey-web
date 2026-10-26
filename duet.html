@@ -166,6 +166,13 @@ body {
   100% { background:rgba(255,221,0,.2); color:#ffee55; transform:scale(1); }
 }
 
+/* 1台モードの一行 (黙って挙動が変わらないように出す) */
+.solo-note {
+  display:none; text-align:center; margin:-8px 0 16px;
+  font-size:.66rem; font-weight:600; letter-spacing:.04em; color:#ffee55; opacity:.8;
+}
+.solo-note.show { display:block; }
+
 /* Arrow between grids */
 .grid-arrow {
   display:flex; align-items:center; justify-content:center;
@@ -274,6 +281,8 @@ input[type=range]::-webkit-slider-thumb {
       <div class="key-grid" id="gridB"></div>
     </div>
   </div>
+
+  <div class="solo-note" id="soloNote">1台モード — AI も PONKEY A で弾きます（B をつなぐと2台に分かれます）</div>
 
   <!-- BPM -->
   <div class="bpm-section">
@@ -534,7 +543,7 @@ async function connectDevice(slot) {
     pk[slot]=null;
     try{p.disconnect();}catch(e){}
     setBtn(slot,'idle');
-    if(window.alienSetConnected) alienSetConnected(slot, false);
+    if(window.alienSetConnected) alienSetConnected(slot, false); refreshSolo();
     btn.disabled=false;
     log(`PONKEY ${slot} disconnected`,'info');
     return;
@@ -580,7 +589,7 @@ async function connectDevice(slot) {
       log(`B "${p.device.name||'PONKEY'}" connected`,'ok');
     }
     setBtn(slot,'connected');
-    if(window.alienSetConnected) alienSetConnected(slot, true);
+    if(window.alienSetConnected) alienSetConnected(slot, true); refreshSolo();
     btn.disabled=false;
   } catch(e) {
     log(`Connect ${slot} failed: ${e.message}`,'err');
@@ -591,7 +600,7 @@ async function connectDevice(slot) {
 function onDisconnect(slot) {
   pk[slot]=null;
   setBtn(slot,'idle');
-  if(window.alienSetConnected) alienSetConnected(slot, false);
+  if(window.alienSetConnected) alienSetConnected(slot, false); refreshSolo();
   log(`PONKEY ${slot} disconnected`,'err');
 }
 
@@ -718,7 +727,7 @@ function onNoteOff(pitch,ch) {
 
   if(dur>=80){
     inputNotes.push({pitch,duration:dur,quantizedDuration:Math.max(1,Math.round(dur/250))});
-    if(inputNotes.length>=triggerCount&&isModelReady&&!isThinking&&pk.B)triggerAI();
+    if(inputNotes.length>=triggerCount&&isModelReady&&!isThinking&&aiOut())triggerAI();
   }
   if(!Object.keys(noteOnTimes).length)setTimeout(()=>{if(!Object.keys(noteOnTimes).length)setBtn('A','connected');},300);
 }
@@ -780,7 +789,7 @@ async function triggerAI() {
     const resp = await musicRNN.continueSequence(qns, steps, temp);
     log(`AI: ${resp.notes.length} notes`, 'ok');
     if(window.alienThink) alienThink(false);
-    setBtn('B','active');
+    if(pk.B) setBtn('B','active');
     await playAIResponse(resp, analysis);
   } catch(e){
     if(window.alienThink) alienThink(false);
@@ -849,14 +858,27 @@ function sendBLEMidiNote(pitch,durMs){
   // Tone.js audio
   playToneNote(CH_TO_IDX[ch]??0,snapped,durMs);
 
-  if(!pk.B)return;
+  const out=aiOut();
+  if(!out)return;
   // 現行ファーム: data1<16 を「キー番号直送」として確実にソレノイド発火させる。
   // 実ノートを送ると本体の選択音色/オクターブ次第で取りこぼすため ki(0-15) を送る。
-  pk.B.noteOn(ch,ki,100).catch(e=>log('TX: '+e.message,'err'));
-  setTimeout(()=>{if(pk.B)pk.B.noteOff(ch,ki).catch(()=>{});},Math.max(80,durMs-20));
+  // 1台モードでは A のキーを跳ねさせる。本体は BLE の NoteOn(0-15) を返さないので、AI の音が人の入力に回り込まない。
+  out.noteOn(ch,ki,100).catch(e=>log('TX: '+e.message,'err'));
+  setTimeout(()=>{out.noteOff(ch,ki).catch(()=>{});},Math.max(80,durMs-20));
 }
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// ── 1台モード ───────────────────────────────────────────────
+// B が無くて A だけつないでいるときは、AI の返事を A のキーで弾く (交互に弾くので1台で成り立つ)。
+// B をつなげば自動で2台モードに戻る。DIALOGUE の「1台でかけあい」と同じ考え方。
+function aiOut(){ return pk.B || pk.A; }
+function refreshSolo(){
+  const solo = !pk.B && !!pk.A;
+  if(window.alienSetConnected) alienSetConnected('B', !!pk.B || solo);
+  const el=document.getElementById('soloNote');
+  if(el) el.classList.toggle('show', solo);
+}
 
 // ── Settings ───────────────────────────────────────────────
 document.getElementById('tempSlider').addEventListener('input',e=>{
