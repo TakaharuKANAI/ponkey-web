@@ -238,7 +238,9 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   `.wrap` の `grid-template-rows` を省くと行が `auto`（＝中身の高さ）になり、
   盤面が自分で自分を大きくするループになる。必ず `minmax(0,1fr)` で閉じる。
 - `ponkey-sound-guide.html` — 音の世界観・リスニングガイド
-- `manifest.json` / `sw.js` / `icon-*.png` — PWA（インストール・オフライン）
+- `manifest.json` / `sw.js` / `icon-*.png` — PWA（インストール・オフライン）。
+  network-first の fetch は `cache:'no-cache'`（`fresh()`）で出す — 素の `fetch(req)` だと GitHub Pages の
+  `max-age=600` に当たり、直して push しても**最大10分 古い版が出続ける**（2026-10-26 DRAWING で「変わってない」になった）。
 - `PONKEY_SESSION_CONCEPT.md` — 設計思想ドキュメント。**なぜその挙動なのかはここに書いてある**
 
 ## 作業ルール

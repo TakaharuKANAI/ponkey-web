@@ -8,7 +8,7 @@
    ・フォント等の外部リソースは cache-first(変わらないので)
    ・DUET の Magenta/TensorFlow CDN は大きいのでキャッシュしない(要ネットのまま)
 */
-const CACHE = 'ponkey-v44';
+const CACHE = 'ponkey-v45';
 const CORE = [
   './', './index.html',
   './ponkey.js',                       // 全アプリ共通の BLE クライアント
@@ -37,6 +37,10 @@ self.addEventListener('activate', e => {
   );
 });
 
+// network-first でも素の fetch(req) はブラウザの HTTP キャッシュを使う。GitHub Pages は max-age=600 なので、
+// 直したのに最大10分 古い版が出続けた (2026-10-26 DRAWING)。no-cache = 毎回サーバーに確かめる (変わってなければ 304 で軽い)
+const fresh = req => new Request(req, { cache: 'no-cache' });
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
@@ -45,8 +49,8 @@ self.addEventListener('fetch', e => {
   // HTMLドキュメント: network-first(新しい版を優先、ダメならキャッシュ)
   if (req.mode === 'navigate' || req.destination === 'document') {
     e.respondWith(
-      fetch(req)
-        .then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); return r; })
+      fetch(fresh(req))
+        .then(r => { if (r.ok) { const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); } return r; })
         .catch(() => caches.match(req).then(m => m || caches.match('./index.html')))
     );
     return;
@@ -56,8 +60,8 @@ self.addEventListener('fetch', e => {
   // CACHE バージョンを上げるまで利用者に古い版が配られ続ける (実際に起きた)
   if (url.origin === location.origin && /\.(js|css)$/.test(url.pathname)) {
     e.respondWith(
-      fetch(req)
-        .then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); return r; })
+      fetch(fresh(req))
+        .then(r => { if (r.ok) { const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); } return r; })
         .catch(() => caches.match(req))
     );
     return;
