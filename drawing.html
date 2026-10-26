@@ -127,11 +127,13 @@ const REPEAT_MS=140;     // 連打の最短間隔 (ソレノイドのパルス�
 const FLASH_MS=260;      // マスの光り
 
 // ── 本体 LED お絵かきオーバーレイ (要ファーム v4.5.66+): CC_LED_PAINT 0x39, val = key<<3 | level(0-7)。
-//    なぞっている間は level 7 で光り、音が消える (NoteOff) と同時に 7→0 へ段階的に下げて送る = ふわっと消える。
-//    ファームは level をそのまま明るさにするだけ (補間しない) ので、なめらかさはこちらの送る間隔で決まる。
+//    なぞっている間は level 7 で光り、マスを離れた瞬間 (音の尾を待たない) から 7→3→1→0 と下げて送る = ふわっと消える。
+//    ファームは level をそのまま明るさにするだけ (補間しない)。BLE の送信は1本ずつ順番待ちなので、
+//    段数を増やすと速くなぞったときに詰まって遅れる → 3回に抑えてある。
 //    旧ファームは未知 CC を無視するだけなので送っても無害。
 const CC_LED_PAINT=0x39;
-const LED_FADE_STEP_MS=55;      // 1 level 下がる間隔 (7→0 で約 0.4 秒)
+const LED_FADE_LEVELS=[3,1,0];  // 7 から下げていく段
+const LED_FADE_STEP_MS=60;      // 段の間隔 (約 0.18 秒で消える)
 
 // ── 音 (ファーム v4.5.65+): BLE の ch16 (0x?F) に送ったものは本体がそのまま内蔵音源 SAM2695 の ch16 へ通す。
 //    本体のシーケンサ・録音・ソレノイド・LED には触らない (叩くのは従来どおり ch1 の NoteOn を別送)。
@@ -169,7 +171,7 @@ document.getElementById('btnConnect').onclick=async()=>{
     p.on('note',({on,ch,note})=>{
       if(!on)return;                                   // 本体の鍵が押された → そのマスに今の色で点を打つ
       const k=lookupKey(ch,note);
-      if(k!=null){splash(k);flash[k]=performance.now();litCell(k);fadeLed(k,250);}   // 本体の音は本体が鳴らすので、少し光ってから消す
+      if(k!=null){splash(k);flash[k]=performance.now();litCell(k);fadeLed(k,120);}   // 本体の音は本体が鳴らすので、一瞬光ってから消す
     });
     await p.connect({debug:false});                    // MIDI のみ
     pk=p; setConn(true);
@@ -195,15 +197,17 @@ function litCell(k){
   if(ledTimer[k]){clearTimeout(ledTimer[k]);ledTimer[k]=null;}
   setPaint(k,7);
 }
-// 7→0 を LED_FADE_STEP_MS ごとに 1 段ずつ。delay 後に始める
+// LED_FADE_LEVELS を LED_FADE_STEP_MS ごとに。最初の段はすぐ送る (delay 指定時はその後)
 function fadeLed(k,delay=0){
   if(ledTimer[k])clearTimeout(ledTimer[k]);
+  let i=0;
   const step=()=>{
-    if(paintLevel[k]===0){ledTimer[k]=null;return;}
-    setPaint(k,paintLevel[k]-1);
+    const lv=LED_FADE_LEVELS[i++];
+    if(lv===undefined||paintLevel[k]===0){ledTimer[k]=null;return;}
+    if(lv<paintLevel[k])setPaint(k,lv);
     ledTimer[k]=paintLevel[k]?setTimeout(step,LED_FADE_STEP_MS):null;
   };
-  ledTimer[k]=setTimeout(step,delay);
+  if(delay)ledTimer[k]=setTimeout(step,delay);else step();
 }
 function clearPaint(){for(let k=0;k<16;k++){if(ledTimer[k]){clearTimeout(ledTimer[k]);ledTimer[k]=null;}setPaint(k,0);}}
 function selectPart(i){
@@ -243,12 +247,11 @@ function releaseCell(k,delay=PARTS[part].hold){
   if(!(k>=0&&k<=15)||holdCount[k]===0)return;
   holdCount[k]--;
   if(holdCount[k]>0)return;
+  fadeLed(k);                          // LED は離れた瞬間に消し始める (音の尾は待たない)
   releaseTimer[k]=setTimeout(()=>{releaseTimer[k]=null;endCell(k);},delay);
 }
-// 音が消える = NoteOff と同時に LED もふわっと消す
 function endCell(k){
   if(playing[k]>=0){writeMIDI(0x80|LIVE_CH,playing[k],0);playing[k]=-1;}
-  fadeLed(k);
 }
 function allSoundOff(){
   playing.fill(-1);
