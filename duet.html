@@ -569,7 +569,7 @@ async function connectDevice(slot) {
     if(slot==='A') {
       p.on('cc',  e=>onCCFromA(e.cc,e.val));
       p.on('note',e=>onNoteFromA(e));
-      await p.connect({debug:false});
+      await p.connect({debug:true});   // AI の POCO を緑で光らせる (SONG_CMD_LED_FRAME) のにデバッグサービスが要る
       pk.A=p;
       log(`A "${p.device.name||'PONKEY'}" connected`,'ok');
       setTimeout(async()=>{
@@ -585,7 +585,7 @@ async function connectDevice(slot) {
       }, 300);
     } else {
       p.on('cc',e=>onCCFromB(e.cc,e.val));
-      await p.connect({debug:false});
+      await p.connect({debug:true});   // AI の POCO を緑で光らせる (SONG_CMD_LED_FRAME) のにデバッグサービスが要る
       pk.B=p;
       setTimeout(async()=>{
         try{
@@ -877,6 +877,24 @@ function sendBLEMidiNote(pitch,durMs){
   // 1台モードでは A のキーを跳ねさせる。本体は BLE の NoteOn(0-15) を返さないので、AI の音が人の入力に回り込まない。
   out.noteOn(ch,ki,100).catch(e=>log('TX: '+e.message,'err'));
   setTimeout(()=>{out.noteOff(ch,ki).catch(()=>{});},Math.max(80,durMs-20));
+  aiGlow(out,ki,durMs);
+}
+
+// 右側の AI が弾いた POCO は緑で光らせる (音が鳴っている間)。
+// 本体の RGB オーバーレイ (SONG_CMD_LED_FRAME) は本体自身の光と「明るい方が勝つ」合成なので、
+// 跳ねている一瞬 (約0.15秒) だけは本体のパート色と混ざり、そのあとは緑だけが残る。
+// 点灯 → 音の終わりで30% → 消灯 の3段 (DRAWING と同じく段数は増やさない)。旧FW は何もしない。
+const AI_GREEN=[0,255,80];
+function aiGlow(out,ki,durMs){
+  if(!out.hasFeature||!out.hasFeature('LED_RGB_FRAME')||!out.dbgCmdChar) return;
+  const own=out._aiGlow||(out._aiGlow={});
+  const n=(own.seq=(own.seq||0)+1);
+  own[ki]=n;                                   // 同じ POCO に次の音が来たら、前の音の消灯で消さない
+  const set=(r,g,b)=>{ try{ out.ledSet(ki,r,g,b).catch(()=>{}); }catch(e){} };
+  set(...AI_GREEN);
+  const end=Math.max(80,durMs-20);
+  setTimeout(()=>{ if(own[ki]===n) set(0,77,24); }, end);
+  setTimeout(()=>{ if(own[ki]===n){ delete own[ki]; set(0,0,0); } }, end+110);
 }
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
