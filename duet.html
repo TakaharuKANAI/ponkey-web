@@ -191,7 +191,9 @@ summary { padding:9px 14px; cursor:pointer; font-size:.62rem; font-weight:700; l
         <div class="sctrl"><input type="range" id="wild" min="0.6" max="1.6" step="0.1" value="1"><span class="sval" id="wildVal">1.0</span></div></div>
       <div class="srow"><span class="sname">何音で答えるか<small>あなたがこの数だけ弾いて手を止めると AI が答える</small></span>
         <div class="sctrl"><input type="range" id="trig" min="2" max="8" step="1" value="4"><span class="sval" id="trigVal">4</span></div></div>
-      <div class="srow"><span class="sname">ブラウザの音<small>OFF でも本体の光とキーは動く</small></span>
+      <div class="srow"><span class="sname">本体の音<small>PONKEY に乗った AI は、本体のそのパートの音色で鳴る</small></span>
+        <div class="sctrl"><button class="btn on" id="devSoundBtn">ON</button></div></div>
+      <div class="srow"><span class="sname">ブラウザの音<small>「画面だけ」のパートの音。OFF でも光とキーは動く</small></span>
         <div class="sctrl"><button class="btn on" id="soundBtn">ON</button></div></div>
     </div>
   </details>
@@ -239,7 +241,7 @@ const HUMAN = { emoji:'🙂', name:'あなた' };
 const S = {
   parts: [],            // {id, kind:'human'|'ai', persona, part, dev:null|deviceId, thinking, buf, held}
   devices: [],          // {id, pk, name, curPart, kit, lights[16]:Map, sent[16], pend}
-  bpm: 100, wild: 1.0, trig: 4, sound: true, auto: false,
+  bpm: 100, wild: 1.0, trig: 4, sound: true, devSound: true, auto: false,
   round: 0,             // 進行中のラウンド番号。あなたが弾くと進んで、古い AI の音は捨てられる
   busy: 0,              // 再生中の AI の数
   last: null,           // 最後に鳴ったフレーズ
@@ -430,6 +432,32 @@ function devFire(d, key, color, durMs, vel, partId) {
   setTimeout(() => devLight(d, key, owner, rgb, 0.3), hold);
   setTimeout(() => devLight(d, key, owner, rgb, 0), hold + 110);
 }
+// ── 本体の内蔵音源で鳴らす (パートごとの音色) ───────────────────────────
+//   各パートの**レイヤー1 の ch** (Ponkey.PARTS[].chL2 = 6,7,8,10,11,12) を素通し宣言し、そこへ NoteOn を送る。
+//   本体はレイヤー1 にもそのパートと同じ音色・音量・残響を入れている (ファーム SAM_SYNTH_CH_L2 への PC/CC7/CC91)
+//   ので、**本体でそのパートを弾いたときと同じ音**になる。音色はアプリから変えない (PC を送らない) =
+//   本体の Fn×P7 で選んだ音色がそのまま AI の声になる。KEYS の本線 ch1 は制御 ch で宣言できないため、
+//   全パートをレイヤー1 側にそろえている。素通しはファームが切断時に既定 (ch16 のみ) へ戻す。
+const L2_CHS = MEL.map(m => PARTS[m].chL2);                  // 0-origin
+const canDevSound = d => d.pk.hasFeature('PASSTHRU_DECL');
+function declarePassthru(d) {
+  if (!canDevSound(d)) return;
+  if (S.devSound) send(d, () => d.pk.passthru([16, ...L2_CHS.map(c => c + 1)]));
+  else {
+    L2_CHS.forEach(c => send(d, () => d.pk.sendMIDI(0xB0 | c, 123, 0)));   // 鳴っている音を止めてから外す
+    send(d, () => d.pk.passthru([16]));
+  }
+}
+function devNote(d, part, pitch, durMs, vel) {
+  const ch = PARTS[part].chL2, id = ch + ':' + pitch, nonce = ++nonceSeq;
+  d.notes.set(id, nonce);
+  send(d, () => d.pk.noteOn(ch, pitch, clamp(vel, 45, 127)));
+  // 同じ音高の次の音が来ていたら、前の音の NoteOff で切らない
+  setTimeout(() => { if (d.notes.get(id) === nonce) { d.notes.delete(id); send(d, () => d.pk.noteOff(ch, pitch)); } },
+             Math.max(80, durMs));
+}
+const devSounding = d => !!d && S.devSound && canDevSound(d);
+
 function devClearPart(d, partId) {
   d.lights.forEach((m, k) => { const v = m.get(partId); if (v) devLight(d, k, { id: partId, nonce: v.nonce }, v.rgb, 0); });
 }
@@ -471,8 +499,10 @@ function sounding(p, pitch, durMs, vel, { tone = true } = {}) {
   const color = partColor(p);
   screenPulse(boardKey(p), key, color, partFace(p), durMs, midiName(snapped));
   hop(p);
-  if (tone) playTone(partColorIdx(p) || 1, snapped, durMs, vel);
   const d = p.dev != null ? devById(p.dev) : null;
+  // 本体に乗っているパートは本体の音源で鳴らす (ブラウザでは重ねない)。画面だけのパートはブラウザで鳴らす
+  if (devSounding(d)) devNote(d, partColorIdx(p) || 1, snapped, durMs, vel);
+  else if (tone) playTone(partColorIdx(p) || 1, snapped, durMs, vel);
   if (d) devFire(d, key, color, durMs, vel, p.id);
   return snapped;
 }
@@ -648,7 +678,7 @@ function screenPress(bkey, key, down) {
 // ── BLE ────────────────────────────────────────────────────────────────
 async function connectNew() {
   const pk = new Ponkey();
-  const d = { id: nextDevId++, pk, name: '', curPart: 1, kit: 0,
+  const d = { id: nextDevId++, pk, name: '', curPart: 1, kit: 0, notes: new Map(),
               lights: Array.from({ length: 16 }, () => new Map()), sent: Array(16).fill('0,0,0'), pend: 0 };
   pk.on('disconnect', () => onDeviceGone(d));
   pk.on('note', e => onDeviceNote(d, e));
@@ -664,6 +694,8 @@ async function connectNew() {
       await pk.sendCC(CC_BPM, clamp(S.bpm - 60, 0, 127));
       if (!pk.hasFeature('SOL_API') || !pk.hasFeature('LED_RGB_FRAME'))
         log(`${d.name}: 古いファームのため、パートごとの色は出せません (本体の今のパート色で光ります)`, 'err');
+      if (canDevSound(d)) { declarePassthru(d); log(`${d.name}: AI の音は本体のパートの音色で鳴ります`, 'ok'); }
+      else log(`${d.name}: 古いファームのため、AI の音はブラウザで鳴らします`, 'err');
     } catch (e) { log('init err: ' + e.message, 'err'); }
   }, 400);
   return d;
@@ -835,7 +867,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;
 // ── 保存 (パートの顔ぶれと設定だけ。本体の接続は毎回えらぶ) ──────────
 const STORE = 'ponkey_duet_v2';
 function save() {
-  try { localStorage.setItem(STORE, JSON.stringify({ parts: S.parts.map(p => ({ kind: p.kind, persona: p.persona, part: p.part })), bpm: S.bpm, wild: S.wild, trig: S.trig, sound: S.sound })); } catch (e) {}
+  try { localStorage.setItem(STORE, JSON.stringify({ parts: S.parts.map(p => ({ kind: p.kind, persona: p.persona, part: p.part })), bpm: S.bpm, wild: S.wild, trig: S.trig, sound: S.sound, devSound: S.devSound })); } catch (e) {}
 }
 function load() {
   let st = null; try { st = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) {}
@@ -844,7 +876,7 @@ function load() {
       if (x.kind === 'human') addPart('human');
       else if (PERSONAS[x.persona]) { addPart('ai', x.persona); const p = S.parts[S.parts.length - 1]; if (MEL.includes(x.part)) setPartColor(p, x.part); }
     });
-    S.bpm = clamp(st.bpm | 0 || 100, 60, 187); S.wild = clamp(+st.wild || 1, .6, 1.6); S.trig = clamp(st.trig | 0 || 4, 2, 8); S.sound = st.sound !== false;
+    S.bpm = clamp(st.bpm | 0 || 100, 60, 187); S.wild = clamp(+st.wild || 1, .6, 1.6); S.trig = clamp(st.trig | 0 || 4, 2, 8); S.sound = st.sound !== false; S.devSound = st.devSound !== false;
   } else {
     addPart('human'); addPart('ai', 'tako'); addPart('ai', 'kame');
   }
@@ -864,6 +896,10 @@ function bindControls() {
   const sb = document.getElementById('soundBtn');
   const paintSound = () => { sb.textContent = S.sound ? 'ON' : 'OFF'; sb.classList.toggle('on', S.sound); };
   paintSound(); sb.onclick = () => { S.sound = !S.sound; paintSound(); save(); };
+  const dsb = document.getElementById('devSoundBtn');
+  const paintDevSound = () => { dsb.textContent = S.devSound ? 'ON' : 'OFF'; dsb.classList.toggle('on', S.devSound); };
+  paintDevSound();
+  dsb.onclick = () => { S.devSound = !S.devSound; paintDevSound(); S.devices.forEach(declarePassthru); save(); };
   document.getElementById('addAi').onclick = () => { addPart('ai'); renderAll(); };
   document.getElementById('addHuman').onclick = () => {
     const boards = ['screen', ...S.devices.map(d => 'd' + d.id)];
