@@ -190,7 +190,7 @@ document.getElementById('btnConnect').onclick = async () => {
 // 内蔵音源 (ch16 パススルー) の下ごしらえ。DRAWING と同じ窓口
 function setupSam() {
   if (!pk || !sam) return;
-  writeMIDI(0xC0 | LIVE_CH, 11, 0);      // Vibraphone: 減衰する音なので旋律が追いやすい
+  writeMIDI(0xC0 | LIVE_CH, 11, 11);     // Vibraphone: 減衰する音なので旋律が追いやすい。3バイト目も同じ番号 (0 だと本体経由でピアノに戻る。drawing.html 参照)
   writeMIDI(0xB0 | LIVE_CH, 7, 105);
   writeMIDI(0xB0 | LIVE_CH, 91, 90);
   writeMIDI(0xB0 | LIVE_CH, 10, 64);

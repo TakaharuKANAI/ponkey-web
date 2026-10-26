@@ -73,7 +73,7 @@
 <header>
   <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
   <h1>DRAWING</h1>
-  <span class="hint" title="アプリの版 (直したのに変わらないときは、ここが新しい日付になっているかを見る)">2026-10-26c</span>
+  <span class="hint" title="アプリの版 (直したのに変わらないときは、ここが新しい日付になっているかを見る)">2026-10-27a</span>
   <button class="primary" id="btnConnect">接続</button>
   <span id="conn" class="pill ng">未接続</span>
   <span class="sep"></span>
@@ -222,7 +222,9 @@ function selectPart(i){
 function applyVoice(){
   if(!sound)return;
   const p=PARTS[part];
-  writeMIDI(0xC0|LIVE_CH,p.voice,0);             // Program Change
+  // Program Change。3バイト目にも同じ番号を入れる: 本体 (PT2/PT3) の sendMIDIToSAM は PC でも3バイト書くので、
+  // 0 を入れるとランニングステータスで「PC 0 (ピアノ)」がもう1回届き、どの色でもピアノになっていた (2026-10-27)
+  writeMIDI(0xC0|LIVE_CH,p.voice,p.voice);
   writeMIDI(0xB0|LIVE_CH,91,p.rev);              // リバーブ send (種別は本体既定の Hall2)
   writeMIDI(0xB0|LIVE_CH,72,p.rel);              // リリース (尾の長さ)
 }

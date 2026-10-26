@@ -163,7 +163,10 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   （`BLE_LIVE_CHANNEL`、本体の状態には触らない）。叩くのは従来どおり ch1 の NoteOn を別送。マス→音高はメジャーペンタ C3 起点、
   色 P1〜P7 ↔ パートの性格に合わせた GM 音色（`PAINT_VOICES`: DRUM=スチールドラム / KEYS=E.ピアノ / LEAD=スクエア+1oct /
   BASS=シンセベース−1oct / CHORD=パッド / BELL=オルゴール+1oct / VOICE=クワイア）。音色ごとに oct・hold（離れてから NoteOff
-  までの ms）・CC72・CC91 を持ち、色を変えるたび PC/CC91/CC72 を送り直す。鳴らした音高は `playing[]` に覚えて同じ音高で NoteOff。**旧ファームだと ch16 の NoteOn が普通の NoteOn 扱いになり音高に当たる鍵が余計に動く**ので、
+  までの ms）・CC72・CC91 を持ち、色を変えるたび PC/CC91/CC72 を送り直す。鳴らした音高は `playing[]` に覚えて同じ音高で NoteOff。
+  ⚠ **ch16 の Program Change は `sendMIDI(0xCF, n, n)`（3バイト目も同じ番号）**。本体 (PT2/PT3) の `sendMIDIToSAM` は
+  PC でも3バイト書くので、`(0xCF, n, 0)` だとランニングステータスで「PC 0 = ピアノ」がもう1回届き、どの音色もピアノになる
+  （2026-10-27 に発覚。SONGBOOK も同じく直した。ファーム側を直すまでは、ch16 に PC を送る全アプリでこの書き方が必要）。**旧ファームだと ch16 の NoteOn が普通の NoteOn 扱いになり音高に当たる鍵が余計に動く**ので、
   「音」ボタンで OFF にできる（tooltip に注意書き）。
   **本体 LED の絵（要ファーム PT2 v4.5.66+）**: 描いたマスは `CC_LED_PAINT 0x39`（val = key<<3 | level 0-7）で
   本体 LED も現パート色で光る（ソレノイドと独立の床上げオーバーレイ）。**マスを離れた瞬間（音の尾は待たない）に
