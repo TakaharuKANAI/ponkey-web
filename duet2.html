@@ -509,12 +509,26 @@ function sounding(p, pitch, durMs, vel, { tone = true } = {}) {
 
 // ── MusicRNN ────────────────────────────────────────────────────────────
 let rnn = null, rnnReady = false;
+// モデル (melody_rnn) は ponkey-web の models/ に置いた写しを読む。Google の置き場が無くなっても動くように。
+// 写しが読めないときだけ、元の Google の置き場を読みにいく。
+const MODEL_URLS = [
+  'models/melody_rnn',
+  'https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/melody_rnn',
+];
 async function loadAI() {
   try {
     if (typeof music_rnn === 'undefined') throw new Error('Magenta not loaded');
-    rnn = new music_rnn.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/melody_rnn');
-    await rnn.initialize();
-    rnnReady = true; log('MusicRNN ready', 'ok'); updateHint();
+    let lastErr = null;
+    for (const url of MODEL_URLS) {
+      try {
+        if (rnn) { try { rnn.dispose(); } catch (e) {} }
+        rnn = new music_rnn.MusicRNN(url);
+        await rnn.initialize();
+        lastErr = null; log('MusicRNN ready (' + url + ')', 'ok'); break;
+      } catch (e) { lastErr = e; log('MusicRNN load failed: ' + url + ' — ' + e.message, 'err'); }
+    }
+    if (lastErr) throw lastErr;
+    rnnReady = true; updateHint();
   } catch (e) {
     rnnReady = false;
     log('MusicRNN error: ' + e.message + ' — 簡易 AI で続けます', 'err');

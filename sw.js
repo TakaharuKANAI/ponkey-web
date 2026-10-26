@@ -7,6 +7,8 @@
    ・自前の JS/CSS も network-first (共通ライブラリ ponkey.js の更新を確実に配るため)
    ・フォント等の外部リソースは cache-first(変わらないので)
    ・DUET の Magenta/TensorFlow CDN は大きいのでキャッシュしない(要ネットのまま)
+   ・DUET / DUET 2 の AI モデル (models/melody_rnn, 約14MB) は下の cache-first で、初回に読んだときにキャッシュされる
+     (CORE に入れるとインストールのたびに全員が14MB 落とすので入れない)
 */
 const CACHE = 'ponkey-v50';
 const CORE = [

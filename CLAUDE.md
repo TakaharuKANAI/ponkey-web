@@ -94,6 +94,12 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   ドラム（ch9）は列 `key%4` の色で光らせるだけで AI には渡さない（MelodyRNN は旋律専用）。
   「▶ AIだけで回す」= あなたが弾かなくても続ける（いちばん音の多かった返事が次のお題）。あなたが弾くと `S.round` が進み、
   AI の未発音の音は捨てられる。パートの顔ぶれと設定は localStorage `ponkey_duet_v2`（本体の接続は毎回えらぶ）。
+- `models/melody_rnn/` — DUET / DUET 2 の AI モデル（Magenta の学習済み `melody_rnn`、約14MB）の**写し**。
+  2026-10-27 に `storage.googleapis.com/magentadata/js/checkpoints/music_rnn/melody_rnn` から6ファイルを取得して置いた
+  （Magenta は更新が止まっていて、Google が置き場を片付けると AI が答えなくなるため。ユーザー指示）。
+  両アプリの `MODEL_URLS` は「この写し → 読めなければ元の Google の置き場」の順。中身は変えないこと
+  （`weights_manifest.json` と shard の大きさが合っていないと読み込みで落ちる）。
+  ⚠ Magenta.js / TensorFlow.js / Tone.js 本体は今も CDN（jsdelivr / cdnjs）から読んでいる。
 - `dialogue.html` — DIALOGUE（A=人 / B=AI の交互かけあい。+ C=ドラマー）。v3.2 で完成していて、
   サプライザル整形・オンライン学習・ノリゲージ・ビートトラッカーまで動く。
   **v4.6 追従済み**: ch → 音階ラダーと fam(B/N) を `Ponkey.PARTS` から作る。fam は
