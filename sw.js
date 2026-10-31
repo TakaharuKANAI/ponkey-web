@@ -12,14 +12,14 @@
    ・DUET / DUET 2 の AI モデル (models/melody_rnn, 約14MB) は下の cache-first で、初回に読んだときにキャッシュされる
      (CORE に入れるとインストールのたびに全員が14MB 落とすので入れない)
 */
-const CACHE = 'ponkey-v51';
+const CACHE = 'ponkey-v52';
 const CORE = [
   './', './index.html',
   './ponkey.js',                       // 全アプリ共通の BLE クライアント
   './lesson.html',
   './sync.html', './sequence.html', './loops.html', './groove.html', './groove-engine.js',
   './invaders.html', './trance.html', './mood.html', './drawing.html', './scale.html', './dialogue.html', './duet.html', './duet2.html', './echo.html',
-  './mirror.html', './step.html', './jam.html', './jam-decoder.js',
+  './mirror.html', './step.html', './jam.html',
   './songbook.html', './songbook.js',
   './ponkey-sound-guide.html',
   './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'
