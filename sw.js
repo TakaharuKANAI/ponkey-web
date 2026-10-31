@@ -7,17 +7,19 @@
    ・自前の JS/CSS も network-first (共通ライブラリ ponkey.js の更新を確実に配るため)
    ・フォント等の外部リソースは cache-first(変わらないので)
    ・DUET の Magenta/TensorFlow CDN は大きいのでキャッシュしない(要ネットのまま)
+   ・JAM の Magenta RT 2 モデル (Hugging Face, 約450MB) は SW を通さない。jam.html 自身が CacheStorage
+     `ponkey-mrt2-*` に置くので、activate で消さない (消すと版を上げるたびに全員が450MB 落とし直す)
    ・DUET / DUET 2 の AI モデル (models/melody_rnn, 約14MB) は下の cache-first で、初回に読んだときにキャッシュされる
      (CORE に入れるとインストールのたびに全員が14MB 落とすので入れない)
 */
-const CACHE = 'ponkey-v50';
+const CACHE = 'ponkey-v51';
 const CORE = [
   './', './index.html',
   './ponkey.js',                       // 全アプリ共通の BLE クライアント
   './lesson.html',
   './sync.html', './sequence.html', './loops.html', './groove.html', './groove-engine.js',
   './invaders.html', './trance.html', './mood.html', './drawing.html', './scale.html', './dialogue.html', './duet.html', './duet2.html', './echo.html',
-  './mirror.html', './step.html',
+  './mirror.html', './step.html', './jam.html', './jam-decoder.js',
   './songbook.html', './songbook.js',
   './ponkey-sound-guide.html',
   './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'
@@ -34,7 +36,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE && !k.startsWith('ponkey-mrt2')).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -47,6 +49,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // JAM のモデル (Hugging Face / その CDN) は大きいので SW を通さない (jam.html が自分でキャッシュする)
+  if (/(^|\.)huggingface\.co$|(^|\.)hf\.co$/.test(url.host)) return;
 
   // HTMLドキュメント: network-first(新しい版を優先、ダメならキャッシュ)
   if (req.mode === 'navigate' || req.destination === 'document') {

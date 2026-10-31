@@ -98,6 +98,18 @@ PONKEY のエンドユーザー向け公開 Web アプリ。**GitHub Pages で�
   ドラム（ch9）は列 `key%4` の色で光らせるだけで AI には渡さない（MelodyRNN は旋律専用）。
   「▶ AIだけで回す」= あなたが弾かなくても続ける（いちばん音の多かった返事が次のお題）。あなたが弾くと `S.round` が進み、
   AI の未発音の音は捨てられる。パートの顔ぶれと設定は localStorage `ponkey_duet_v2`（本体の接続は毎回えらぶ）。
+- `jam.html` / `jam-decoder.js` — JAM（2026-10-31。Magenta RealTime 2 とジャム。**画面は DUET と同じ**：左=あなた / 右=AI）。
+  MRT2 は**音符ではなく音（48kHz ステレオ）を作る**モデル。**ブラウザだけで動く**（ONNX Runtime Web + WebGPU、サーバーなし）。
+  モデルは Hugging Face `magenta-community/magenta-rt-onnx-small`（mrt2_small int4、約450MB）を初回に読み、
+  CacheStorage `ponkey-mrt2-*` に置く。**sw.js はこのキャッシュを activate で消さない・HF への fetch は SW を通さない**
+  （消すと CACHE を上げるたびに全員が450MB 落とし直す）。重みは CC BY 4.0 なので**画面下のクレジットを消さない**。
+  条件 = スタイル12（`presets.json` の12種。STYLE チップ）+ 音高128（-1 おまかせ / 0 鳴らさない / 3 鳴らす）+ ドラム1 + CFG 3。
+  **押している音（本体の鍵 or 画面の盤面）を 3 にする**だけ。本体の鍵は叩くと一瞬で離れるので「音を残す」秒数ぶん保持する。
+  ドラム（ch9）は光るだけで指示にしない。値の決め方は公式 Jam の PyTorch 版（HF Space `magenta-rt-jam`）に合わせた。
+  右の盤面は AI の音の16帯域（左下=低音）。音への変換は `jam-decoder.js`（Worker）で別スレッド —
+  同じ ORT で生成と同時に run すると WASM が壊れる（数値の例外が飛ぶ）。
+  ⚠ **M3 / 8GB では 0.80× リアルタイムで間に合わない**（2026-10-31 実測。1フレーム 40ms に対し生成 50ms）。
+  fused 版（frame_step_gpu）・fp16 版はどちらも遅かった（`?mode=fused|f16` で比較できる）。上位の Apple Silicon 向け。
 - `models/melody_rnn/` — DUET / DUET 2 の AI モデル（Magenta の学習済み `melody_rnn`、約14MB）の**写し**。
   2026-10-27 に `storage.googleapis.com/magentadata/js/checkpoints/music_rnn/melody_rnn` から6ファイルを取得して置いた
   （Magenta は更新が止まっていて、Google が置き場を片付けると AI が答えなくなるため。ユーザー指示）。

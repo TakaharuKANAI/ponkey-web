@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PONKEY JAM</title>
+<meta name="theme-color" content="#1a1714">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PONKEY JAM">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- BLE 層は ponkey.js 経由 -->
+<script src="./ponkey.js"></script>
+<!--
+  PONKEY JAM — Magenta RealTime 2 (MRT2) とジャムする。DUET と同じ画面。
+  ・AI は「音そのもの」(48kHz ステレオ) をブラウザの中で作る。サーバーは使わない (ONNX Runtime Web + WebGPU)。
+  ・左 = あなた。PONKEY の鍵 (または画面の盤面) で押している音が、AI への「この音を鳴らして」の指示になる。
+    MRT2 の条件は 12 (スタイル) + 128 (音高ごとの指示) + 1 (ドラム) + 3 (CFG の強さ)。
+    音高ごと: -1 = おまかせ / 0 = 鳴らさない / 3 = 鳴らす。押した音を -1 → 3 にするだけ。
+  ・右 = AI の音を 16 帯域に割って光らせる (音符ではなく音を作るモデルなので、鍵の位置は持たない)。
+  ・モデルは magenta-community/magenta-rt-onnx-small (mrt2_small の int4)。初回に約450MB を読み、
+    CacheStorage `ponkey-mrt2-*` に置く (sw.js はこのキャッシュを消さない)。
+  ・音への変換 (SpectroStream) は jam-decoder.js の Worker で回す (同じ ORT で同時に run すると壊れるため)。
+  ・速さ (2026-10-31, M3 / 8GB, アプリ内ブラウザ): temporal 12 + depth 26〜39 ms/フレーム → 0.80× リアルタイムで
+    間に合わず音が途切れる。fused 版・fp16 版はどちらも遅かった (MODE の説明)。上位の Apple Silicon 向け。
+-->
+<style>
+:root {
+  --orange: #C4884E;
+  --orange-bright: #F0A060;
+  --black: #1A1714;
+  --dark: #2A2420;
+  --mid: #3D3530;
+  --muted: #6B5F58;
+  --cream: #F7F3EE;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:'Be Vietnam Pro',sans-serif;
+  background:var(--black);
+  color:var(--cream);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:28px 20px;
+}
+
+
+
+/* ── Error banner ── */
+.error-banner {
+  display:none; width:100%; max-width:520px;
+  background:rgba(220,60,60,.15); border:1.5px solid rgba(220,60,60,.4);
+  border-radius:10px; padding:9px 14px;
+  font-size:.78rem; font-weight:600; color:#f08080;
+  margin-bottom:16px; text-align:center;
+}
+.error-banner.show { display:block; }
+
+.wrap { width:100%; max-width:520px; }
+
+/* ── Connect buttons ── */
+.connect-row {
+  display:grid; grid-template-columns:1fr 1fr; gap:10px;
+  margin-bottom:20px;
+}
+.btn-connect {
+  padding:12px 0;
+  border:2px solid var(--mid); border-radius:10px;
+  background:transparent; color:var(--muted);
+  font-family:'Be Vietnam Pro',sans-serif; font-size:.75rem;
+  font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  cursor:pointer; transition:all .2s;
+  position:relative;
+}
+.btn-connect:hover:not(:disabled) { border-color:var(--orange);color:var(--orange); }
+.btn-connect:disabled { opacity:.3; cursor:not-allowed; }
+.btn-connect.connected {
+  border-color:var(--orange); color:var(--orange);
+}
+.btn-connect.connected::before {
+  content:'';position:absolute;top:8px;left:12px;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--orange);
+}
+.btn-connect.active {
+  border-color:var(--orange-bright); color:var(--orange-bright);
+  box-shadow:0 0 12px rgba(240,160,96,.25);
+}
+.btn-connect.active::before { background:var(--orange-bright); animation:bdot .7s ease-in-out infinite alternate; }
+@keyframes bdot { from{opacity:.5;transform:scale(.8)} to{opacity:1;transform:scale(1.2)} }
+
+/* ── Alien stage ── */
+.alien-row {
+  display:grid;
+  grid-template-columns:1fr 24px 1fr;
+  gap:0;
+  align-items:flex-end;
+  margin-bottom:12px;
+}
+.alien-canvas-wrap {
+  display:flex;
+  justify-content:center;
+  align-items:flex-end;
+}
+.alien-canvas-wrap canvas {
+  display:block;
+  image-rendering:pixelated;
+  image-rendering:crisp-edges;
+}
+.alien-arrow-gap { display:flex;align-items:center;justify-content:center; }
+
+/* ── Dual grid layout ── */
+.grids-row {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  align-items:center;
+  margin-bottom:20px;
+}
+.grid-panel { }
+.grid-label {
+  font-size:.58rem; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--muted);
+  text-align:center; margin-bottom:8px;
+}
+.key-grid {
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:3px;
+  aspect-ratio:1;
+  width:70%;
+  margin:0 auto;
+}
+.key-cell {
+  background:rgba(255,255,255,.04);
+  border:none;
+  aspect-ratio:1;
+  display:flex; align-items:center; justify-content:center;
+  font-size:clamp(.38rem,.8vw,.55rem); font-weight:700;
+  color:transparent;
+  transition:background .15s, color .15s;
+  position:relative; overflow:hidden;
+}
+
+/* Human side — blue eye color */
+#gridA .key-cell.lit {
+  background:rgba(34,102,255,.25);
+  color:#6699ff;
+}
+#gridA .key-cell.flash {
+  animation:flash-human .4s ease-out forwards;
+}
+@keyframes flash-human {
+  0%   { background:rgba(34,102,255,.7); color:#fff; transform:scale(1.06); }
+  100% { background:rgba(34,102,255,.25); color:#6699ff; transform:scale(1); }
+}
+
+/* AI side — yellow eye color */
+#gridB .key-cell.lit {
+  background:rgba(255,221,0,.2);
+  color:#ffee55;
+}
+#gridB .key-cell.flash {
+  animation:flash-ai .45s ease-out forwards;
+}
+@keyframes flash-ai {
+  0%   { background:rgba(255,221,0,.65); color:#fff; transform:scale(1.06); }
+  100% { background:rgba(255,221,0,.2); color:#ffee55; transform:scale(1); }
+}
+
+/* 1台モードの一行 (黙って挙動が変わらないように出す) */
+.solo-note {
+  display:none; text-align:center; margin:-8px 0 16px;
+  font-size:.66rem; font-weight:600; letter-spacing:.04em; color:#ffee55; opacity:.8;
+}
+.solo-note.show { display:block; }
+
+/* Arrow between grids */
+.grid-arrow {
+  display:flex; align-items:center; justify-content:center;
+  color:var(--muted); font-size:.85rem;
+  margin-top:20px; /* offset label height */
+}
+
+/* ── Collapsible ── */
+.collapsible { margin-bottom:8px; }
+.coll-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:9px 14px;
+  background:var(--dark); border:2px solid var(--mid); border-radius:10px;
+  cursor:pointer; user-select:none; transition:border-color .2s;
+}
+.coll-header:hover { border-color:var(--muted); }
+.coll-header.open { border-radius:10px 10px 0 0; border-bottom-color:transparent; }
+.coll-title { font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted); }
+.coll-arrow { font-size:.65rem;color:var(--muted);transition:transform .2s; }
+.coll-header.open .coll-arrow { transform:rotate(180deg); }
+.coll-body {
+  display:none;
+  background:var(--dark); border:2px solid var(--mid); border-top:none;
+  border-radius:0 0 10px 10px; padding:14px;
+}
+.coll-body.open { display:block; }
+
+/* Settings */
+.srow { display:flex;align-items:center;justify-content:space-between;padding:5px 0; }
+.srow+.srow { border-top:1px solid rgba(255,255,255,.05); }
+.sname { font-size:.78rem;font-weight:600;color:var(--cream);opacity:.8; }
+.sctrl { display:flex;align-items:center;gap:8px; }
+.sval  { font-size:.75rem;font-weight:700;color:var(--orange);min-width:32px;text-align:right; }
+input[type=range] {
+  -webkit-appearance:none;appearance:none;width:100px;height:3px;
+  background:var(--mid);border-radius:2px;outline:none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:var(--orange);cursor:pointer;
+}
+
+/* BPM section */
+.bpm-section {
+  background:var(--dark); border:2px solid var(--mid); border-radius:10px;
+  padding:12px 14px; margin-bottom:8px;
+}
+.bpm-row {
+  display:flex; align-items:center; gap:10px;
+}
+.bpm-label {
+  font-size:.65rem; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); min-width:28px;
+}
+.bpm-row input[type=range] { flex:1; }
+
+/* Log */
+.log-body {
+  font-size:.65rem;font-family:'SF Mono','Fira Code',monospace;
+  color:var(--muted);max-height:180px;overflow-y:auto;
+  line-height:1.7;user-select:text;-webkit-user-select:text;
+}
+.log-line { display:block;white-space:pre-wrap;word-break:break-all; }
+.log-line.ok  { color:#7ec87e; }
+.log-line.err { color:#e07070; }
+.log-line.info{ color:var(--orange); }
+.btn-copy {
+  font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 8px;border:1px solid var(--mid);border-radius:5px;
+  background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .2s;
+}
+.btn-copy:hover { border-color:var(--orange);color:var(--orange); }
+
+
+/* ── JAM 追加分 ── */
+.btn-connect.ai.active::before { background:#ffdd00; }
+.btn-connect.ai.active { border-color:#ffdd00; color:#ffee55; box-shadow:0 0 12px rgba(255,221,0,.2); }
+.key-cell { cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:none; }
+#gridA .key-cell.tail { background:rgba(34,102,255,.12); color:#4d77cc; }
+#gridB .key-cell { cursor:default; }
+.status-line { text-align:center; margin:-8px 0 14px; min-height:1.2em;
+  font-size:.66rem; font-weight:600; letter-spacing:.04em; color:var(--muted); }
+.status-line.warn { color:#f0a060; }
+.prog { display:none; height:4px; background:var(--mid); border-radius:2px; overflow:hidden; margin:-6px 0 16px; }
+.prog.show { display:block; }
+.prog > div { height:100%; width:0; background:#ffdd00; transition:width .15s; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.chip { padding:6px 10px; border:1.5px solid var(--mid); border-radius:999px; background:transparent;
+  color:var(--muted); font-family:inherit; font-size:.7rem; font-weight:700; cursor:pointer; transition:all .15s; }
+.chip:hover { border-color:var(--muted); color:var(--cream); }
+.chip.on { border-color:#ffdd00; color:#ffee55; background:rgba(255,221,0,.08); }
+.tog { font-size:.68rem; font-weight:700; padding:4px 10px; border:1.5px solid var(--mid); border-radius:6px;
+  background:transparent; color:var(--muted); cursor:pointer; font-family:inherit; min-width:52px; }
+.tog.on { border-color:var(--orange); color:var(--orange); }
+.shint { font-size:.62rem; color:var(--muted); margin-top:1px; font-weight:500; }
+.credit { margin-top:18px; font-size:.6rem; line-height:1.7; color:var(--muted); text-align:center; opacity:.8; }
+.credit a { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="error-banner" id="errorBanner"></div>
+
+<div class="wrap">
+
+  <a href="index.html" style="display:inline-block;font-size:12px;letter-spacing:.12em;color:var(--muted);text-decoration:none;margin-bottom:14px" title="アプリ一覧へ">‹</a>
+
+  <!-- 左 = PONKEY をつなぐ / 右 = AI を呼ぶ -->
+  <div class="connect-row">
+    <button class="btn-connect" id="btnA">Connect</button>
+    <button class="btn-connect ai" id="btnAI">AI ▶</button>
+  </div>
+
+  <div class="alien-row">
+    <div class="alien-canvas-wrap"><canvas id="alienA" width="150" height="200"></canvas></div>
+    <div class="alien-arrow-gap"></div>
+    <div class="alien-canvas-wrap"><canvas id="alienB" width="150" height="200"></canvas></div>
+  </div>
+
+  <div class="grids-row">
+    <div class="grid-panel">
+      <div class="grid-label">HI</div>
+      <div class="key-grid" id="gridA"></div>
+    </div>
+    <div class="grid-panel">
+      <div class="grid-label">AI</div>
+      <div class="key-grid" id="gridB"></div>
+    </div>
+  </div>
+
+  <div class="status-line" id="status">AI ▶ を押すと AI が読み込まれて弾きはじめます</div>
+  <div class="prog" id="prog"><div id="bar"></div></div>
+
+  <!-- スタイル (DUET の BPM の場所) -->
+  <div class="bpm-section">
+    <div class="bpm-row"><span class="bpm-label">STYLE</span><span class="sname" id="styleName" style="font-size:.72rem"></span></div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="collapsible">
+    <div class="coll-header" id="hdrSettings">
+      <span class="coll-title">Settings</span>
+      <span class="coll-arrow">▼</span>
+    </div>
+    <div class="coll-body" id="bodySettings">
+      <div class="srow"><div><div class="sname">ノートの強さ</div><div class="shint">押した音にどれだけ従うか</div></div>
+        <div class="sctrl"><input type="range" id="sNotes" min="0" max="5" step="0.1"><span class="sval" id="vNotes"></span></div></div>
+      <div class="srow"><div><div class="sname">スタイルの強さ</div><div class="shint">STYLE にどれだけ寄せるか</div></div>
+        <div class="sctrl"><input type="range" id="sStyle" min="0" max="5" step="0.1"><span class="sval" id="vStyle"></span></div></div>
+      <div class="srow"><div><div class="sname">Temperature</div><div class="shint">高いほど冒険する</div></div>
+        <div class="sctrl"><input type="range" id="sTemp" min="0.5" max="1.6" step="0.05"><span class="sval" id="vTemp"></span></div></div>
+      <div class="srow"><div><div class="sname">音を残す</div><div class="shint">鍵を離してから AI が覚えている秒数</div></div>
+        <div class="sctrl"><input type="range" id="sHold" min="0" max="4" step="0.25"><span class="sval" id="vHold"></span></div></div>
+      <div class="srow"><div><div class="sname">先読み</div><div class="shint">短いほど反応が速い。途切れるなら長く</div></div>
+        <div class="sctrl"><input type="range" id="sLead" min="0.2" max="2" step="0.1"><span class="sval" id="vLead"></span></div></div>
+      <div class="srow"><div class="sname">AI の音量</div>
+        <div class="sctrl"><input type="range" id="sVol" min="0" max="1" step="0.05"><span class="sval" id="vVol"></span></div></div>
+      <div class="srow"><div><div class="sname">押した音だけ</div><div class="shint">伴奏を足さず、押した音だけ弾かせる</div></div>
+        <button class="tog" id="tSolo"></button></div>
+      <div class="srow"><div class="sname">ドラムなし</div><button class="tog" id="tDrum"></button></div>
+      <div class="srow"><div><div class="sname">本体の音</div><div class="shint">OFF = PONKEY の内蔵音源を黙らせ、AI だけ鳴らす</div></div>
+        <button class="tog" id="tDev"></button></div>
+    </div>
+  </div>
+
+  <div class="collapsible">
+    <div class="coll-header" id="hdrLog">
+      <span class="coll-title">Debug Log</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn-copy" id="btnCopy">Copy</button>
+        <span class="coll-arrow">▼</span>
+      </div>
+    </div>
+    <div class="coll-body" id="bodyLog"><div class="log-body" id="log"></div></div>
+  </div>
+
+  <div class="credit">
+    AI: <a href="https://github.com/magenta/magenta-realtime" target="_blank" rel="noopener">Magenta RealTime 2</a> (Google DeepMind) — 重み CC BY 4.0<br>
+    ブラウザ版: <a href="https://huggingface.co/magenta-community/magenta-rt-onnx-small" target="_blank" rel="noopener">magenta-community/magenta-rt-onnx-small</a> ·
+    <a href="https://onnxruntime.ai/" target="_blank" rel="noopener">ONNX Runtime Web</a><br>
+    音はこのブラウザの中で作っています（サーバーには送りません）。Mac / PC の Chrome・Edge 向け
+  </div>
+</div>
+
+<script>
+// ── Alien Animation ────────────────────────────────────────
+(function() {
+  const S = 8;
+  const _ = null;
+  const K = '#111111';
+  const O = '#ff8800';
+  const B = '#2266ff';
+
+  // ---- body builders ----
+  function makeNormal(eyeTop, eyeBot, legA, legB, legC) {
+    return [
+      [_,_,_,K,K,K,K,K,K,K,K,K,_,_,_],
+      [_,_,K,O,O,O,O,O,O,O,O,O,K,_,_],
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      [K,O,O,O,O,O,O,O,O,O,O,O,O,O,K],
+      eyeTop, eyeBot,
+      [K,O,O,O,O,O,O,O,O,O,O,O,O,O,K],
+      [K,O,O,O,O,O,O,O,O,O,O,O,O,O,K],
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      legA, legB, legC,
+      [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    ];
+  }
+  function makeTall(eyeTop, eyeBot, legA, legB, legC) {
+    return [
+      [_,_,_,_,K,K,K,K,K,K,K,_,_,_,_],
+      [_,_,_,K,O,O,O,O,O,O,O,K,_,_,_],
+      [_,_,K,O,O,O,O,O,O,O,O,O,K,_,_],
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      eyeTop, eyeBot,
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      [_,K,O,O,O,O,O,O,O,O,O,O,O,K,_],
+      [_,_,K,O,O,O,O,O,O,O,O,O,K,_,_],
+      legA, legB, legC,
+      [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    ];
+  }
+
+  const eyeOpen    = [K,O,K,B,B,K,B,B,K,B,B,K,O,O,K];
+  const eyeHalf    = [K,O,K,K,K,K,K,K,K,K,K,K,O,O,K];
+  const eyeShut    = [K,O,K,K,K,K,K,K,K,K,K,K,O,O,K];
+  const eyeWide    = [K,O,B,B,B,K,B,B,K,B,B,B,B,O,K];
+  const eyeOpenBot = [K,O,K,B,B,K,B,B,K,B,B,K,O,O,K];
+  const eyeShutBot = [K,O,K,K,K,K,K,K,K,K,K,K,O,O,K];
+  const eyeWideBot = [K,O,B,B,K,K,B,B,K,K,B,B,B,O,K];
+
+  const legStand1=[K,O,K,_,K,O,K,_,K,O,K,_,K,O,K];
+  const legStand2=[K,O,K,_,K,O,K,_,K,O,K,_,K,O,K];
+  const legStand3=[K,K,_,_,K,K,_,_,K,K,_,_,K,K,_];
+  const legWide1 =[K,O,K,O,K,_,K,O,K,_,K,O,K,O,K];
+  const legWide2 =[O,K,_,K,O,K,_,K,O,K,_,K,O,K,O];
+  const legWide3 =[K,_,_,_,K,K,_,_,K,_,_,_,K,_,K];
+  const legCurl1 =[_,_,K,O,K,_,K,O,K,_,K,O,K,_,_];
+  const legCurl2 =[_,_,K,K,_,_,K,K,_,_,K,K,_,_,_];
+  const legCurl3 =[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_];
+  const legTall1 =[_,_,K,O,K,_,K,O,K,_,K,O,K,_,_];
+  const legTall2 =[_,_,K,O,K,_,K,O,K,_,K,O,K,_,_];
+  const legTall3 =[_,_,K,K,_,_,K,K,_,_,K,K,_,_,_];
+
+  // Antennae for green alien
+  function ant(s0,s1,s2,bx,by){
+    return [
+      {dx:s0,dy:-1,c:'stem'},{dx:s1,dy:-2,c:'stem'},{dx:s2,dy:-3,c:'stem'},
+      {dx:bx,dy:by,c:'ball'},{dx:bx+1,dy:by,c:'ball'},
+      {dx:bx,dy:by+1,c:'ball'},{dx:bx+1,dy:by+1,c:'ball'},
+    ];
+  }
+  const antFrames=[
+    ant(0,0,0,-1,-5),ant(0,0,1,0,-5),ant(0,-1,-1,-2,-5),ant(0,-1,-2,-2,-5),
+    ant(0,0,-1,-1,-5),ant(0,1,1,1,-5),ant(1,2,2,2,-5),ant(1,2,3,3,-5),
+    ant(0,1,1,1,-5),ant(0,-1,-1,-1,-5),ant(0,0,1,0,-5),ant(0,0,0,-1,-5),
+  ];
+
+  const tailFrames=[
+    [{dx:0,dy:0},{dx:2,dy:0},{dx:3,dy:-1},{dx:3,dy:-2},{dx:2,dy:-2}],
+    [{dx:0,dy:0},{dx:2,dy:0},{dx:3,dy:-1},{dx:4,dy:-2},{dx:4,dy:-3}],
+    [{dx:0,dy:0},{dx:2,dy:-1},{dx:3,dy:-2},{dx:3,dy:-3},{dx:2,dy:-3}],
+    [{dx:0,dy:0},{dx:2,dy:-1},{dx:3,dy:-2},{dx:4,dy:-3},{dx:4,dy:-4}],
+    [{dx:0,dy:0},{dx:2,dy:0},{dx:3,dy:-1},{dx:3,dy:-2},{dx:2,dy:-2}],
+    [{dx:0,dy:1},{dx:2,dy:1},{dx:3,dy:0},{dx:3,dy:-1},{dx:2,dy:-1}],
+    [{dx:0,dy:0},{dx:2,dy:-1},{dx:3,dy:-2},{dx:4,dy:-3},{dx:3,dy:-3}],
+    [{dx:0,dy:0},{dx:2,dy:-1},{dx:3,dy:-2},{dx:4,dy:-3},{dx:5,dy:-4}],
+    [{dx:0,dy:0},{dx:2,dy:0},{dx:3,dy:-1},{dx:4,dy:-2},{dx:4,dy:-3}],
+    [{dx:0,dy:1},{dx:2,dy:1},{dx:3,dy:0},{dx:3,dy:-1},{dx:2,dy:-1}],
+    [{dx:0,dy:0},{dx:2,dy:0},{dx:3,dy:-1},{dx:3,dy:-2},{dx:2,dy:-2}],
+    [{dx:0,dy:0},{dx:2,dy:0},{dx:3,dy:-1},{dx:3,dy:-2},{dx:2,dy:-2}],
+  ];
+
+  // ── Idle loop (shared base sequence) ──
+  const idleSeq=[
+    {rows:makeNormal(eyeOpen,eyeOpenBot,legStand1,legStand2,legStand3),offsetY:0,  dur:800},
+    {rows:makeNormal(eyeHalf,eyeOpenBot,legStand1,legStand2,legStand3),offsetY:0,  dur:200},
+    {rows:makeNormal(eyeOpen,eyeOpenBot,legStand1,legStand2,legStand3),offsetY:0,  dur:600},
+    {rows:makeNormal(eyeOpen,eyeOpenBot,legWide1, legWide2, legWide3), offsetY:0,  dur:200},
+    {rows:makeNormal(eyeOpen,eyeOpenBot,legStand1,legStand2,legStand3),offsetY:0,  dur:500},
+  ];
+
+  // ── Reaction sequence: plays when this alien is hit (note played) ──
+  const reactSeq=[
+    {rows:makeNormal(eyeWide,eyeWideBot,legCurl1, legCurl2, legCurl3), offsetY:8,  dur:80},   // squat
+    {rows:makeNormal(eyeWide,eyeWideBot,legCurl1, legCurl2, legCurl3), offsetY:-55,dur:90},   // launch
+    {rows:makeNormal(eyeWide,eyeWideBot,legWide1, legWide2, legWide3), offsetY:-105,dur:110}, // peak
+    {rows:makeNormal(eyeOpen,eyeOpenBot,legCurl1, legCurl2, legCurl3), offsetY:-45,dur:90},   // fall
+    {rows:makeNormal(eyeOpen,eyeOpenBot,legWide1, legWide2, legWide3), offsetY:8,  dur:80},   // land
+    {rows:makeNormal(eyeHalf,eyeOpenBot,legStand1,legStand2,legStand3),offsetY:0,  dur:120},  // settle
+  ];
+
+  // ── Thinking sequence: plays on AI while generating ──
+  const thinkSeq=[
+    {rows:makeTall(eyeHalf, eyeOpenBot,legTall1,legTall2,legTall3), offsetY:0, dur:220},
+    {rows:makeTall(eyeWide, eyeWideBot,legTall1,legTall2,legTall3), offsetY:0, dur:180},
+    {rows:makeTall(eyeShut, eyeShutBot,legTall1,legTall2,legTall3), offsetY:0, dur:180},
+    {rows:makeTall(eyeHalf, eyeOpenBot,legTall1,legTall2,legTall3), offsetY:0, dur:220},
+  ];
+
+  // ── Per-alien state machine ──
+  function makeAlienState() {
+    return {
+      mode: 'idle',   // 'idle' | 'react' | 'think'
+      seq:  idleSeq,
+      fi:   0,
+      lastT: 0,
+      antFi: 0,  // antennae frame driven separately
+    };
+  }
+
+  const stateA = makeAlienState();
+  const stateB = makeAlienState();
+
+  // Exposed globally so MIDI handlers can trigger them
+  window.alienHit = function(slot) {
+    const st = slot === 'A' ? stateA : stateB;
+    // Don't interrupt think mode
+    if (st.mode === 'think') return;
+    st.mode  = 'react';
+    st.seq   = reactSeq;
+    st.fi    = 0;
+    st.lastT = performance.now();
+  };
+
+  window.alienThink = function(active) {
+    if (active) {
+      stateB.mode  = 'think';
+      stateB.seq   = thinkSeq;
+      stateB.fi    = 0;
+      stateB.lastT = performance.now();
+    } else {
+      stateB.mode = 'idle';
+      stateB.seq  = idleSeq;
+      stateB.fi   = 0;
+      stateB.lastT = performance.now();
+    }
+  };
+
+  function tickState(st, ts) {
+    if (st.lastT === 0) st.lastT = ts;
+    const frame = st.seq[st.fi % st.seq.length];
+    if (ts - st.lastT >= frame.dur) {
+      st.lastT = ts;
+      st.fi++;
+      if (st.fi >= st.seq.length) {
+        if (st.mode === 'think') {
+          // Think loops until alienThink(false)
+          st.fi = 0;
+        } else {
+          // React: return to idle
+          st.mode = 'idle';
+          st.seq  = idleSeq;
+          st.fi   = 0;
+        }
+      }
+    }
+    return st.seq[st.fi % st.seq.length];
+  }
+
+  // ── Canvas setup ──
+  const canvasA = document.getElementById('alienA');
+  const canvasB = document.getElementById('alienB');
+  const ctxA = canvasA.getContext('2d');
+  const ctxB = canvasB.getContext('2d');
+  const CW = canvasA.width, CH = canvasA.height;
+  const GRID_W = 15 * S;
+  const GROUND_Y = CH - 10;
+  const ANT_ROOT_GX = 7, ANT_ROOT_GY = 0;
+  const TAIL_ROOT_GX = 13, TAIL_ROOT_GY = 8;
+
+  // Global antenna frame counter (smooth 12-step loop)
+  let antGlobalFi = 0, antLastT = 0;
+  const ANT_DUR = 180;
+
+  function drawOne(ctx, frame, colorFn, antDots, tailDots) {
+    const {rows, offsetY} = frame;
+    const totalH = rows.length * S;
+    const ox = Math.floor((CW - GRID_W) / 2);
+    const oy = GROUND_Y - totalH - Math.round(offsetY * S / 18);
+
+    rows.forEach((row, ry) => {
+      row.forEach((col, rx) => {
+        const c = colorFn(col);
+        if (!c) return;
+        ctx.fillStyle = c;
+        ctx.fillRect(ox + rx*S, oy + ry*S, S, S);
+      });
+    });
+
+    if (antDots) {
+      antDots.forEach(({dx,dy,c}) => {
+        ctx.fillStyle = c === 'stem' ? '#eeeeee' : '#00cc44';
+        ctx.fillRect(ox+(ANT_ROOT_GX+dx)*S, oy+(ANT_ROOT_GY+dy)*S, S, S);
+      });
+      const ball = antDots.find(d => d.c === 'ball');
+      if (ball) {
+        const cx2 = ox + (ANT_ROOT_GX + ball.dx + 1)*S;
+        const cy2 = oy + (ANT_ROOT_GY + ball.dy + 1)*S;
+        const grad = ctx.createRadialGradient(cx2,cy2,0,cx2,cy2,S*2.2);
+        grad.addColorStop(0,'#00cc4477');
+        grad.addColorStop(1,'#00cc4400');
+        ctx.globalAlpha=0.5;
+        ctx.fillStyle=grad;
+        ctx.beginPath();ctx.arc(cx2,cy2,S*2.2,0,Math.PI*2);ctx.fill();
+        ctx.globalAlpha=1;
+      }
+    }
+
+    if (tailDots) {
+      tailDots.forEach(({dx,dy}) => {
+        ctx.fillStyle = '#ff8800';
+        ctx.fillRect(ox+(TAIL_ROOT_GX+dx)*S, oy+(TAIL_ROOT_GY+dy)*S, S, S);
+      });
+    }
+  }
+
+  function colorOrange(c) {
+    if (!c || c === K) return null;
+    if (c === O) return '#ff8800';
+    if (c === B) return '#2266ff';
+    return null;
+  }
+  function colorGreen(c) {
+    if (!c) return null;
+    if (c === K) return '#eeeeee';
+    if (c === O) return '#00cc44';
+    if (c === B) return '#ffdd00';
+    return null;
+  }
+
+  // ── Connection state (toggled from outside) ──
+  const connected = { A: false, B: false };
+  window.alienSetConnected = function(slot, val) { connected[slot] = val; };
+
+  // ── Wobbly blob (disconnected state) ──
+  // Each canvas has its own blob phase so they wobble independently
+  const blobPhase = { A: 0, B: Math.PI * 0.7 };
+  const BLOB_COLOR = { A: '#ff8800', B: '#00cc44' };
+
+  function drawBlob(ctx, slot, ts) {
+    const cx = CW / 2, cy = CH * 0.72;
+    const t = ts * 0.0018 + blobPhase[slot];
+    const color = BLOB_COLOR[slot];
+    const DS = S; // same dot size as alien (8px)
+
+    // Grid in dot units — coarse scan
+    const rx0 = 8, ry0 = 2; // in dot units
+    for (let gy = -ry0 - 2; gy <= ry0 + 2; gy++) {
+      for (let gx = -rx0 - 2; gx <= rx0 + 2; gx++) {
+        const angle = Math.atan2(gy, gx);
+        const noise = 1
+          + Math.sin(t * 1.3 + angle * 2.3) * 0.25
+          + Math.sin(t * 2.7 + angle * 1.1) * 0.14
+          + Math.sin(t * 0.9 + angle * 3.7) * 0.09;
+        const rx = rx0 * noise;
+        const ry = ry0 * noise;
+        if ((gx/rx)*(gx/rx) + (gy/ry)*(gy/ry) <= 1) {
+          ctx.fillStyle = color;
+          ctx.fillRect(
+            Math.round(cx + gx * DS - DS/2),
+            Math.round(cy + gy * DS - DS/2),
+            DS, DS
+          );
+        }
+      }
+    }
+  }
+
+  function renderAliens(ts) {
+    // Advance shared antenna counter
+    if (ts - antLastT >= ANT_DUR) { antLastT=ts; antGlobalFi=(antGlobalFi+1)%antFrames.length; }
+
+    ctxA.clearRect(0,0,CW,CH);
+    ctxB.clearRect(0,0,CW,CH);
+
+    if (connected.A) {
+      const frameA = tickState(stateA, ts);
+      const tailFi = stateA.fi % tailFrames.length;
+      drawOne(ctxA, frameA, colorOrange, null, tailFrames[tailFi]);
+    } else {
+      drawBlob(ctxA, 'A', ts);
+    }
+
+    if (connected.B) {
+      const frameB = tickState(stateB, ts);
+      drawOne(ctxB, frameB, colorGreen, antFrames[antGlobalFi], null);
+    } else {
+      drawBlob(ctxB, 'B', ts);
+    }
+
+    requestAnimationFrame(renderAliens);
+  }
+  requestAnimationFrame(renderAliens);
+})();
+
+</script>
+
+<script type="module">
+import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/ort.webgpu.min.mjs";
+ort.env.wasm.numThreads = navigator.hardwareConcurrency ? Math.min(4, navigator.hardwareConcurrency) : 2;
+ort.env.webgpu.powerPreference = 'high-performance';
+
+const $ = id => document.getElementById(id);
+
+// ── 設定 (localStorage に覚える) ──────────────────────────────
+const LS = 'ponkey_jam_v01';
+const DEF = { style:'lo-fi hip hop', cfgNotes:2.4, cfgStyle:1.6, temp:1.1, hold:1.5, lead:0.5, vol:0.8, solo:false, drumless:false, devSound:true };
+const P = Object.assign({}, DEF);
+try { Object.assign(P, JSON.parse(localStorage.getItem(LS) || '{}')); } catch(e) {}
+const save = () => { try { localStorage.setItem(LS, JSON.stringify(P)); } catch(e) {} };
+
+// ── 画面の小物 ───────────────────────────────────────────────
+function log(msg, type='') {
+  const el = $('log'); const line = document.createElement('span');
+  line.className = 'log-line ' + type;
+  const d = new Date();
+  line.textContent = `[${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}] ${msg}`;
+  el.appendChild(line); el.appendChild(document.createElement('br'));
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 160) el.removeChild(el.firstChild);
+}
+function showError(msg) { const el = $('errorBanner'); el.textContent = '⚠ ' + msg; el.classList.add('show'); }
+function clearError() { $('errorBanner').classList.remove('show'); }
+function status(msg, warn=false) { const el = $('status'); el.textContent = msg; el.classList.toggle('warn', warn); }
+function prog(frac) { $('prog').classList.toggle('show', frac != null); if (frac != null) $('bar').style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(1) + '%'; }
+['Settings','Log'].forEach(k => $('hdr'+k).onclick = () => { const b = $('body'+k); $('hdr'+k).classList.toggle('open', b.classList.toggle('open')); });
+$('btnCopy').onclick = e => {
+  e.stopPropagation();
+  const text = Array.from($('log').querySelectorAll('.log-line')).map(l => l.textContent).join('\n');
+  navigator.clipboard.writeText(text).then(() => { e.target.textContent = 'Copied!'; setTimeout(() => e.target.textContent = 'Copy', 1500); }).catch(() => {});
+};
+
+// ── パートと音高 (表の正本は ponkey.js の Ponkey.PARTS) ─────────
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const midiName = m => NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
+const MEL_PARTS = Ponkey.PARTS.filter(p => p.table);
+const CH2PART = {};
+MEL_PARTS.forEach(p => { CH2PART[p.ch] = p; CH2PART[p.chL2] = p; });
+let curPart = MEL_PARTS[0];                          // 画面の盤面が弾くパート = 本体で最後に弾いたパート
+const tableOf = part => part.table.map(n => n + part.shift);
+function noteToKey(midi, part) {                     // 本体の実音高 → 鍵番号 (DUET と同じく折り返して最寄り)
+  const t = tableOf(part), lo = Math.min(...t), hi = Math.max(...t);
+  let p = midi; while (p > hi) p -= 12; while (p < lo) p += 12;
+  let best = 0, bd = 999; t.forEach((n, i) => { const d = Math.abs(n - p); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+
+// ── 押している音 = AI への指示 ─────────────────────────────────
+// held: いま押している (音高 → 押している指の数) / tail: 離した音を P.hold 秒だけ残す (音高 → 消える時刻)
+// PONKEY の鍵は叩くと一瞬で離れるので、残さないと AI が拾う前に消えてしまう。
+const held = new Map(), tail = new Map(), keyOf = new Map();   // keyOf: 音高 → 左の盤面の鍵
+function noteOn(pitch, key) {
+  held.set(pitch, (held.get(pitch) || 0) + 1); tail.delete(pitch);
+  if (key != null) keyOf.set(pitch, key);
+  if (window.alienHit) alienHit('A');
+}
+function noteOff(pitch) {
+  const n = (held.get(pitch) || 0) - 1;
+  if (n > 0) { held.set(pitch, n); return; }
+  held.delete(pitch);
+  if (P.hold > 0) tail.set(pitch, performance.now() + P.hold * 1000);
+}
+function activeNotes() {
+  const now = performance.now(), s = new Set(held.keys());
+  for (const [p, t] of tail) { if (t > now) s.add(p); else tail.delete(p); }
+  return s;
+}
+
+// ── 盤面 ──────────────────────────────────────────────────────
+function initGrids() {
+  ['gridA','gridB'].forEach(id => {
+    const el = $(id); el.innerHTML = '';
+    for (let i = 0; i < 16; i++) { const c = document.createElement('div'); c.className = 'key-cell'; c.id = id + '_' + i; el.appendChild(c); }
+  });
+  // 鍵番号 0 = 左下 (本体と同じ並び: 下の段から 0-3, 4-7 …)
+  const cellOfKey = k => $('gridA_' + ((3 - Math.floor(k / 4)) * 4 + (k % 4)));
+  window._cellA = cellOfKey;
+  for (let k = 0; k < 16; k++) {
+    const c = cellOfKey(k); const ptr = new Set();
+    c.addEventListener('pointerdown', e => {
+      e.preventDefault(); try { c.setPointerCapture(e.pointerId); } catch(_) {}
+      const pitch = tableOf(curPart)[k]; ptr.add(e.pointerId); c._pitch = pitch; noteOn(pitch, k);
+    });
+    const up = e => { if (!ptr.delete(e.pointerId)) return; noteOff(c._pitch); };
+    c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+  }
+}
+function renderA() {
+  const act = activeNotes(), lit = new Map();
+  for (const p of act) {
+    const k = keyOf.has(p) ? keyOf.get(p) : noteToKey(p, curPart);
+    const prev = lit.get(k); if (!prev || held.has(p)) lit.set(k, { p, hard: held.has(p) });
+  }
+  for (let k = 0; k < 16; k++) {
+    const c = window._cellA(k), L = lit.get(k);
+    c.classList.toggle('lit', !!(L && L.hard)); c.classList.toggle('tail', !!(L && !L.hard));
+    c.textContent = L ? midiName(L.p) : '';
+  }
+}
+
+// ── PONKEY ────────────────────────────────────────────────────
+let pk = null, drumKit = 0;
+const CC_STATE_SYNC = 0x51, CC_SAM_MUTE = 0x55, CC_VOICE = 0x30;
+function setBtnA(on) { const b = $('btnA'); b.className = 'btn-connect' + (on ? ' connected' : ''); b.textContent = on ? 'Disconnect' : 'Connect'; }
+async function connectA() {
+  const b = $('btnA'); b.disabled = true;
+  if (pk) { const p = pk; pk = null; try { if (!P.devSound) await p.sendCC(CC_SAM_MUTE, 0); } catch(e) {} try { p.disconnect(); } catch(e) {} onDisc(); b.disabled = false; return; }
+  try {
+    log('Scanning…', 'info');
+    const p = new Ponkey();
+    p.on('disconnect', () => { if (pk === p) { pk = null; onDisc(); log('PONKEY disconnected', 'err'); } });
+    p.on('note', onDevNote);
+    p.on('cc', e => { if (e.cc === CC_VOICE && ((e.val >> 4) & 0x0F) === 0) drumKit = e.val & 7; });
+    await p.connect({ debug:false });
+    pk = p; setBtnA(true); if (window.alienSetConnected) alienSetConnected('A', true);
+    log(`"${p.device.name || 'PONKEY'}" connected`, 'ok');
+    setTimeout(async () => {
+      try { await p.sendCC(CC_STATE_SYNC, 127); if (!P.devSound) await p.sendCC(CC_SAM_MUTE, 127); } catch(e) { log('init err: ' + e.message, 'err'); }
+    }, 300);
+  } catch(e) { log('Connect failed: ' + e.message, 'err'); }
+  b.disabled = false;
+}
+function onDisc() { setBtnA(false); if (window.alienSetConnected) alienSetConnected('A', false); held.clear(); }
+function onDevNote(e) {
+  if (e.ch === Ponkey.DRUM_CH) {               // ドラムは AI への指示にしない (MRT2 のドラム条件は「あり/なし」だけ)
+    if (!e.on) return;
+    const k = Ponkey.keyFromNote(Ponkey.DRUM_CH, e.note, drumKit); if (k == null) return;
+    const c = window._cellA(k); c.style.background = Ponkey.KIT_COL_RGB[k % 4] + 'b0'; setTimeout(() => c.style.background = '', 140);
+    if (window.alienHit) alienHit('A');
+    return;
+  }
+  const part = CH2PART[e.ch]; if (!part) return;
+  curPart = part;
+  if (e.on) noteOn(e.note, noteToKey(e.note, part)); else noteOff(e.note);
+}
+$('btnA').onclick = connectA;
+
+// ══════════════════════ Magenta RealTime 2 (ONNX / WebGPU) ══════════════════════
+const BASE = 'https://huggingface.co/magenta-community/magenta-rt-onnx-small/resolve/main';
+// 生成の形は3つ (?mode= で切り替え。既定は MODE_DEFAULT):
+//  'q4'    = temporal / depth を分けて実行 (depth は 12 段ぶん GPU⇔CPU 往復)。M3 で最速: 生成 38ms/フレーム
+//  'f16'   = 同じ形を fp16 で。M3 では temporal が倍遅かった (生成 51ms)
+//  'fused' = temporal + depth + サンプリングを 1 回の GPU 実行に。M3 では逆に遅かった (生成 57ms)
+const MODE_DEFAULT = 'q4';
+const MODE = (location.search.match(/[?&]mode=(\w+)/) || [])[1] || MODE_DEFAULT;
+const FUSED = MODE === 'fused', F16 = MODE === 'f16';
+const FILES = FUSED ? [
+  { id:'enc',   path:'onnx/encoder.q4.onnx' },
+  { id:'frame', path:'frame_step_gpu.q4.onnx' },
+  { id:'dec',   path:'spectrostream_stream.onnx' },          // 状態つきストリーミングデコーダ (新しいフレームだけ復号)
+  { id:'quant', path:'onnx/quantizer_fp16.bin' },
+] : [
+  { id:'enc',   path:'onnx/encoder.q4.onnx' },
+  { id:'tmp',   path: F16 ? 'temporal_step.q4f16e2e.onnx' : 'onnx/temporal_step.q4.onnx' },
+  { id:'dep',   path: F16 ? 'depth_step.q4f16e2e.onnx'    : 'onnx/depth_step.q4.onnx' },
+  { id:'dec',   path:'spectrostream_stream.onnx' },
+  { id:'emb',   path:'onnx/token_embedding_fp16.bin' },
+  { id:'quant', path:'onnx/quantizer_fp16.bin' },
+];
+const MODEL_CACHE = 'ponkey-mrt2-small-v1';   // ファイルの URL ごとに入る (モードを変えても前のは残る)
+const CHUNK = 10;                                   // 10 フレーム = 0.4 秒ずつ音にする
+
+let cfg = null, presets = {}, DSJ = null, sess = {}, EMB = null;
+let dw = null, dwWait = null, dwRun = 0;               // 音への変換を受け持つ Worker (jam-decoder.js)
+let loaded = false, loading = false, playing = false;
+
+async function fetchBuf(url, onFrac) {
+  let cache = null;
+  try { cache = await caches.open(MODEL_CACHE); const hit = await cache.match(url); if (hit) { onFrac && onFrac(1); return new Uint8Array(await hit.arrayBuffer()); } } catch(e) {}
+  const r = await fetch(url); if (!r.ok) throw new Error(r.status + ' ' + url.split('/').pop());
+  const total = +r.headers.get('content-length') || 0, rd = r.body.getReader(), chunks = []; let got = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; chunks.push(value); got += value.length; if (total && onFrac) onFrac(got / total); }
+  const buf = new Uint8Array(got); let o = 0; for (const c of chunks) { buf.set(c, o); o += c.length; }
+  if (cache) { try { await cache.put(url, new Response(buf)); } catch(e) { log('キャッシュに置けず (容量?): ' + e.message, 'err'); } }
+  return buf;
+}
+function f16(u) { const s = (u & 0x8000) >> 15, e = (u & 0x7c00) >> 10, f = u & 0x03ff;
+  if (e === 0) return (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
+  if (e === 31) return f ? NaN : (s ? -1 : 1) * Infinity;
+  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024); }
+function f16decode(b) { const u = new Uint16Array(b.buffer, b.byteOffset, b.byteLength >> 1), o = new Float32Array(u.length); for (let i = 0; i < u.length; i++) o[i] = f16(u[i]); return o; }
+const i64 = (a, dims) => new ort.Tensor('int64', BigInt64Array.from(a.map(x => BigInt(x))), dims);
+const f32 = (a, dims) => new ort.Tensor('float32', a instanceof Float32Array ? a : Float32Array.from(a), dims);
+const dispose = t => { try { t && t.dispose && t.dispose(); } catch(e) {} };
+function to16(a) {                                 // float32 → fp16 のビット列
+  const o = new Uint16Array(a.length), fb = new Float32Array(1), ib = new Uint32Array(fb.buffer);
+  for (let i = 0; i < a.length; i++) { fb[0] = a[i]; const x = ib[0], sg = (x >>> 16) & 0x8000; let e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
+    if (e <= 0) o[i] = sg; else if (e >= 31) o[i] = sg | 0x7c00; else { m += 0x1000; if (m & 0x800000) { m = 0; e++; } o[i] = sg | (e << 10) | (m >>> 13); } }
+  return o;
+}
+const fhalf = (a, dims) => F16 ? new ort.Tensor('float16', to16(a), dims) : f32(a, dims);
+const emptyKV = (L, nh, d) => fhalf(new Float32Array(0), [L, 1, 0, nh, d]);
+
+async function loadEngine() {
+  if (!navigator.gpu) throw new Error('このブラウザは WebGPU が使えません。Mac / PC の Chrome か Edge で開いてください');
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference:'high-performance' }).catch(() => null);
+  if (!adapter) throw new Error('WebGPU のアダプタが取れません (GPU が無効?)');
+  status('AI を読み込んでいます… (初回は約450MB。2回目からはこの端末に残ります)');
+  prog(0);
+  cfg = cfg || await (await fetch(BASE + '/config.json')).json();
+  DSJ = await (await fetch(BASE + '/stream_state.json')).json();
+  const bufs = {};
+  for (let i = 0; i < FILES.length; i++) {
+    const f = FILES[i], name = f.path.split('/').pop();
+    bufs[f.id] = await fetchBuf(BASE + '/' + f.path, fr => { prog((i + fr) / FILES.length); status(`AI を読み込んでいます… ${name} ${(fr * 100).toFixed(0)}% (${i + 1}/${FILES.length})`); });
+    log('loaded ' + name + ' (' + (bufs[f.id].length / 1048576).toFixed(0) + 'MB)', 'ok');
+  }
+  status('AI を組み立てています…'); prog(1);
+  const HI = { extra: { 'ep.webgpuexecutionprovider.maxPendingDispatches': '100000' } };
+  const o = (extra) => Object.assign({ executionProviders:['webgpu'] }, F16 ? { graphOptimizationLevel:'extended' } : {}, extra || {});
+  sess.enc = await ort.InferenceSession.create(bufs.enc, o());
+  if (FUSED) {
+    sess.frame = await ort.InferenceSession.create(bufs.frame, o({ preferredOutputLocation: { new_self_k:'gpu-buffer', new_self_v:'gpu-buffer', new_cross_k:'gpu-buffer', new_cross_v:'gpu-buffer' } }));
+  } else {
+    sess.tmp = await ort.InferenceSession.create(bufs.tmp, o({ preferredOutputLocation: { new_self_k:'gpu-buffer', new_self_v:'gpu-buffer', new_cross_k:'gpu-buffer', new_cross_v:'gpu-buffer', out:'gpu-buffer' } }));
+    sess.dep = await ort.InferenceSession.create(bufs.dep, o({ preferredOutputLocation: { new_depth_k:'gpu-buffer', new_depth_v:'gpu-buffer' } }));
+  }
+  // 音への変換は Worker へ (別のランタイムなので生成と同時に GPU を使える)
+  dw = new Worker('jam-decoder.js', { type:'module' });
+  dw.onmessage = onDecoder;
+  dw.onerror = e => log('decoder worker: ' + (e.message || 'error'), 'err');
+  await new Promise((res, rej) => { dwWait = { res, rej }; dw.postMessage({ type:'init', dec:bufs.dec.buffer, quant:bufs.quant.buffer, dsj:DSJ }, [bufs.dec.buffer, bufs.quant.buffer]); });
+  sess.HI = HI;
+  if (bufs.emb) EMB = f16decode(bufs.emb);
+  // 準備運転: KV が伸びきるまで回して WebGPU のシェーダを先に作っておく (本番で詰まらないように)
+  reset(); await updateSource(true);
+  const W = cfg.temporal.max_past + 4;
+  for (let w = 0; w < W; w++) { await genFrame(); prog((w + 1) / W); status(`AI の準備運転 ${w + 1}/${W}`); await new Promise(r => setTimeout(r)); }
+  await new Promise((res, rej) => { dwWait = { res, rej }; dw.postMessage({ type:'decode', id:-1, codes:history.slice(-CHUNK) }); });
+  dw.postMessage({ type:'reset' });
+  prog(null);
+  loaded = true;
+}
+
+// ── 条件 (スタイル + 音高 + ドラム + 強さ) → source ─────────────
+// 値の決め方は Magenta RT Jam と同じ: 音高ごと -1 おまかせ / 0 鳴らさない / 3 鳴らす。
+// 強さ (CFG) は discretize_cfg: [-1,7] を step 刻みの段にする。ドラムは 4.0 固定。
+function disc(v, step, max) { const c = Math.max(-1, Math.min(7, v)); return Math.max(0, Math.min(max, Math.round((c + 1) / step))); }
+let source = null, sig = null;
+async function updateSource(force) {
+  const act = activeNotes();
+  const style = presets[P.style] || Object.values(presets)[0] || Array(12).fill(-1);
+  const s = [P.style, [...act].sort((a,b) => a-b).join(','), P.solo, P.drumless, P.cfgNotes, P.cfgStyle].join('|');
+  if (!force && s === sig) return;
+  sig = s;
+  const notes = [];
+  for (let p = 0; p < 128; p++) notes.push(act.has(p) ? 3 : (P.solo ? 0 : -1));
+  const cn = (P.solo && !act.size) ? 7 : P.cfgNotes;            // 「押した音だけ」で何も押していなければ黙らせる (Jam と同じ)
+  const vals = [...style, ...notes, P.drumless ? 0 : -1, disc(P.cfgStyle, .2, 40), disc(cn, .2, 40), disc(4, 1, 8)]
+    .map(v => v + cfg.conditioning.cond_offset);
+  let { source: src } = await sess.enc.run({ cond: i64(vals, [1, 1, vals.length]) });
+  if (F16) { const d = src.data ?? await src.getData(); const s16 = new ort.Tensor('float16', to16(d), src.dims); dispose(src); src = s16; }  // エンコーダは fp32
+  dispose(source); source = src;
+}
+
+// ── 1 フレーム (40ms) ずつ作る ────────────────────────────────
+let KV = null, prev = null, history = [];
+const TM = { tmp:0, dep:0, dec:0, n:0, c:0 };       // 1 フレームあたりの時間 (Debug Log に出す)
+function reset() {
+  const t = cfg.temporal;
+  [KV && KV.sk, KV && KV.sv, KV && KV.ck, KV && KV.cv, prev].forEach(dispose);
+  KV = { sk:emptyKV(t.num_layers, t.num_heads, t.dim_per_head), sv:emptyKV(t.num_layers, t.num_heads, t.dim_per_head),
+         ck:emptyKV(t.num_layers, t.num_heads, t.dim_per_head), cv:emptyKV(t.num_layers, t.num_heads, t.dim_per_head) };
+  prev = i64(Array(cfg.num_codebooks).fill(0), [1, 1, cfg.num_codebooks]); history = [];
+  if (dw) dw.postMessage({ type:'reset' });
+}
+function sampleTopk(d, lo, hi, temp, topk) {
+  const idx = []; for (let i = lo; i < hi; i++) idx.push(i); idx.sort((a, b) => d[b] - d[a]);
+  let best = lo, bv = -1e9;
+  for (let j = 0; j < Math.min(topk, idx.length); j++) { const g = -Math.log(-Math.log(Math.random() + 1e-10)); const v = d[idx[j]] + g * temp; if (v > bv) { bv = v; best = idx[j]; } }
+  return best;
+}
+function gatherEmb(tok) {                           // depth_step は埋め込みを sqrt(model_dims) 倍した値で受ける
+  const d = cfg.model_dims, sc = Math.sqrt(d), e = EMB.subarray(tok * d, (tok + 1) * d), o = new Float32Array(d);
+  for (let i = 0; i < d; i++) o[i] = e[i] * sc; return fhalf(o, [1, 1, d]);
+}
+async function genFrame() { return FUSED ? genFrameFused() : genFrameSplit(); }
+async function genFrameFused() {                    // 1 フレームを 1 回の GPU 実行で (サンプリングも GPU 上。乱数だけ渡す)
+  const Q = cfg.num_codebooks, CB = cfg.codebook_size, NR = cfg.num_reserved_tokens;
+  const t0 = performance.now();
+  const noise = new Float32Array(Q * CB); for (let i = 0; i < noise.length; i++) noise[i] = Math.random();
+  const r = await sess.frame.run({ prev, self_k:KV.sk, self_v:KV.sv, cross_k:KV.ck, cross_v:KV.cv, source,
+                                   temperature: f32([P.temp], []), noise: f32(noise, [Q, 1, 1, CB]) }, sess.HI);
+  const c = r.codes.data ?? await r.codes.getData();
+  [KV.sk, KV.sv, KV.ck, KV.cv, prev].forEach(dispose);
+  KV = { sk:r.new_self_k, sv:r.new_self_v, ck:r.new_cross_k, cv:r.new_cross_v };
+  const abs = Array.from(c, Number); prev = i64(abs, [1, 1, Q]); dispose(r.codes);
+  TM.tmp += performance.now() - t0; TM.n++;
+  const codes = abs.map(x => (x - NR) % CB);
+  history.push(codes); if (history.length > 64) history.shift();
+  return codes;
+}
+async function genFrameSplit() {
+  const dc = cfg.depth, NR = cfg.num_reserved_tokens, CB = cfg.codebook_size;
+  const t0 = performance.now();
+  const r = await sess.tmp.run({ prev, self_k:KV.sk, self_v:KV.sv, cross_k:KV.ck, cross_v:KV.cv, source }, sess.HI);
+  const t1 = performance.now();
+  [KV.sk, KV.sv, KV.ck, KV.cv, prev].forEach(dispose);
+  KV = { sk:r.new_self_k, sv:r.new_self_v, ck:r.new_cross_k, cv:r.new_cross_v };
+  let dk = emptyKV(dc.num_layers, dc.num_heads, dc.dim_per_head), dv = emptyKV(dc.num_layers, dc.num_heads, dc.dim_per_head);
+  let di = r.out; const toks = [], codes = [];
+  for (let q = 0; q < cfg.num_codebooks; q++) {
+    const dr = await sess.dep.run({ depth_input:di, depth_k:dk, depth_v:dv }, sess.HI);
+    dispose(dk); dispose(dv); if (di !== r.out) dispose(di);
+    dk = dr.new_depth_k; dv = dr.new_depth_v;
+    const ld = F16 ? f16decode(dr.logits.data) : dr.logits.data; dispose(dr.logits);
+    const lo = NR + q * CB, tok = sampleTopk(ld, lo, lo + CB, P.temp, 40);
+    toks.push(tok); codes.push((tok - NR) % CB); di = gatherEmb(tok);
+  }
+  dispose(di); dispose(dk); dispose(dv); dispose(r.out);
+  prev = i64(toks, [1, 1, cfg.num_codebooks]);
+  const t2 = performance.now(); TM.tmp += t1 - t0; TM.dep += t2 - t1; TM.n++;
+  history.push(codes); if (history.length > 64) history.shift();
+  return codes;
+}
+// Worker からの返事。id = (回のばんごう << 16) | チャンク番号。止めて弾き直した後に届いた前の回の音は捨てる
+let inflight = 0;
+function onDecoder(e) {
+  const m = e.data;
+  if (m.type === 'ready') { dwWait && dwWait.res(); dwWait = null; return; }
+  if (m.type === 'error') { log('decode: ' + m.message, 'err'); if (dwWait) { dwWait.rej(new Error(m.message)); dwWait = null; } return; }
+  if (m.type !== 'pcm') return;
+  if (m.id === -1) { dwWait && dwWait.res(); dwWait = null; return; }   // 準備運転
+  inflight = Math.max(0, inflight - 1);
+  TM.dec += m.ms; TM.c++;
+  if ((m.id >> 16) !== dwRun || !playing) return;
+  const chunk = m.id & 0xffff, n = m.pcm.length / 2;
+  playSamples(m.pcm, chunk === 0 ? 1920 : 0, n);                     // 最初のチャンクの頭 1 フレームは立ち上がりなので捨てる
+}
+
+// ── 音を出す ─────────────────────────────────────────────────
+let actx = null, gain = null, analyser = null, freq = null, nextT = 0, underruns = 0;
+function ensureAudio() {
+  if (actx) return;
+  actx = new AudioContext({ sampleRate:48000 });
+  gain = actx.createGain(); gain.gain.value = P.vol;
+  analyser = actx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.6;
+  freq = new Uint8Array(analyser.frequencyBinCount);
+  gain.connect(analyser); analyser.connect(actx.destination);
+}
+function playSamples(d, start, end) {
+  const n = end - start; if (n < 1) return;
+  const buf = actx.createBuffer(2, n, 48000), L = buf.getChannelData(0), R = buf.getChannelData(1);
+  for (let i = 0; i < n; i++) { L[i] = d[(start + i) * 2]; R[i] = d[(start + i) * 2 + 1]; }
+  const s = actx.createBufferSource(); s.buffer = buf; s.connect(gain);
+  if (nextT < actx.currentTime + 0.02) { if (nextT > 0) underruns++; nextT = actx.currentTime + 0.1; }
+  s.start(nextT); nextT += n / 48000;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function audioLoop() {
+  dwRun = (dwRun + 1) & 0x7fff; inflight = 0;
+  reset(); sig = null; await updateSource(true);
+  nextT = 0; underruns = 0;
+  let chunk = 0, frames = 0, lastLog = 0; const t0 = performance.now();
+  while (playing) {
+    // 先読みしすぎない: 溜めすぎると押した音への反応が遅れる。変換待ちも 2 つまで
+    while (playing && (nextT - actx.currentTime > P.lead || inflight >= 2)) await sleep(10);
+    if (!playing) break;
+    const nf = [];
+    for (let i = 0; i < CHUNK && playing; i++) { await updateSource(false); nf.push(await genFrame()); frames++; }
+    if (nf.length < CHUNK) break;
+    inflight++; dw.postMessage({ type:'decode', id:(dwRun << 16) | (chunk++ & 0xffff), codes:nf });
+    const rt = (frames / cfg.frames_per_second) / ((performance.now() - t0) / 1000);
+    if (performance.now() - lastLog > 1000) {
+      lastLog = performance.now();
+      if (TM.n && TM.c) { log(`1フレーム: temporal ${(TM.tmp / TM.n).toFixed(1)} + depth ${(TM.dep / TM.n).toFixed(1)}ms / decode ${(TM.dec / TM.c / CHUNK).toFixed(1)}ms (別スレッド) — 40ms 以内なら間に合う`); Object.assign(TM, { tmp:0, dep:0, dec:0, n:0, c:0 }); }
+      const slow = rt < 0.97 && frames > 50;
+      status(slow ? `この端末では生成が追いつきません (${rt.toFixed(2)}× リアルタイム) — 音が途切れます`
+                  : `AI が弾いています · ${rt.toFixed(2)}× リアルタイム` + (underruns ? ` · 途切れ ${underruns}` : ''), slow);
+    }
+  }
+}
+
+async function toggleAI() {
+  const b = $('btnAI');
+  if (loading) return;
+  clearError();
+  ensureAudio(); await actx.resume();
+  if (playing) { playing = false; await sleep(30); try { await actx.suspend(); } catch(e) {} setAIBtn(); status('AI はおやすみ中 (AI ▶ でつづき)'); if (window.alienSetConnected) alienSetConnected('B', false); return; }
+  if (!loaded) {
+    loading = true; b.disabled = true; setAIBtn();
+    if (window.alienSetConnected) alienSetConnected('B', true); if (window.alienThink) alienThink(true);
+    try { await loadEngine(); log('MRT2 ready (small · WebGPU · ' + MODE + ')', 'ok'); }
+    catch(e) { loading = false; b.disabled = false; prog(null); if (window.alienThink) alienThink(false); if (window.alienSetConnected) alienSetConnected('B', false);
+               showError('AI を読み込めませんでした: ' + e.message); status(''); log('load failed: ' + e.message, 'err'); setAIBtn(); return; }
+    loading = false; b.disabled = false; if (window.alienThink) alienThink(false);
+  }
+  playing = true; setAIBtn(); if (window.alienSetConnected) alienSetConnected('B', true);
+  status('AI が弾きはじめます…');
+  audioLoop().catch(e => { playing = false; setAIBtn(); showError('生成が止まりました: ' + e.message); log('loop: ' + e.message, 'err'); });
+}
+function setAIBtn() {
+  const b = $('btnAI');
+  b.className = 'btn-connect ai' + (playing ? ' connected active' : '');
+  b.textContent = loading ? '読み込み中…' : playing ? 'AI ■' : 'AI ▶';
+}
+$('btnAI').onclick = toggleAI;
+
+// ── 右の盤面 = AI の音を 16 帯域に割って光らせる (左下 = 低音 / 右上 = 高音) ──
+const BAND_EDGES = (() => { const e = []; for (let i = 0; i <= 16; i++) e.push(60 * Math.pow(12000 / 60, i / 16)); return e; })();
+let lvAvg = 0, lastHit = 0;
+function renderB() {
+  const cells = []; for (let k = 0; k < 16; k++) cells.push($('gridB_' + ((3 - Math.floor(k / 4)) * 4 + (k % 4))));
+  if (!analyser || !playing) { cells.forEach(c => c.style.background = ''); return; }
+  analyser.getByteFrequencyData(freq);
+  const hz = 48000 / analyser.fftSize; let tot = 0;
+  for (let b = 0; b < 16; b++) {
+    const i0 = Math.max(1, Math.floor(BAND_EDGES[b] / hz)), i1 = Math.max(i0 + 1, Math.ceil(BAND_EDGES[b + 1] / hz));
+    let m = 0; for (let i = i0; i < i1 && i < freq.length; i++) m = Math.max(m, freq[i]);
+    const v = Math.max(0, (m - 90) / 150); tot += v;
+    cells[b].style.background = `rgba(255,221,0,${(0.04 + v * 0.66).toFixed(3)})`;
+  }
+  // 音の立ち上がりで右のエイリアンを跳ねさせる
+  const lv = tot / 16, now = performance.now();
+  if (lv > lvAvg * 1.35 + 0.03 && now - lastHit > 260) { lastHit = now; if (window.alienHit) alienHit('B'); }
+  lvAvg = lvAvg * 0.92 + lv * 0.08;
+}
+function tick() { renderA(); renderB(); requestAnimationFrame(tick); }
+
+// ── スタイル ─────────────────────────────────────────────────
+const STYLE_JA = { 'disco funk':'ディスコ', 'lo-fi hip hop':'ローファイ', 'ambient pads':'アンビエント', 'drum and bass':'ドラムンベース',
+  'jazz piano trio':'ジャズトリオ', 'techno':'テクノ', 'cinematic strings':'ストリングス', 'synthwave':'シンセウェイブ',
+  'afrobeat':'アフロビート', 'bossa nova':'ボサノバ', 'heavy metal':'メタル', 'gospel choir':'ゴスペル' };
+function renderChips() {
+  const el = $('chips'); el.innerHTML = '';
+  if (!presets[P.style]) P.style = Object.keys(presets)[0];
+  Object.keys(presets).forEach(name => {
+    const b = document.createElement('button'); b.className = 'chip' + (name === P.style ? ' on' : '');
+    b.textContent = STYLE_JA[name] || name; b.title = name;
+    b.onclick = () => { P.style = name; save(); renderChips(); log('style → ' + name, 'info'); };
+    el.appendChild(b);
+  });
+  $('styleName').textContent = P.style || '';
+}
+
+// ── 設定 ─────────────────────────────────────────────────────
+function bindRange(id, key, fmt) {
+  const s = $('s' + id), v = $('v' + id); s.value = P[key]; v.textContent = fmt(P[key]);
+  s.oninput = () => { P[key] = parseFloat(s.value); v.textContent = fmt(P[key]); save(); if (key === 'vol' && gain) gain.gain.value = P.vol; };
+}
+bindRange('Notes', 'cfgNotes', x => x.toFixed(1));
+bindRange('Style', 'cfgStyle', x => x.toFixed(1));
+bindRange('Temp',  'temp',     x => x.toFixed(2));
+bindRange('Hold',  'hold',     x => x.toFixed(2) + 's');
+bindRange('Lead',  'lead',     x => x.toFixed(1) + 's');
+bindRange('Vol',   'vol',      x => Math.round(x * 100) + '');
+function bindTog(id, key, after) {
+  const b = $(id), draw = () => { b.classList.toggle('on', !!P[key]); b.textContent = P[key] ? 'ON' : 'OFF'; };
+  draw(); b.onclick = () => { P[key] = !P[key]; save(); draw(); after && after(); };
+}
+bindTog('tSolo', 'solo');
+bindTog('tDrum', 'drumless');
+bindTog('tDev', 'devSound', () => { if (pk) pk.sendCC(CC_SAM_MUTE, P.devSound ? 0 : 127).catch(() => {}); });
+
+// ── 起動 ─────────────────────────────────────────────────────
+initGrids();
+requestAnimationFrame(tick);
+if (!navigator.gpu) status('このブラウザは WebGPU が使えません — Mac / PC の Chrome か Edge で開いてください', true);
+(async () => {
+  try {
+    [cfg, presets] = await Promise.all([fetch(BASE + '/config.json').then(r => r.json()), fetch(BASE + '/presets.json').then(r => r.json())]);
+    renderChips();
+    // 2回目以降はモデルが端末に残っているか先に見る
+    try { const c = await caches.open(MODEL_CACHE); const hits = await Promise.all(FILES.map(f => c.match(BASE + '/' + f.path)));
+          if (hits.every(Boolean) && navigator.gpu) status('AI ▶ で弾きはじめます (モデルはこの端末に読み込み済み)'); else if (navigator.gpu) status('AI ▶ で読み込んで弾きはじめます (初回は約450MB)'); } catch(e) {}
+  } catch(e) { showError('スタイル一覧を読めませんでした (ネットにつながっていますか?): ' + e.message); }
+})();
+window.addEventListener('beforeunload', () => { if (pk && !P.devSound) { try { pk.sendCC(CC_SAM_MUTE, 0); } catch(e) {} } });
+</script>
+</body>
+</html>
