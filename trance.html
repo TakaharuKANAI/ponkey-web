@@ -1373,6 +1373,25 @@ function legacyBuildP1(ln) {
   ln.table = null;
   ln.stepMap = ln.map.map(n => keyOf.get(n) ?? LEGACY_P1_KEYS[0]);
 }
+// 本体が鳴らした打楽器が、アプリの覚えているキットでは曲の音程に当たらないときの逆引き。
+//   ファーム (PT2 v4.6.39 / PT3 v5.0.07) はクイックページでプリセットを変えるとキットも切り替えるのに、
+//   P1 のキット番号 (CC_VOICE_SELECT の part0) だけ通知しない。接続中に変えられると slot.kit が古いまま
+//   になり、ch1 が1音も出なくなっていた (2026-11-21、PONKEY2 が SPACE なのに TOY のつもりで引いていた)。
+//   8キット全部で引いて「曲の音程が付いたキー」が1つに決まればそれを使い、キットも1つに決まれば合わせる
+function legacyGuessP1Key(slot, ln, note) {
+  const keys = new Set(), kits = [];
+  KIT_NOTES.forEach((kit, ki) => {
+    const k = kit.indexOf(note);
+    if (k >= 0 && ln.keyPitch[k] != null) { keys.add(k); kits.push(ki); }
+  });
+  if (keys.size !== 1) return -1;
+  if (kits.length === 1 && kits[0] !== (slot.kit & 7)) {
+    log("warn", `S${slot.id}: 本体のドラムキットが ${KIT_NAMES[slot.kit & 7]} のつもりでしたが ${KIT_NAMES[kits[0]]} だったので合わせました (本体のプリセット切替はキットを知らせてこないため)`);
+    slot.kit = kits[0];
+    refreshSlotUI(slot);
+  }
+  return [...keys][0];
+}
 // レーンの音階表と STEP の表を作る: 出てくる音を低い順に左下から並べ、ステップ → その音のキー
 function legacyBuildLane(ln) {
   const pitches = [...new Set(ln.map)].sort((a, b) => a - b);
@@ -3340,7 +3359,11 @@ function processMidiEvent(slot, ts13, status, d1, d2in) {
   if (isOn && channel === DRUM_CH && lgP1) {
     // 0615 の ch1: 本体 P1 が鳴らした打楽器 → 割り当てた音程 (当時と同じく ch1、85% ゲート)
     kitKey = identifyKitKey(slot, d1);
-    const n = kitKey >= 0 ? lgP1.keyPitch[kitKey] : null;
+    let n = kitKey >= 0 ? lgP1.keyPitch[kitKey] : null;
+    if (n == null) {                                   // アプリの覚えているキットが本体と違う (下の legacyGuessP1Key)
+      const g = legacyGuessP1Key(slot, lgP1, d1);
+      if (g >= 0) { kitKey = g; n = lgP1.keyPitch[g]; }
+    }
     if (n != null) { d2 = legacyLaneVel(lgP1, n); melodyOverride = { kitKey, melodyNote: n, ch: 0, legacy: true }; }
   } else if (isOn && channel === DRUM_CH) {
     kitKey = identifyKitKey(slot, d1);
