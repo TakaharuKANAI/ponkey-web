@@ -73,7 +73,7 @@
 <header>
   <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
   <h1>DRAWING</h1>
-  <span class="hint" title="アプリの版 (直したのに変わらないときは、ここが新しい日付になっているかを見る)">2026-10-27a</span>
+  <span class="hint" title="アプリの版 (直したのに変わらないときは、ここが新しい日付になっているかを見る)">2026-11-25a</span>
   <button class="primary" id="btnConnect">接続</button>
   <span id="conn" class="pill ng">未接続</span>
   <span class="sep"></span>
@@ -85,7 +85,7 @@
   <button id="btnFade" title="描いた線が少しずつ消えていく (本体の LED は音が消えると自動で消える)">消えていく</button>
   <button id="btnClear">クリア</button>
   <button id="btnSave">PNG</button>
-  <span class="hint how">なぞる=叩く+鳴る ・ マス=16鍵 ・ 色=P1〜P7 (キー1〜7) = 音色</span>
+  <span class="hint how">なぞる=叩く+鳴る ・ マス=16鍵 ・ 色=P1〜P7 (キー1〜7) = 音色 ・ A〜K=白鍵 / W E T Y U=黒鍵</span>
 </header>
 <div id="stage">
 <div id="board">
@@ -236,12 +236,13 @@ function setupSound(){
   applyVoice();
 }
 // マスに入った: 押えているポインタ数を数え、最初の1本で鳴らす。音が無くても数える (LED の消し時に使う)
-function pressCell(k,vel){
+// note = 鳴らす音高 (省略時はマスのペンタ音。キーボード演奏は半音階で直接渡す)
+function pressCell(k,vel,note=cellNote(k)){
   if(!(k>=0&&k<=15))return;
   if(releaseTimer[k]){clearTimeout(releaseTimer[k]);releaseTimer[k]=null;}
   if(holdCount[k]===0&&sound){
     if(playing[k]>=0)writeMIDI(0x80|LIVE_CH,playing[k],0);   // 前の尾が残っていたら打ち直す
-    playing[k]=cellNote(k)+PARTS[part].oct;
+    playing[k]=note+PARTS[part].oct;
     writeMIDI(0x90|LIVE_CH,playing[k],vel);
   }
   holdCount[k]++;
@@ -319,6 +320,11 @@ function frame(now){
                        gctx.beginPath();gctx.moveTo(0,i*H/4+.5);gctx.lineTo(W,i*H/4+.5);gctx.stroke();}
   gctx.font='500 10px Inter,sans-serif'; gctx.fillStyle='rgba(255,255,255,.14)';
   for(let k=0;k<16;k++){const r=cellRect(k);gctx.fillText(String(k+1),r.x+7,r.y+15);}
+  gctx.textAlign='right';                                   // キーボードの割り当て (右下)
+  for(const [code,m] of Object.entries(KB_MAP)){const r=cellRect(m.cell);
+    gctx.fillStyle=kbHeld.has(code)?'rgba(255,255,255,.55)':'rgba(255,255,255,.14)';
+    gctx.fillText(code.slice(3)+(m.black?' ♯':''),r.x+r.w-7,r.y+r.h-8);}
+  gctx.textAlign='left';
   const p=PARTS[part];
   for(let k=0;k<16;k++){
     const a=1-(now-flash[k])/FLASH_MS; if(a<=0)continue;
@@ -356,6 +362,31 @@ board.addEventListener('pointermove',e=>{
 const up=e=>{const s=pointers.get(e.pointerId);if(!s)return;releaseCell(s.cell,Math.min(300,PARTS[part].hold));pointers.delete(e.pointerId);};
 board.addEventListener('pointerup',up); board.addEventListener('pointercancel',up); board.addEventListener('pointerleave',up);
 
+// ── キーボード演奏 (PC の鍵盤をピアノに見立てる)
+//   A S D F G H J K = 白鍵 C D E F G A B C / W E T Y U = 黒鍵 C# D# F# G# A#  (音は C3 起点の半音階 + パートの oct)
+//   叩くマスは「低い音ほど左下」のはしご (なぞるときのペンタと同じ並び): 白鍵 8 つ = 下2段、黒鍵 5 つ = その上。
+//   押している間は鳴りっぱなし、「連打」ON なら REPEAT_MS ごとに鍵を叩き続ける。
+//   e.code で見るので、日本語入力が ON でも・配列が違っても位置で効く。
+const KB_KEYS=[['KeyA',0],['KeyS',2],['KeyD',4],['KeyF',5],['KeyG',7],['KeyH',9],['KeyJ',11],['KeyK',12],   // 白鍵
+               ['KeyW',1],['KeyE',3],['KeyT',6],['KeyY',8],['KeyU',10]];                                       // 黒鍵
+const KB_MAP={};
+KB_KEYS.forEach(([code,semi],idx)=>{KB_MAP[code]={semi,black:idx>=8,cell:(3-Math.floor(idx/4))*4+idx%4};});
+const kbHeld=new Map();   // code → 連打タイマ
+function kbDown(code){
+  const m=KB_MAP[code]; if(!m||kbHeld.has(code))return;
+  const k=m.cell;
+  splash(k); fire(k); pressCell(k,80,NOTE_BASE+m.semi);
+  kbHeld.set(code,repeat?setInterval(()=>fire(k),REPEAT_MS):null);
+}
+function kbUp(code){
+  if(!kbHeld.has(code))return;
+  const t=kbHeld.get(code); if(t)clearInterval(t);
+  kbHeld.delete(code);
+  releaseCell(KB_MAP[code].cell,Math.min(300,PARTS[part].hold));
+}
+addEventListener('keyup',e=>kbUp(e.code));
+addEventListener('blur',()=>{for(const c of [...kbHeld.keys()])kbUp(c);});   // 押したままフォーカスが外れても鳴りっぱなしにしない
+
 // ── UI
 const pal=document.getElementById('pal');
 PARTS.forEach((p,i)=>{const d=document.createElement('div');d.className='sw'+(i===part?' on':'');
@@ -374,6 +405,8 @@ document.getElementById('btnSave').onclick=()=>{
 };
 addEventListener('keydown',e=>{
   if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.target.tagName==='INPUT'&&e.target.type!=='range')return;
+  if(KB_MAP[e.code]){e.preventDefault();if(!e.repeat)kbDown(e.code);return;}
   if(e.key>='1'&&e.key<='7'){selectPart(+e.key-1);e.preventDefault();}
   else if(e.key==='['){brush=Math.max(3,brush-3);document.getElementById('size').value=brush;}
   else if(e.key===']'){brush=Math.min(48,brush+3);document.getElementById('size').value=brush;}
