@@ -73,13 +73,14 @@
 <header>
   <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
   <h1>DRAWING</h1>
-  <span class="hint" title="アプリの版 (直したのに変わらないときは、ここが新しい日付になっているかを見る)">2026-11-25a</span>
+  <span class="hint" title="アプリの版 (直したのに変わらないときは、ここが新しい日付になっているかを見る)">2026-11-25b</span>
   <button class="primary" id="btnConnect">接続</button>
   <span id="conn" class="pill ng">未接続</span>
   <span class="sep"></span>
   <div id="pal" title="線の色 = PONKEY のパート色。キーボードの 1〜7 でも選べる"></div>
   <span class="sep"></span>
   <span class="hint">太さ <input type="range" id="size" min="3" max="48" value="14"></span>
+  <button id="btnMidi" title="USB などでつないだ MIDI 鍵盤で弾く (Chrome / Edge)">MIDI鍵盤</button>
   <button id="btnRepeat" class="on" title="同じマスの中でなぞり続けても叩き続ける">連打</button>
   <button id="btnSound" class="on" title="PONKEY の内蔵音源でアンビエントな音を鳴らす (要ファーム v4.5.65+。古いファームだと鍵が余計に動くので OFF に)">音</button>
   <button id="btnFade" title="描いた線が少しずつ消えていく (本体の LED は音が消えると自動で消える)">消えていく</button>
@@ -385,6 +386,59 @@ function kbUp(code){
   releaseCell(KB_MAP[code].cell,Math.min(300,PARTS[part].hold));
 }
 addEventListener('keyup',e=>kbUp(e.code));
+
+// ── MIDI 鍵盤 (Web MIDI)。どの ch でも受ける。
+//   マス = 音名 (C〜B) で PC キーボードと同じマス (C=A のマス、C#=W のマス …)。オクターブ違いは同じマスを叩く。
+//   音 = 弾いた音高そのまま＋パートの oct、強さも鍵盤の velocity。マスとは別に音高ごとに NoteOff する
+//   (同じ音名を2オクターブ同時に押しても、片方を離したときにもう片方の音を切らない)。
+//   名前に PONKEY を含む入力は無視する (本体を OS 側でも BLE MIDI 接続していると、本体の音が回り込むため)。
+const PC_CELL=[0,8,1,9,2,3,10,4,11,5,12,6].map(i=>KB_MAP[KB_KEYS[i][0]].cell);   // 音名 → マス
+const midiHeld=new Map();                 // 鍵盤の音高 → {k, played, timer}
+const midiCellHold=new Uint8Array(16);    // マス → 押えている鍵盤の音の数 (LED の消し時)
+let midiAccess=null;
+function midiNoteOn(note,vel){
+  if(midiHeld.has(note))midiNoteOff(note);
+  const k=PC_CELL[note%12];
+  splash(k); fire(k);
+  let played=-1;
+  if(sound){played=Math.max(0,Math.min(127,note+PARTS[part].oct));writeMIDI(0x90|LIVE_CH,played,vel);}
+  midiCellHold[k]++;
+  midiHeld.set(note,{k,played,timer:repeat?setInterval(()=>fire(k),REPEAT_MS):null});
+}
+function midiNoteOff(note){
+  const h=midiHeld.get(note); if(!h)return;
+  midiHeld.delete(note);
+  if(h.timer)clearInterval(h.timer);
+  if(h.played>=0)writeMIDI(0x80|LIVE_CH,h.played,0);
+  if(--midiCellHold[h.k]===0&&holdCount[h.k]===0)fadeLed(h.k);
+}
+function onMidiMessage(e){
+  const [s,d1,d2]=e.data, t=s&0xF0;
+  if(t===0x90&&d2>0)midiNoteOn(d1,d2);
+  else if(t===0x80||(t===0x90&&d2===0))midiNoteOff(d1);
+  else if(t===0xB0&&(d1===123||d1===120))for(const n of [...midiHeld.keys()])midiNoteOff(n);   // All Notes Off
+}
+function bindMidiInputs(){
+  const names=[];
+  midiAccess.inputs.forEach(inp=>{
+    const skip=/ponkey/i.test(inp.name||'');
+    inp.onmidimessage=skip?null:onMidiMessage;
+    if(!skip&&inp.state==='connected')names.push(inp.name);
+  });
+  const b=document.getElementById('btnMidi');
+  b.classList.toggle('on',names.length>0);
+  b.textContent=names.length?'MIDI鍵盤 '+names.length:'MIDI鍵盤 なし';
+  b.title=names.length?'受けている入力: '+names.join(' / '):'MIDI 鍵盤が見つからない (つなぐと自動で受ける)';
+}
+document.getElementById('btnMidi').onclick=async()=>{
+  if(midiAccess){bindMidiInputs();return;}
+  if(!navigator.requestMIDIAccess){alert('このブラウザは Web MIDI に対応していません (Chrome / Edge で開いてください)');return;}
+  try{
+    midiAccess=await navigator.requestMIDIAccess();
+    midiAccess.onstatechange=bindMidiInputs;            // 抜き差しに追従
+    bindMidiInputs();
+  }catch(err){console.warn(err);alert('MIDI の使用が許可されませんでした');}
+};
 addEventListener('blur',()=>{for(const c of [...kbHeld.keys()])kbUp(c);});   // 押したままフォーカスが外れても鳴りっぱなしにしない
 
 // ── UI
