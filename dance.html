@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>DANCE</title>
+<meta name="theme-color" content="#0e0f12">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DANCE">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* DANCE: 聞こえている音を 16 の帯域に分け、16 鍵に割り当てて PONKEY を踊らせる。
+     ニュートラル・ダーク (DRAWING と同じ骨格)。盤面は本体と同じ並び (左下 = 低音 → 右上 = 高音) */
+  :root{--bg:#0e0f12;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;--red:#c96a5e}
+  *{box-sizing:border-box;border-radius:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:13px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none}
+  header{flex:none;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:8px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 10px 0 0;font-weight:400;letter-spacing:.08em}
+  button{font:inherit;font-weight:400;font-size:12.5px;letter-spacing:.04em;padding:7px 12px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.on{border-color:var(--teal);color:var(--teal);background:rgba(111,176,184,.12)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .sep{width:1px;height:22px;background:var(--line)}
+  .hint{font-size:11px;color:var(--dim);line-height:1.5}
+  input[type=range]{accent-color:var(--teal);vertical-align:middle;width:90px}
+  #stage{flex:1;position:relative;min-height:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;padding:8px}
+  #board{position:relative;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:6px}
+  .cell{position:relative;background:#121418;border:1px solid var(--line);overflow:hidden}
+  .cell .bar{position:absolute;left:0;right:0;bottom:0;height:0;opacity:.85}
+  .cell .hit{position:absolute;inset:0;opacity:0;transition:opacity .25s ease-out}
+  .cell.fire .hit{opacity:.9;transition:none}
+  .cell .lb{position:absolute;left:7px;top:6px;font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.04em}
+  .cell .n{position:absolute;right:7px;bottom:5px;font-size:10px;color:rgba(255,255,255,.3)}
+  #msg{font-size:11px;color:var(--dim);letter-spacing:.06em;text-align:center;min-height:1.5em}
+  #msg b{color:var(--txt);font-weight:500}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
+  <h1>DANCE</h1>
+  <span class="hint" title="アプリの版">2026-11-28a</span>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <span class="sep"></span>
+  <button id="srcMic"  title="マイクで部屋の音を聞く (PONKEY 自身の音も拾うので、叩いた直後は少し耳をふさぐ)">マイク</button>
+  <button id="srcTab"  title="ブラウザの別タブの音 (YouTube など) を聞く。共有ダイアログで「タブの音声を共有」を ON に">タブの音</button>
+  <button id="srcFile" title="音楽ファイルを再生して聞く (画面に落としても可)">ファイル</button>
+  <input type="file" id="file" accept="audio/*" hidden>
+  <button id="btnStop" title="聞くのをやめる">止める</button>
+  <span class="sep"></span>
+  <span class="hint" title="右ほど小さな変化でも叩く">感度 <input type="range" id="sens" min="0" max="100" value="55"></span>
+  <span class="hint" title="同じ鍵を続けて叩く最短の間隔">間隔 <input type="range" id="gap" min="80" max="400" value="130"></span>
+  <button id="btnFire" class="on" title="音の立ち上がりで鍵を叩く">叩く</button>
+  <button id="btnLight" class="on" title="帯域の大きさで LED を光らせる (要ファーム v4.5.69+)">光る</button>
+</header>
+<div id="stage">
+  <div id="board"></div>
+  <div id="msg">聞く音を選ぶと PONKEY が踊りだす ・ 左下 = 低い音 → 右上 = 高い音</div>
+</div>
+<audio id="player" crossorigin="anonymous"></audio>
+
+<script src="./ponkey.js"></script>
+<script>
+// ============================================================ しくみ
+// 1. 音を AnalyserNode (FFT 4096) で見て、40Hz〜12kHz を対数で 16 帯域に分ける。
+// 2. 帯域 b → 鍵: 左下から右へ、下の段から上の段へ (b=0 が左下 = 本体の鍵 12)。DRAWING のペンタの並びと同じ向き。
+// 3. 叩く: 帯域ごとの「立ち上がり」(dB の増え分) を、その帯域の最近の平均 + 感度ぶんの揺れ幅 と比べ、越えたら叩く。
+//    強さ = 越えた量。SOL_API (v4.5.69+) なら solFire(key, vel)、旧ファームは NoteOn(鍵番号) (強さは出ない)。
+// 4. 光る: 帯域の大きさを、帯域ごとに追っている「最近の最大・最小」で 0-1 に直して色の明るさにする。
+//    ledFrame (16鍵ぶんを1パケット) を約 12 回/秒。BLE は ponkey.js で直列なので、送信が詰まっていたらその回は飛ばす。
+// 5. マイクのときは自分の音を拾う (ソレノイドの打撃音は全帯域の立ち上がりに見える) → 叩いた直後 GATE_MS は全帯域で叩かない。
+const BANDS=16, F_LO=40, F_HI=12000;
+const GATE_MS=90;          // マイク時: 叩いた直後に耳をふさぐ時間
+const LED_MS=80;           // LED フレームの間隔
+const MAX_FIRE_PER_TICK=3; // 1回の解析で叩く最大数 (BLE を詰まらせない)
+const bandKey=b=>(3-Math.floor(b/4))*4+(b%4);
+const keyBand=new Array(16); for(let b=0;b<BANDS;b++)keyBand[bandKey(b)]=b;
+const HUE=b=>Math.round(b/(BANDS-1)*300);   // 低音=赤 → 高音=紫
+
+// ============================================================ 画面
+const board=document.getElementById('board'), cells=[];
+for(let k=0;k<16;k++){
+  const b=keyBand[k], c=document.createElement('div'); c.className='cell';
+  c.innerHTML=`<div class="bar"></div><div class="hit"></div><span class="lb"></span><span class="n">${k+1}</span>`;
+  c.querySelector('.bar').style.background=`linear-gradient(to top,hsl(${HUE(b)} 90% 55% / .9),hsl(${HUE(b)} 90% 65% / .25))`;
+  c.querySelector('.hit').style.background=`radial-gradient(circle,hsl(${HUE(b)} 100% 75%),hsl(${HUE(b)} 100% 50% / 0) 75%)`;
+  board.appendChild(c); cells[k]=c;
+}
+function fit(){const s=document.getElementById('stage').getBoundingClientRect();
+  const side=Math.max(120,Math.min(s.width-16,s.height-50));board.style.width=board.style.height=side+'px';}
+addEventListener('resize',fit); fit();
+const msg=t=>document.getElementById('msg').innerHTML=t;
+
+// ============================================================ BLE
+let pk=null, inflight=0;
+function track(p){if(!p)return;inflight++;p.then(()=>inflight--,()=>inflight--);}
+function setConn(ok){const e=document.getElementById('conn');e.className='pill '+(ok?'ok':'ng');e.textContent=ok?'接続中':'未接続';
+  document.getElementById('btnConnect').textContent=ok?'切断':'接続';}
+document.getElementById('btnConnect').onclick=async()=>{
+  if(pk){try{pk.disconnect();}catch(_){}return;}
+  try{
+    const p=new Ponkey();
+    p.on('disconnect',()=>{pk=null;inflight=0;setConn(false);});
+    await p.connect({debug:true});           // LED フレームと solFire にデバッグサービスが要る
+    pk=p; setConn(true);
+  }catch(e){console.warn(e);}
+};
+const has=f=>{try{return pk&&pk.hasFeature(f);}catch(_){return false;}};
+function fireKey(k,vel){
+  if(!pk)return;
+  try{ track(has('SOL_API')?pk.solFire(k,vel):pk.sendMIDI(0x90,k,100)); }catch(e){}
+}
+function sendLeds(lv){
+  if(!pk||!has('LED_RGB_FRAME')||inflight>2)return;   // 詰まっていたら光はこの回飛ばす (叩くのを優先)
+  const f=[];
+  for(let k=0;k<16;k++){const b=keyBand[k],v=lv[b]*lv[b];          // 2乗で暗部を締める
+    const [r,g,bl]=hsl2rgb(HUE(b),1,.5);f[k]=[r*v|0,g*v|0,bl*v|0];}
+  try{track(pk.ledFrame(f));}catch(e){}
+}
+function ledsOff(){if(pk&&has('LED_RGB_FRAME'))try{pk.ledClear();}catch(_){}}
+function hsl2rgb(h,s,l){const a=s*Math.min(l,1-l),f=n=>{const k=(n+h/30)%12;return 255*(l-a*Math.max(-1,Math.min(k-3,9-k,1)));};return [f(0),f(8),f(4)];}
+
+// ============================================================ 音の入口
+let ac=null, an=null, srcNode=null, stream=null, source='';
+const player=document.getElementById('player');
+let playerNode=null;
+function ensureAC(){
+  if(!ac){ac=new (window.AudioContext||window.webkitAudioContext)();
+    an=ac.createAnalyser();an.fftSize=4096;an.smoothingTimeConstant=0;an.minDecibels=-100;an.maxDecibels=-10;setupBands();}
+  if(ac.state==='suspended')ac.resume();
+}
+function stopSource(){
+  if(srcNode){try{srcNode.disconnect();}catch(_){}srcNode=null;}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(!player.paused)player.pause();
+  source=''; ['srcMic','srcTab','srcFile'].forEach(id=>document.getElementById(id).classList.remove('on'));
+  ledsOff(); resetState();
+}
+function started(name,label){
+  source=name; document.getElementById({mic:'srcMic',tab:'srcTab',file:'srcFile'}[name]).classList.add('on');
+  msg(`<b>${label}</b> を聞いています`+(pk?'':' ・ 本体は「接続」でつなぐ'));
+}
+document.getElementById('srcMic').onclick=async()=>{
+  ensureAC(); stopSource();
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an);   // スピーカーには出さない (ハウリング防止)
+    started('mic','マイク');
+  }catch(e){msg('マイクが使えませんでした ('+e.name+')');}
+};
+document.getElementById('srcTab').onclick=async()=>{
+  ensureAC(); stopSource();
+  try{
+    stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+    if(!stream.getAudioTracks().length){stream.getTracks().forEach(t=>t.stop());stream=null;
+      msg('音が来ていません。共有のときに「タブの音声を共有」を ON にしてください');return;}
+    stream.getVideoTracks().forEach(t=>t.stop());              // 映像は要らない
+    srcNode=ac.createMediaStreamSource(new MediaStream(stream.getAudioTracks())); srcNode.connect(an);
+    stream.getAudioTracks()[0].onended=stopSource;
+    started('tab','タブの音');
+  }catch(e){msg('タブの共有が取り消されました');}
+};
+document.getElementById('srcFile').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').onchange=e=>{if(e.target.files[0])playFile(e.target.files[0]);e.target.value='';};
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&/^audio\//.test(f.type))playFile(f);});
+function playFile(f){
+  ensureAC(); stopSource();
+  if(!playerNode){playerNode=ac.createMediaElementSource(player);}
+  playerNode.connect(an); playerNode.connect(ac.destination); srcNode=playerNode;   // ファイルは聞こえるように出す
+  player.src=URL.createObjectURL(f); player.play();
+  player.onended=stopSource;
+  started('file',f.name.replace(/[<>&]/g,''));
+}
+document.getElementById('btnStop').onclick=()=>{stopSource();msg('止めました');};
+
+// ============================================================ 解析
+let bins=[], spec=null;
+const level=new Float32Array(BANDS), prevDb=new Float32Array(BANDS).fill(-100);
+const fMean=new Float32Array(BANDS), fVar=new Float32Array(BANDS).fill(1);
+const peak=new Float32Array(BANDS).fill(-60), floor_=new Float32Array(BANDS).fill(-90);
+const lastFire=new Float64Array(16);
+let gateUntil=0, lastLed=0, doFire=true, doLight=true;
+function setupBands(){
+  spec=new Float32Array(an.frequencyBinCount);
+  const hz=ac.sampleRate/an.fftSize; bins=[];
+  for(let b=0;b<BANDS;b++){
+    const lo=F_LO*Math.pow(F_HI/F_LO,b/BANDS), hi=F_LO*Math.pow(F_HI/F_LO,(b+1)/BANDS);
+    const i0=Math.max(1,Math.floor(lo/hz)), i1=Math.max(i0+1,Math.ceil(hi/hz));
+    bins.push([i0,i1]);
+    const lb=cells[bandKey(b)].querySelector('.lb'); lb.textContent=lo<1000?Math.round(lo)+'Hz':(lo/1000).toFixed(1)+'k';
+  }
+}
+function resetState(){prevDb.fill(-100);fMean.fill(0);fVar.fill(1);peak.fill(-60);floor_.fill(-90);level.fill(0);
+  cells.forEach(c=>c.querySelector('.bar').style.height='0');}
+function tick(){
+  if(!source||!an)return;
+  const now=performance.now();
+  an.getFloatFrequencyData(spec);
+  const sens=+document.getElementById('sens').value/100;     // 0..1
+  const k_=3.2-2.4*sens;                                        // しきい値 = 平均 + k_×揺れ幅
+  const gap=+document.getElementById('gap').value;
+  const cand=[];
+  for(let b=0;b<BANDS;b++){
+    const [i0,i1]=bins[b]; let p=0;
+    for(let i=i0;i<i1;i++)p+=Math.pow(10,spec[i]/10);
+    const db=10*Math.log10(p/(i1-i0)+1e-12);
+    // 大きさ: 帯域ごとに最近の最大 (ゆっくり下がる) と最小 (ゆっくり上がる) を追って 0-1 に
+    // 最大は -65dB より下げない (無音に近いとき、かすかなノイズまで目一杯に引き伸ばして光らせないため)
+    peak[b]=Math.max(db,peak[b]-0.15,-65); floor_[b]=Math.min(db,floor_[b]+0.05);
+    if(peak[b]-floor_[b]<12)floor_[b]=peak[b]-12;
+    level[b]=Math.max(0,Math.min(1,(db-floor_[b])/(peak[b]-floor_[b])));
+    // 立ち上がり
+    const flux=Math.max(0,db-prevDb[b]); prevDb[b]=db;
+    const d=flux-fMean[b]; fMean[b]+=0.06*d; fVar[b]=0.94*(fVar[b]+0.06*d*d);
+    const th=fMean[b]+k_*Math.sqrt(fVar[b])+1.5;
+    if(flux>th&&level[b]>0.35&&db>-85)cand.push({b,over:(flux-th)/(th+1)});
+  }
+  // 叩く (強いものから)
+  if(doFire&&!(source==='mic'&&now<gateUntil)){
+    cand.sort((a,b)=>b.over-a.over);
+    let n=0;
+    for(const c of cand){
+      const k=bandKey(c.b); if(now-lastFire[k]<gap)continue;
+      lastFire[k]=now; const vel=Math.round(Math.min(127,50+c.over*120));
+      fireKey(k,vel); flashCell(k);
+      if(++n>=MAX_FIRE_PER_TICK)break;
+    }
+    if(n&&source==='mic')gateUntil=now+GATE_MS;
+  }
+  if(doLight&&now-lastLed>=LED_MS){lastLed=now;sendLeds(level);}
+}
+// 解析は setInterval (rAF はタブが隠れると止まるので使わない。ただしブラウザは隠れたタブのタイマーも間引く)
+setInterval(tick,16);
+function flashCell(k){const c=cells[k];c.classList.add('fire');requestAnimationFrame(()=>requestAnimationFrame(()=>c.classList.remove('fire')));}
+function draw(){
+  if(source)for(let b=0;b<BANDS;b++)cells[bandKey(b)].querySelector('.bar').style.height=(level[b]*100).toFixed(1)+'%';
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+document.getElementById('btnFire').onclick=e=>{doFire=!doFire;e.target.classList.toggle('on',doFire);};
+document.getElementById('btnLight').onclick=e=>{doLight=!doLight;e.target.classList.toggle('on',doLight);if(!doLight)ledsOff();};
+</script>
+</body>
+</html>

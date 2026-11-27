@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>HARMONY</title>
+<meta name="theme-color" content="#0e0f12">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HARMONY">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* HARMONY: 歌った (口笛・鼻歌) 音の高さを聞き、スケールの中で 3 度上などを PONKEY が鳴らしてハモる。
+     ニュートラル・ダーク (DRAWING / DANCE と同じ骨格) */
+  :root{--bg:#0e0f12;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;--red:#c96a5e;--gold:#c2a85a}
+  *{box-sizing:border-box;border-radius:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:13px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none}
+  header{flex:none;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:8px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 10px 0 0;font-weight:400;letter-spacing:.08em}
+  button,select{font:inherit;font-weight:400;font-size:12.5px;letter-spacing:.04em;padding:7px 12px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer}
+  select{padding:6px 8px;background:var(--bg)}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.on{border-color:var(--teal);color:var(--teal);background:rgba(111,176,184,.12)}
+  button.rec{border-color:var(--red);color:var(--red);background:rgba(201,106,94,.12)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .sep{width:1px;height:22px;background:var(--line)}
+  .hint{font-size:11px;color:var(--dim);line-height:1.5}
+  main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:14px}
+  @media(max-width:760px){main{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}}
+  #left{display:flex;flex-direction:column;gap:12px;min-height:0}
+  #now{display:flex;gap:28px;align-items:baseline;flex-wrap:wrap}
+  .who{font-size:11px;color:var(--dim);letter-spacing:.12em}
+  .big{font-size:44px;font-weight:300;letter-spacing:.02em;min-width:2.6em}
+  #you{color:#fff} #pk{color:var(--teal)}
+  #trace{flex:1;min-height:120px;width:100%;background:#0a0b0e;border:1px solid var(--line)}
+  #board{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-self:center}
+  .cell{background:#121418;border:1px solid var(--line);position:relative;display:flex;align-items:center;justify-content:center;
+        font-size:12px;color:rgba(255,255,255,.35);transition:background .3s,color .3s}
+  .cell.on{background:rgba(111,176,184,.55);color:#fff;transition:none}
+  .cell .n{position:absolute;left:6px;top:4px;font-size:9px;color:rgba(255,255,255,.2)}
+  #msg{font-size:11px;color:var(--dim);letter-spacing:.04em;min-height:1.5em}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
+  <h1>HARMONY</h1>
+  <span class="hint" title="アプリの版">2026-11-28a</span>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <span class="sep"></span>
+  <button id="btnMic" title="マイクで歌 (口笛・鼻歌) を聞く">🎤 歌う</button>
+  <span class="sep"></span>
+  <select id="key" title="曲のキー (わからなければ SCALE の「鼻歌で探す」で調べられる)"></select>
+  <select id="scale"><option value="major">メジャー</option><option value="minor">マイナー</option></select>
+  <select id="itv" title="どこでハモるか (スケールの中で数える)">
+    <option value="2">3度上</option><option value="-2">3度下</option><option value="4">5度上</option>
+    <option value="-3">5度下</option><option value="5">6度上</option><option value="-5">6度下</option>
+    <option value="7">オクターブ上</option><option value="2,4">3度上＋5度上 (和音)</option>
+  </select>
+  <span class="sep"></span>
+  <select id="out" title="ハモりの音をどこで鳴らすか">
+    <option value="device">音: 本体</option><option value="browser">音: ブラウザ</option><option value="none">音: なし</option>
+  </select>
+  <select id="voice" title="本体で鳴らすときの音色 (内蔵音源 SAM2695 の GM 音色)">
+    <option value="52">こえ (Choir)</option><option value="73">フルート</option><option value="48">ストリングス</option>
+    <option value="4">E.ピアノ</option><option value="80">スクエア</option><option value="89">パッド</option>
+  </select>
+  <button id="btnFire" class="on" title="ハモりの音が変わるたびに、その音の鍵を叩く">叩く</button>
+</header>
+<main>
+  <div id="left">
+    <div id="now">
+      <div><div class="who">あなた</div><div class="big" id="you">—</div></div>
+      <div><div class="who">PONKEY</div><div class="big" id="pk">—</div></div>
+    </div>
+    <canvas id="trace"></canvas>
+    <div id="msg">「歌う」を押して、口笛か鼻歌で歌ってください。本体のスピーカーの音を拾うときは、少し離すかイヤホン (音: ブラウザ) で</div>
+  </div>
+  <div id="board"></div>
+</main>
+
+<script src="./ponkey.js"></script>
+<script>
+// ============================================================ しくみ
+// 1. マイク → 自己相関で音の高さ (SCALE の「鼻歌で探す」と同じ方式) → いちばん近い半音に丸める。
+// 2. 同じ半音が STABLE フレーム続いたら「その音を歌っている」とみなす (揺れで音がパタパタ変わらないように)。
+//    無声が RELEASE フレーム続いたら離す。
+// 3. ハモり = スケールの中で数えた度数ずらし (3度上 = スケールの2段上)。スケール外の音を歌ったら、近いスケール音として数える。
+// 4. 出口: 音は「本体」= BLE ch16 素通し (要 v4.5.65+。DRAWING と同じ) / 「ブラウザ」= WebAudio (イヤホン向け)。
+//    鍵は BLE NoteOn(鍵番号) = ソレノイド + LED。鍵の並び = キーの主音 (3オクターブ目) からのスケールのはしご、
+//    左下が低い → 右上が高い (DRAWING のペンタ・SONGBOOK の度数と同じ向き)。16 段に収まらない音は 7 段 (1オクターブ) ずつ折り返す。
+// 5. 自分の音を拾う対策: いま鳴らしているハモりと同じ音名が聞こえたら、それは本体の音とみなして無視する
+//    (ハモりは歌と必ず別の音名なので、取り違えない)。
+const NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const SCALES={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10]};
+const LIVE_CH=15, STABLE=3, RELEASE=8, MIN_M=40, MAX_M=88;
+const nn=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
+const keySel=document.getElementById('key');
+NAMES.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent='キー '+n;keySel.appendChild(o);});
+const cfg=JSON.parse(localStorage.getItem('ponkey_harmony_v01')||'{}');
+for(const id of ['key','scale','itv','out','voice'])if(cfg[id]!=null)document.getElementById(id).value=cfg[id];
+function saveCfg(){const c={};for(const id of ['key','scale','itv','out','voice'])c[id]=document.getElementById(id).value;localStorage.setItem('ponkey_harmony_v01',JSON.stringify(c));}
+
+// ---- 度数 ⇄ 音高
+function sc(){return SCALES[document.getElementById('scale').value];}
+function root(){return +document.getElementById('key').value;}
+// 音高 → 度数 (主音 C-1 起点の通し番号)。スケール外は近いスケール音 (同じ距離なら下) に寄せる
+function degOf(m){
+  const s=sc(), r=root(), rel=m-r, oct=Math.floor(rel/12), pc=rel-oct*12;
+  let best=0,bd=99; s.forEach((v,i)=>{const d=Math.abs(v-pc);if(d<bd){bd=d;best=i;}});
+  if(12-pc<bd)return (oct+1)*7;   // 上の主音のほうが近い
+  return oct*7+best;
+}
+function noteOfDeg(d){const s=sc(),oct=Math.floor(d/7),i=d-oct*7;return root()+oct*12+s[i];}
+const BASE_DEG=()=>degOf(root()+48);   // 3オクターブ目の主音 = 左下の鍵
+function keyOfNote(m){
+  let idx=degOf(m)-BASE_DEG(); while(idx<0)idx+=7; while(idx>15)idx-=7;
+  return (3-Math.floor(idx/4))*4+(idx%4);
+}
+
+// ============================================================ 画面
+const board=document.getElementById('board'), cells=[];
+for(let k=0;k<16;k++){const c=document.createElement('div');c.className='cell';c.innerHTML=`<span class="n">${k+1}</span><span class="t"></span>`;board.appendChild(c);cells[k]=c;}
+function labelBoard(){   // 各マスの音名 (鍵が表す音名。オクターブは折り返しがあるので出さない)
+  for(let idx=0;idx<16;idx++){const k=(3-Math.floor(idx/4))*4+(idx%4);
+    cells[k].querySelector('.t').textContent=NAMES[((noteOfDeg(BASE_DEG()+idx))%12+12)%12];}
+}
+function fit(){const m=document.querySelector('main').getBoundingClientRect();
+  const narrow=innerWidth<=760, side=narrow?Math.min(m.width-28,260):Math.min(m.height-28,m.width*0.42,420);
+  board.style.width=board.style.height=side+'px';board.style.gridTemplateRows='repeat(4,1fr)';
+  const cv=document.getElementById('trace'),r=cv.getBoundingClientRect();cv.width=r.width*devicePixelRatio;cv.height=r.height*devicePixelRatio;}
+addEventListener('resize',fit);
+const msg=t=>document.getElementById('msg').textContent=t;
+
+// ============================================================ BLE
+let pk=null;
+function writeMIDI(s,a,b){if(!pk||!pk.midiChar)return;return pk.sendMIDI(s,a,b).catch(()=>{});}
+function setConn(ok){const e=document.getElementById('conn');e.className='pill '+(ok?'ok':'ng');e.textContent=ok?'接続中':'未接続';
+  document.getElementById('btnConnect').textContent=ok?'切断':'接続';}
+document.getElementById('btnConnect').onclick=async()=>{
+  if(pk){try{pk.disconnect();}catch(_){}return;}
+  try{const p=new Ponkey();p.on('disconnect',()=>{pk=null;setConn(false);});
+    await p.connect({debug:false}); pk=p; setConn(true); setupDeviceVoice();}catch(e){console.warn(e);}
+};
+function setupDeviceVoice(){
+  if(document.getElementById('out').value!=='device')return;
+  const v=+document.getElementById('voice').value;
+  writeMIDI(0xB0|LIVE_CH,7,100); writeMIDI(0xB0|LIVE_CH,91,90); writeMIDI(0xB0|LIVE_CH,72,80);
+  writeMIDI(0xC0|LIVE_CH,v,v);   // 3バイト目も同じ番号 (本体が PC でも3バイト書くため。DRAWING と同じ)
+}
+
+// ============================================================ ハモりの音を出す
+let ac=null; const bNotes=new Map();   // ブラウザで鳴らしている音高 → {o,g}
+function actx(){if(!ac)ac=new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();return ac;}
+let sounding=[];   // いま鳴らしているハモりの音高
+function hOn(m){
+  const out=document.getElementById('out').value;
+  if(out==='device')writeMIDI(0x90|LIVE_CH,m,90);
+  else if(out==='browser'){const c=actx(),o=c.createOscillator(),o2=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
+    o.type='sawtooth';o2.type='triangle';o.frequency.value=o2.frequency.value=440*Math.pow(2,(m-69)/12);o2.detune.value=7;
+    f.type='lowpass';f.frequency.value=1800;o.connect(f);o2.connect(f);f.connect(g);g.connect(c.destination);
+    g.gain.setValueAtTime(0,c.currentTime);g.gain.linearRampToValueAtTime(.09,c.currentTime+.04);
+    o.start();o2.start();bNotes.set(m,{o,o2,g});}
+  if(document.getElementById('btnFire').classList.contains('on')){const k=keyOfNote(m);writeMIDI(0x90,k,100);lightCell(k);}
+}
+function hOff(m){
+  writeMIDI(0x80|LIVE_CH,m,0);
+  const b=bNotes.get(m);if(b){const t=ac.currentTime;b.g.gain.cancelScheduledValues(t);b.g.gain.setValueAtTime(b.g.gain.value,t);
+    b.g.gain.linearRampToValueAtTime(0,t+.15);b.o.stop(t+.2);b.o2.stop(t+.2);bNotes.delete(m);}
+}
+function setHarmony(sung){
+  const want=sung==null?[]:document.getElementById('itv').value.split(',').map(s=>noteOfDeg(degOf(sung)+(+s)));
+  for(const m of sounding)if(!want.includes(m))hOff(m);
+  for(const m of want)if(!sounding.includes(m))hOn(m);
+  sounding=want;
+  document.getElementById('you').textContent=sung==null?'—':nn(sung);
+  document.getElementById('pk').textContent=want.length?want.map(nn).join(' '):'—';
+}
+function allOff(){setHarmony(null);writeMIDI(0xB0|LIVE_CH,123,0);}
+function lightCell(k){cells[k].classList.add('on');setTimeout(()=>cells[k].classList.remove('on'),220);}
+
+// ============================================================ 聞く
+let stream=null, an=null, buf=null, timer=null;
+let cand=null, candN=0, silentN=0, cur=null;
+const hist=[];   // 軌跡: {t, m(歌の小数音高|null), h:[ハモり]}
+document.getElementById('btnMic').onclick=async()=>{
+  if(stream){stopMic();return;}
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});}
+  catch(e){msg('マイクが使えませんでした ('+e.name+')');return;}
+  const c=actx(), src=c.createMediaStreamSource(stream); an=c.createAnalyser(); an.fftSize=2048; src.connect(an);
+  buf=new Float32Array(an.fftSize);
+  const b=document.getElementById('btnMic'); b.classList.add('rec'); b.textContent='■ やめる';
+  msg('聞いています。のばす音でゆっくり歌うとハモりやすい');
+  timer=setInterval(listen,20);
+};
+function stopMic(){
+  clearInterval(timer);timer=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  allOff();cur=null;cand=null;
+  const b=document.getElementById('btnMic');b.classList.remove('rec');b.textContent='🎤 歌う';msg('止めました');
+}
+function listen(){
+  an.getFloatTimeDomainData(buf);
+  const f=autoCorrelate(buf,ac.sampleRate);
+  let m=f>0?69+12*Math.log2(f/440):null;
+  if(m!=null&&(m<MIN_M||m>MAX_M))m=null;
+  // 自分 (本体・ブラウザ) が鳴らしているハモりの音名なら、歌ではないので無視
+  if(m!=null&&sounding.some(h=>((Math.round(m)-h)%12+12)%12===0))m=null;
+  hist.push({t:performance.now(),m,h:sounding.slice()});
+  if(m==null){ if(++silentN>=RELEASE&&cur!=null){cur=null;setHarmony(null);} candN=0;cand=null;return; }
+  silentN=0;
+  const n=Math.round(m);
+  if(n===cand)candN++;else{cand=n;candN=1;}
+  if(candN>=STABLE&&n!==cur){cur=n;setHarmony(n);}
+}
+// 自己相関 (SCALE と同じ。無声 = -1)
+function autoCorrelate(b,sr){
+  const N=b.length;let rms=0;for(let i=0;i<N;i++)rms+=b[i]*b[i];
+  if(Math.sqrt(rms/N)<0.012)return -1;
+  const H=N/2,c=new Float32Array(H);
+  for(let lag=0;lag<H;lag++){let s=0;for(let j=0;j<H;j++)s+=b[j]*b[j+lag];c[lag]=s;}
+  // 最初の谷を越える。窓が正規化されていないので低い音では序盤に小さな凸凹が出る → まず c[0] の半分を下回るまで進む
+  let d=1;while(d<H-1&&c[d]>0.5*c[0])d++;while(d<H-1&&c[d]>c[d+1])d++;
+  let mv=-1,mp=-1;for(let i=d;i<H;i++)if(c[i]>mv){mv=c[i];mp=i;}
+  if(mp<=0||mv<0.3*c[0])return -1;
+  // 周期の倍数 (= 1〜2 オクターブ下) の山も同じ高さになるので、最大の 9 割を超える「最初の山」を周期にする
+  for(let i=d;i<mp;i++)if(c[i]>=0.9*mv&&c[i]>=c[i-1]&&c[i]>=c[i+1]){mp=i;break;}
+  let T=mp;const x1=c[T-1],x2=c[T],x3=c[T+1],a=(x1+x3-2*x2)/2,b2=(x3-x1)/2;if(a)T=T-b2/(2*a);
+  return sr/T;
+}
+
+// ---- 軌跡 (直近 6 秒。白 = 歌、水色 = ハモり。横線 = スケールの音)
+const SPAN=6000;
+function draw(){
+  const cv=document.getElementById('trace'),x=cv.getContext('2d'),W=cv.width,H=cv.height,now=performance.now();
+  while(hist.length&&now-hist[0].t>SPAN)hist.shift();
+  const ms=hist.flatMap(p=>[p.m,...p.h]).filter(v=>v!=null);
+  const mid=ms.length?(Math.min(...ms)+Math.max(...ms))/2:60, lo=mid-14, hi=mid+14;
+  const y=m=>H-(m-lo)/(hi-lo)*H;
+  x.clearRect(0,0,W,H);
+  x.font=`${10*devicePixelRatio}px Inter,sans-serif`;
+  for(let m=Math.ceil(lo);m<=hi;m++){const inS=sc().includes(((m-root())%12+12)%12);if(!inS)continue;
+    x.fillStyle=((m-root())%12+12)%12===0?'rgba(255,255,255,.12)':'rgba(255,255,255,.05)';x.fillRect(0,y(m),W,1);
+    x.fillStyle='rgba(255,255,255,.25)';x.fillText(nn(m),4,y(m)-2);}
+  const X=t=>W-(now-t)/SPAN*W;
+  for(const p of hist){
+    for(const h of p.h){x.fillStyle='rgba(111,176,184,.9)';x.fillRect(X(p.t),y(h)-2,3*devicePixelRatio,4);}
+    if(p.m!=null){x.fillStyle='#fff';x.fillRect(X(p.t),y(p.m)-1.5,2*devicePixelRatio,3);}
+  }
+  requestAnimationFrame(draw);
+}
+
+// ---- 設定の変更
+for(const id of ['key','scale','itv'])document.getElementById(id).onchange=()=>{saveCfg();labelBoard();if(cur!=null)setHarmony(cur);};
+document.getElementById('out').onchange=()=>{saveCfg();const keep=cur;setHarmony(null);writeMIDI(0xB0|LIVE_CH,123,0);setupDeviceVoice();if(keep!=null)setHarmony(keep);};
+document.getElementById('voice').onchange=()=>{saveCfg();setupDeviceVoice();};
+document.getElementById('btnFire').onclick=e=>e.target.classList.toggle('on');
+labelBoard(); fit(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>
