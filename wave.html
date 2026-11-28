@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>WAVE</title>
+<meta name="theme-color" content="#0e0f12">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="WAVE">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* WAVE: 音が鳴るたびに、その大きさの波が左下の鍵から広がる。ニュートラル・ダーク (DANCE と同じ骨格) */
+  :root{--bg:#0e0f12;--panel:#15171b;--line:#272a30;--txt:#cbced4;--dim:#6b6f76;--teal:#6fb0b8;--red:#c96a5e}
+  *{box-sizing:border-box;border-radius:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);
+       font-size:13px;font-weight:300;letter-spacing:.01em;-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none}
+  header{flex:none;background:var(--bg);border-bottom:1px solid var(--line);
+         padding:8px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  h1{font-size:19px;margin:0 10px 0 0;font-weight:400;letter-spacing:.08em}
+  button{font:inherit;font-weight:400;font-size:12.5px;letter-spacing:.04em;padding:7px 12px;
+         border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:#1c1f25;border-color:#3a3f47}
+  button.primary{border-color:var(--teal);color:var(--teal)}
+  button.on{border-color:var(--teal);color:var(--teal);background:rgba(111,176,184,.12)}
+  .pill{font-size:11px;font-weight:500;padding:3px 10px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .pill.ok{border-color:var(--teal);color:var(--teal)}
+  .pill.ng{border-color:var(--red);color:var(--red)}
+  .sep{width:1px;height:22px;background:var(--line)}
+  .hint{font-size:11px;color:var(--dim);line-height:1.5}
+  input[type=range]{accent-color:var(--teal);vertical-align:middle;width:90px}
+  #stage{flex:1;position:relative;min-height:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;padding:8px}
+  #wrap{position:relative;display:flex;gap:10px;align-items:stretch}
+  #board{display:block;cursor:pointer;touch-action:none}
+  #meter{width:10px;background:#121418;border:1px solid var(--line);position:relative}
+  #meter .lv{position:absolute;left:0;right:0;bottom:0;height:0;background:var(--teal);opacity:.8}
+  #meter .th{position:absolute;left:-4px;right:-4px;height:1px;background:var(--red)}
+  #msg{font-size:11px;color:var(--dim);letter-spacing:.06em;text-align:center;min-height:1.5em}
+  #msg b{color:var(--txt);font-weight:500}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" style="font-size:12px;letter-spacing:.1em;color:var(--dim);text-decoration:none" title="アプリ一覧へ">‹</a>
+  <h1>WAVE</h1>
+  <span class="hint" title="アプリの版">2026-11-28a</span>
+  <button class="primary" id="btnConnect">接続</button>
+  <span id="conn" class="pill ng">未接続</span>
+  <span class="sep"></span>
+  <button id="srcMic"  title="マイクで部屋の音を聞く (波が走っている間は PONKEY 自身の音を拾わないよう耳をふさぐ)">マイク</button>
+  <button id="srcTab"  title="ブラウザの別タブの音 (YouTube など) を聞く。共有ダイアログで「タブの音声を共有」を ON に">タブの音</button>
+  <button id="srcFile" title="音楽ファイルを再生して聞く (画面に落としても可)">ファイル</button>
+  <input type="file" id="file" accept="audio/*" hidden>
+  <button id="btnStop" title="聞くのをやめる">止める</button>
+  <span class="sep"></span>
+  <span class="hint" title="右ほど小さな音でも波が立つ / 大きく広がる">感度 <input type="range" id="sens" min="0" max="100" value="55"></span>
+  <span class="hint" title="波が1マス進む時間。右ほどゆっくり">速さ <input type="range" id="speed" min="30" max="220" value="80"></span>
+  <span class="hint" title="波が1マス進むごとに残る強さ。右ほど遠くまで届く">広がり <input type="range" id="reach" min="55" max="95" value="72"></span>
+  <button id="btnFire" class="on" title="波が通った鍵を叩く">叩く</button>
+  <button id="btnLight" class="on" title="波を LED で見せる (要ファーム v4.5.69+)">光る</button>
+</header>
+<div id="stage">
+  <div id="wrap"><canvas id="board"></canvas><div id="meter" title="いまの音の大きさ (赤い線 = 波が立つ目安)"><div class="lv"></div><div class="th"></div></div></div>
+  <div id="msg">聞く音を選ぶと、音が鳴るたびに左下から波が広がる ・ 大きい音ほど強く遠くまで ・ 盤面タップでも波が出る</div>
+</div>
+<audio id="player" crossorigin="anonymous"></audio>
+
+<script src="./ponkey.js"></script>
+<script>
+// ============================================================ しくみ
+// 1. 音全体の大きさ (dBFS, 16ms ごと) を見て、急に大きくなった瞬間 (立ち上がり) を探す。
+//    立ち上がり = dB の増え分が「最近の平均 + 感度ぶんの揺れ幅」を越えたとき。見つけたら 3 回 (約 50ms) 様子を見て
+//    その間の最大の大きさを波の強さ A (0-1) にする (打撃音の頭はまだ小さいので)。
+// 2. 波は左下の鍵 (本体の鍵 12) の中心から円く広がる。鍵 k の距離 d = 左下からのマス数 (斜めは √2 など、最大 4.24)。
+//    波頭は「速さ」ms で 1 マス進み、1 マス進むごとに強さが「広がり」倍になる。A×広がり^d が 0.12 を割る鍵には届かない
+//    → 大きい音ほど遠くまで届く。
+// 3. 叩く: 波頭が鍵に着いた瞬間に solFire(k, vel)。vel = 強さに比例。SOL_API の無い旧ファームは NoteOn(鍵番号) (強さは出ない)。
+//    同じ鍵を続けて叩く最短 60ms (波が重なったとき)。BLE の送信が 6 本以上たまっていたらその鍵は叩かない。
+// 4. 光る: 波頭 (と、その後ろの小さな 2 つ目の波) の近くの鍵ほど明るい。色は波ごとに少しずつ回す。ledFrame を約 16 回/秒。
+// 5. マイクのときは自分の打撃音を拾って波が止まらなくなるので、波が叩いている間 + 120ms は新しい波を立てない。
+const ORIGIN={c:0,r:3};
+const dist=k=>Math.hypot((k%4)-ORIGIN.c,ORIGIN.r-Math.floor(k/4));
+const DIST=[...Array(16)].map((_,k)=>dist(k));
+const MIN_AMP=0.12, KEY_GAP=60, GATE_MS=120, LED_MS=60, PEAK_TICKS=3;
+
+// ============================================================ 画面
+const cv=document.getElementById('board'), g=cv.getContext('2d');
+let side=300, dpr=1;
+function fit(){const s=document.getElementById('stage').getBoundingClientRect();
+  side=Math.max(120,Math.min(s.width-40,s.height-50)); dpr=window.devicePixelRatio||1;
+  cv.style.width=cv.style.height=side+'px'; cv.width=cv.height=Math.round(side*dpr);
+  document.getElementById('meter').style.height=side+'px';}
+addEventListener('resize',fit); fit();
+const msg=t=>document.getElementById('msg').innerHTML=t;
+
+// ============================================================ BLE
+let pk=null, inflight=0;
+function track(p){if(!p)return;inflight++;p.then(()=>inflight--,()=>inflight--);}
+function setConn(ok){const e=document.getElementById('conn');e.className='pill '+(ok?'ok':'ng');e.textContent=ok?'接続中':'未接続';
+  document.getElementById('btnConnect').textContent=ok?'切断':'接続';}
+document.getElementById('btnConnect').onclick=async()=>{
+  if(pk){try{pk.disconnect();}catch(_){}return;}
+  try{
+    const p=new Ponkey();
+    p.on('disconnect',()=>{pk=null;inflight=0;setConn(false);});
+    await p.connect({debug:true});           // LED フレームと solFire にデバッグサービスが要る
+    pk=p; setConn(true);
+  }catch(e){console.warn(e);}
+};
+const has=f=>{try{return pk&&pk.hasFeature(f);}catch(_){return false;}};
+function fireKey(k,vel){
+  if(!pk||inflight>=6)return;
+  try{ track(has('SOL_API')?pk.solFire(k,vel):pk.sendMIDI(0x90,k,100)); }catch(e){}
+}
+function sendLeds(rgb){
+  if(!pk||!has('LED_RGB_FRAME')||inflight>2)return;   // 詰まっていたら光はこの回飛ばす (叩くのを優先)
+  try{track(pk.ledFrame(rgb.map(([r,gg,b])=>[r|0,gg|0,b|0])));}catch(e){}
+}
+function ledsOff(){if(pk&&has('LED_RGB_FRAME'))try{pk.ledClear();}catch(_){}}
+function hsl2rgb(h,s,l){const a=s*Math.min(l,1-l),f=n=>{const k=(n+h/30)%12;return 255*(l-a*Math.max(-1,Math.min(k-3,9-k,1)));};return [f(0),f(8),f(4)];}
+
+// ============================================================ 波
+// {t0, A, hue, step(ms/マス), decay, fired:Set}
+let waves=[], hueNext=190, lastFire=new Float64Array(16), gateUntil=0;
+let doFire=true, doLight=true;
+const ampAt=(w,d)=>w.A*Math.pow(w.decay,d);
+function launch(A){
+  A=Math.max(0,Math.min(1,A));
+  const step=+document.getElementById('speed').value, decay=+document.getElementById('reach').value/100;
+  const w={t0:performance.now(),A,hue:hueNext,step,decay,fired:new Set()};
+  hueNext=(hueNext+37)%360;
+  waves.push(w);
+  // マイク: この波が叩き終わるまで + GATE_MS は次の波を立てない
+  let far=0; for(let k=0;k<16;k++)if(ampAt(w,DIST[k])>=MIN_AMP)far=Math.max(far,DIST[k]);
+  if(source==='mic')gateUntil=Math.max(gateUntil,w.t0+far*step+GATE_MS);
+}
+function stepWaves(now){
+  for(const w of waves){
+    const front=(now-w.t0)/w.step;                    // 波頭の位置 (マス)
+    for(let k=0;k<16;k++){
+      if(w.fired.has(k)||DIST[k]>front)continue;
+      w.fired.add(k);
+      const a=ampAt(w,DIST[k]); if(a<MIN_AMP)continue;
+      if(doFire&&now-lastFire[k]>=KEY_GAP){lastFire[k]=now;fireKey(k,Math.round(Math.min(127,25+a*102)));}
+    }
+  }
+  // 端 (4.24 マス) を越えて残光も消えたら捨てる
+  waves=waves.filter(w=>(now-w.t0)/w.step<5.5+2);
+}
+// 鍵 k の明るさと色 (全部の波を足す)
+function keyLight(now){
+  const out=[];
+  for(let k=0;k<16;k++){
+    let r=0,gg=0,b=0;
+    for(const w of waves){
+      const front=(now-w.t0)/w.step, d=DIST[k];
+      const a=ampAt(w,d); if(a<MIN_AMP*0.5)continue;
+      const x=front-d;                                  // 波頭がこの鍵をどれだけ過ぎたか (マス)
+      const crest=Math.exp(-x*x/0.18)+0.35*Math.exp(-(x-1.3)*(x-1.3)/0.25);   // 本波 + 2つ目の小さな波
+      const v=a*crest; if(v<0.01)continue;
+      const [cr,cg,cb]=hsl2rgb((w.hue+d*18)%360,1,.5);
+      r+=cr*v; gg+=cg*v; b+=cb*v;
+    }
+    out[k]=[Math.min(255,r),Math.min(255,gg),Math.min(255,b)];
+  }
+  return out;
+}
+
+// ============================================================ 音の入口
+let ac=null, an=null, srcNode=null, stream=null, source='', tbuf=null;
+const player=document.getElementById('player');
+let playerNode=null;
+function ensureAC(){
+  if(!ac){ac=new (window.AudioContext||window.webkitAudioContext)();
+    an=ac.createAnalyser();an.fftSize=1024;an.smoothingTimeConstant=0;tbuf=new Float32Array(an.fftSize);}
+  if(ac.state==='suspended')ac.resume();
+}
+function stopSource(){
+  if(srcNode){try{srcNode.disconnect();}catch(_){}srcNode=null;}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(!player.paused)player.pause();
+  source=''; ['srcMic','srcTab','srcFile'].forEach(id=>document.getElementById(id).classList.remove('on'));
+  resetDet();
+}
+function started(name,label){
+  source=name; document.getElementById({mic:'srcMic',tab:'srcTab',file:'srcFile'}[name]).classList.add('on');
+  msg(`<b>${label}</b> を聞いています`+(pk?'':' ・ 本体は「接続」でつなぐ'));
+}
+document.getElementById('srcMic').onclick=async()=>{
+  ensureAC(); stopSource();
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an);   // スピーカーには出さない (ハウリング防止)
+    started('mic','マイク');
+  }catch(e){msg('マイクが使えませんでした ('+e.name+')');}
+};
+document.getElementById('srcTab').onclick=async()=>{
+  ensureAC(); stopSource();
+  try{
+    stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+    if(!stream.getAudioTracks().length){stream.getTracks().forEach(t=>t.stop());stream=null;
+      msg('音が来ていません。共有のときに「タブの音声を共有」を ON にしてください');return;}
+    stream.getVideoTracks().forEach(t=>t.stop());              // 映像は要らない
+    srcNode=ac.createMediaStreamSource(new MediaStream(stream.getAudioTracks())); srcNode.connect(an);
+    stream.getAudioTracks()[0].onended=stopSource;
+    started('tab','タブの音');
+  }catch(e){msg('タブの共有が取り消されました');}
+};
+document.getElementById('srcFile').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').onchange=e=>{if(e.target.files[0])playFile(e.target.files[0]);e.target.value='';};
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&/^audio\//.test(f.type))playFile(f);});
+function playFile(f){
+  ensureAC(); stopSource();
+  if(!playerNode){playerNode=ac.createMediaElementSource(player);}
+  playerNode.connect(an); playerNode.connect(ac.destination); srcNode=playerNode;   // ファイルは聞こえるように出す
+  player.src=URL.createObjectURL(f); player.play();
+  player.onended=stopSource;
+  started('file',f.name.replace(/[<>&]/g,''));
+}
+document.getElementById('btnStop').onclick=()=>{stopSource();msg('止めました');};
+// 盤面タップ = 試しの波 (上ほど強い)
+cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();launch(0.35+0.65*(1-(e.clientY-r.top)/r.height));});
+
+// ============================================================ 検出
+let prevDb=null, fMean=0, fVar=1, curDb=-100, pending=null, lastLaunch=0;
+function resetDet(){prevDb=null;fMean=0;fVar=1;curDb=-100;pending=null;}
+// dBFS → 強さ 0-1。40dB の幅を 0→1 に割る。感度を上げるほど小さい音でも強い波になる (0 とみなす音が -35〜-65dB で動く)
+function ampOf(db,sens){const lo=-35-30*sens;return (db-lo)/40;}
+function tick(){
+  const now=performance.now();
+  if(source&&an){
+    an.getFloatTimeDomainData(tbuf);
+    let s=0; for(let i=0;i<tbuf.length;i++)s+=tbuf[i]*tbuf[i];
+    const db=10*Math.log10(s/tbuf.length+1e-12); curDb=db;
+    const sens=+document.getElementById('sens').value/100;
+    const flux=prevDb===null?0:Math.max(0,db-prevDb); prevDb=db;
+    const th=fMean+(3.0-2.0*sens)*Math.sqrt(fVar)+2;
+    // 平均と揺れ幅は「立ち上がりでない回」だけで更新する (大きな音の直後に揺れ幅が膨らんで、次の小さな音を見逃さないため)
+    if(flux<=th){const d=flux-fMean; fMean+=0.05*d; fVar=0.95*(fVar+0.05*d*d);}
+    if(pending){
+      pending.max=Math.max(pending.max,db);
+      if(++pending.n>=PEAK_TICKS){const A=ampOf(pending.max,sens);pending=null;if(A>=MIN_AMP){launch(A);lastLaunch=now;}}
+    }else if(flux>th&&ampOf(db,sens)>0.05&&now-lastLaunch>90&&!(source==='mic'&&now<gateUntil)){
+      pending={max:db,n:0};
+    }
+  }
+  stepWaves(now);
+  if(doLight&&now-lastLed>=LED_MS&&(waves.length||ledDirty)){lastLed=now;const L=keyLight(now);sendLeds(L);ledDirty=L.some(c=>c[0]+c[1]+c[2]>0);}
+}
+let lastLed=0, ledDirty=false;
+// 解析は setInterval (rAF はタブが隠れると止まるので使わない)
+setInterval(tick,16);
+
+// ============================================================ 描画
+function draw(){
+  const now=performance.now(), W=cv.width, gap=6*dpr, cs=(W-gap*3)/4;
+  g.clearRect(0,0,W,W);
+  const L=keyLight(now);
+  for(let k=0;k<16;k++){
+    const x=(k%4)*(cs+gap), y=Math.floor(k/4)*(cs+gap);
+    g.fillStyle='#121418'; g.fillRect(x,y,cs,cs);
+    const [r,gg,b]=L[k]; if(r+gg+b>2){g.fillStyle=`rgb(${r|0},${gg|0},${b|0})`;g.globalAlpha=Math.min(1,(r+gg+b)/255*1.4);g.fillRect(x,y,cs,cs);g.globalAlpha=1;}
+    g.strokeStyle='#272a30'; g.lineWidth=dpr; g.strokeRect(x+.5*dpr,y+.5*dpr,cs-dpr,cs-dpr);
+    g.fillStyle='rgba(255,255,255,.3)'; g.font=`${10*dpr}px Inter,sans-serif`; g.textAlign='right'; g.fillText(k+1,x+cs-7*dpr,y+cs-6*dpr);
+  }
+  // 波頭の弧 (左下の鍵の中心から)
+  const ox=cs/2, oy=3*(cs+gap)+cs/2, unit=cs+gap;
+  g.save(); g.beginPath(); g.rect(0,0,W,W); g.clip();
+  for(const w of waves){
+    const front=(now-w.t0)/w.step, a=ampAt(w,front); if(a<MIN_AMP*0.5||front<0)continue;
+    g.strokeStyle=`hsla(${(w.hue+front*18)%360},90%,70%,${Math.min(.8,a)})`; g.lineWidth=(1+3*a)*dpr;
+    g.beginPath(); g.arc(ox,oy,front*unit,-Math.PI/2,0); g.stroke();
+  }
+  g.restore();
+  // メーター
+  const sens=+document.getElementById('sens').value/100;
+  document.querySelector('#meter .lv').style.height=(source?Math.max(0,Math.min(1,ampOf(curDb,sens)))*100:0)+'%';
+  document.querySelector('#meter .th').style.bottom=(MIN_AMP*100)+'%';
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+document.getElementById('btnFire').onclick=e=>{doFire=!doFire;e.target.classList.toggle('on',doFire);};
+document.getElementById('btnLight').onclick=e=>{doLight=!doLight;e.target.classList.toggle('on',doLight);if(!doLight)ledsOff();};
+</script>
+</body>
+</html>
