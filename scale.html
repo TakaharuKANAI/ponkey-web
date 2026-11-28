@@ -408,10 +408,14 @@ function autoCorrelate(buf,sr){
   if(Math.sqrt(rms/SIZE)<0.012) return -1;
   const c=new Float32Array(SIZE/2);
   for(let lag=0;lag<SIZE/2;lag++){ let sum=0; for(let j=0;j<SIZE/2;j++) sum+=buf[j]*buf[j+lag]; c[lag]=sum; }
-  let d=1; while(d<SIZE/2-1 && c[d]>c[d+1]) d++;              // 最初の谷を越える
+  const H=SIZE/2;
+  let d=1; while(d<H-1 && c[d]>0.5*c[0]) d++;                 // 低い正弦波の手前で谷探しが止まらないよう、まず半分まで下る
+  while(d<H-1 && c[d]>c[d+1]) d++;                            // 最初の谷を越える
   let maxv=-1,maxp=-1;
-  for(let i=d;i<SIZE/2;i++) if(c[i]>maxv){ maxv=c[i]; maxp=i; }
+  for(let i=d;i<H;i++) if(c[i]>maxv){ maxv=c[i]; maxp=i; }
   if(maxp<=0 || maxv<0.3*c[0]) return -1;                     // 周期性が弱い=無声
+  // 全体最大は周期の整数倍(=1〜2オクターブ下)を拾いがち → 最大の 0.9 倍以上ある最初の山を採る
+  for(let i=d;i<maxp;i++) if(c[i]>=0.9*maxv && c[i]>=c[i-1] && c[i]>=c[i+1]){ maxp=i; break; }
   let T=maxp;                                                 // 放物線補間
   const x1=c[T-1],x2=c[T],x3=c[T+1],a=(x1+x3-2*x2)/2,b2=(x3-x1)/2;
   if(a) T=T-b2/(2*a);

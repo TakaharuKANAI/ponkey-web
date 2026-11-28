@@ -12,7 +12,7 @@
    ・DUET / DUET 2 の AI モデル (models/melody_rnn, 約14MB) は下の cache-first で、初回に読んだときにキャッシュされる
      (CORE に入れるとインストールのたびに全員が14MB 落とすので入れない)
 */
-const CACHE = 'ponkey-v53';
+const CACHE = 'ponkey-v54';
 const CORE = [
   './', './index.html',
   './ponkey.js',                       // 全アプリ共通の BLE クライアント
